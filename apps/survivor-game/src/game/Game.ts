@@ -29,7 +29,7 @@ import { createDamageNumber, updateDamageNumber } from './effects/DamageNumber';
 import {
   type CodexTab, type DesktopTab, type MetaState,
   loadMetaState, applyRunReward, getInitialShards,
-  buyMetaUpgrade, selectSkin, META_UPGRADES, CHARACTER_SKINS,
+  buyMetaUpgrade, selectSkin, CHARACTER_SKINS,
 } from './systems/meta/MetaProgression';
 import { MapSystem } from './systems/map/MapSystem';
 import { pools, clearAllPools } from './utils/PoolManager';
@@ -268,11 +268,15 @@ export class Game {
     }
 
     if (this.desktopTab === 'growth') {
-      const layout = this.getDesktopCardLayout(META_UPGRADES.length, 3, 210, 112, 14, 222);
-      for (let i = 0; i < META_UPGRADES.length; i++) {
-        const card = layout(i);
-        if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
-          this.meta = buyMetaUpgrade(this.meta, META_UPGRADES[i].id);
+      const nodes = this.renderer.getMetaStarNodeRects();
+      for (const nodeRect of nodes) {
+        const cx = nodeRect.x + nodeRect.w / 2;
+        const cy = nodeRect.y + nodeRect.h / 2;
+        const dx = x - cx;
+        const dy = y - cy;
+        const r = nodeRect.w / 2 + 8;
+        if (dx * dx + dy * dy <= r * r) {
+          this.meta = buyMetaUpgrade(this.meta, nodeRect.id);
           return;
         }
       }

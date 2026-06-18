@@ -12,7 +12,8 @@ import { shuffleArray } from '../../utils/math';
 export function generateUpgradeOptions(
   player: Player,
   count: number = getShopOptionCount(player),
-  includeModifiers: boolean = true
+  includeModifiers: boolean = true,
+  modifierPool: GenericModifierType[] = Object.values(GenericModifierType)
 ): UpgradeOption[] {
   const allOptions: UpgradeOption[] = [];
 
@@ -81,7 +82,7 @@ export function generateUpgradeOptions(
     result.push(remaining.shift()!);
   }
 
-  const modifierOption = includeModifiers ? rollModifierOption(player) : undefined;
+  const modifierOption = includeModifiers ? rollModifierOption(player, modifierPool) : undefined;
   if (modifierOption) {
     if (result.length < count) {
       result.push(modifierOption);
@@ -176,13 +177,15 @@ function getWeaponUpgradeDesc(w: Weapon): string {
   return parts.join(' ');
 }
 
-function rollModifierOption(player: Player): UpgradeOption | undefined {
+function rollModifierOption(player: Player, modifierPool: GenericModifierType[]): UpgradeOption | undefined {
+  if (modifierPool.length === 0) return undefined;
   if (Math.random() >= 0.4) return undefined;
 
   const options: UpgradeOption[] = [];
   for (const weapon of player.weapons) {
     const weaponData = WEAPON_DATA[weapon.type];
     for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
+      if (!modifierPool.includes(modifier.id)) continue;
       if (weapon.level < modifier.unlockLevel) continue;
       if (!modifier.compatibleFamilies.includes(weapon.family)) continue;
       if (weapon.modifiers.filter(m => m === modifier.id).length >= modifier.maxStacks) continue;

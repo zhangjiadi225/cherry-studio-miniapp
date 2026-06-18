@@ -99,15 +99,30 @@ export class ProjectileCombat {
     const dmgColor = this.getProjectileDamageColor(projectile);
     const dmgSize = projectile.damage >= 30 ? 18 : projectile.damage >= 20 ? 16 : 14;
     ctx.damageNumbers.push(createDamageNumber(enemy.x, enemy.y, projectile.damage, dmgColor, dmgSize));
-    this.triggerProjectileModifiers(ctx, projectile, enemy);
+    this.triggerProjectileModifiers(ctx, projectile, enemy, isDead);
     return isDead;
   }
 
-  private triggerProjectileModifiers(ctx: ProjectileCombatContext, projectile: Projectile, enemy: Enemy) {
+  private triggerProjectileModifiers(ctx: ProjectileCombatContext, projectile: Projectile, enemy: Enemy, isDead: boolean) {
     for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
-      if (modifier.trigger !== 'onHit') continue;
       if (!this.projectileHasModifier(projectile, modifier.id)) continue;
 
+      if (modifier.trigger === 'onKill' && isDead) {
+        switch (modifier.effect) {
+          case 'deathExplosion':
+            this.spawnDeathExplosion(ctx, projectile, enemy, 92, 0.45, '#ff9a45');
+            break;
+          case 'lightningExplosion':
+            this.spawnDeathExplosion(ctx, projectile, enemy, 126, 0.38, '#8fe8ff');
+            break;
+          case 'chainExplosion':
+            this.spawnChainExplosion(ctx, projectile, enemy);
+            break;
+        }
+        continue;
+      }
+
+      if (modifier.trigger !== 'onHit') continue;
       switch (modifier.effect) {
         case 'pulse':
           if (!projectile.pulseDone) {
@@ -162,6 +177,53 @@ export class ProjectileCombat {
       damageEnemy(target, damage, (dir.x / len) * projectile.knockback * 0.4, (dir.y / len) * projectile.knockback * 0.4);
       ctx.damageNumbers.push(createDamageNumber(target.x, target.y, damage, '#c49cff', 12));
     });
+  }
+
+  private spawnDeathExplosion(
+    ctx: ProjectileCombatContext,
+    projectile: Projectile,
+    source: Enemy,
+    radius: number,
+    damageRatio: number,
+    color: string
+  ) {
+    const damage = projectile.damage * damageRatio;
+    spawnExplosionParticles(ctx.particles, source.x, source.y, color, 16, {
+      speed: 170, life: 0.55, radius: 4, type: 'spark', glow: true,
+      innerColor: '#ffffff', ringCount: 7,
+    });
+
+    this.enemyGrid.forNearby(source.x, source.y, radius, (target) => {
+      if (target.hp <= 0 || target.id === source.id) return;
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const dSq = dx * dx + dy * dy;
+      if (dSq > radius * radius) return;
+      const len = Math.sqrt(dSq) || 1;
+      damageEnemy(target, damage, (dx / len) * projectile.knockback * 0.55, (dy / len) * projectile.knockback * 0.55);
+      ctx.damageNumbers.push(createDamageNumber(target.x, target.y, damage, color, 12));
+    });
+  }
+
+  private spawnChainExplosion(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy) {
+    const chainRadius = 260;
+    const targets: Enemy[] = [];
+    this.enemyGrid.forNearby(source.x, source.y, chainRadius, (target) => {
+      if (target.hp <= 0 || target.id === source.id || targets.length >= 2) return;
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      if (dx * dx + dy * dy <= chainRadius * chainRadius) targets.push(target);
+    });
+
+    for (const target of targets) {
+      spawnExplosionParticles(ctx.particles, target.x, target.y, '#ffd166', 10, {
+        speed: 135, life: 0.4, radius: 3, type: 'star', glow: true,
+        innerColor: '#fff0bd', ringCount: 5,
+      });
+      const damage = projectile.damage * 0.32;
+      damageEnemy(target, damage, 0, 0);
+      ctx.damageNumbers.push(createDamageNumber(target.x, target.y, damage, '#ffd166', 12));
+    }
   }
 
   private spawnChainHit(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy) {

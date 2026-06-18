@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PASSIVE_DATA } from '../../constants';
-import { SupplyType, WeaponType } from '../../types';
+import { GenericModifierType, SupplyType, WeaponType } from '../../types';
 import { createPlayer } from '../player/Player';
 import { createWeapon } from './Weapon';
 import { applyUpgrade, generateUpgradeOptions } from './Upgrade';
@@ -71,6 +71,20 @@ describe('generateUpgradeOptions', () => {
       option.type === 'supply' &&
       option.supplyType === SupplyType.FIELD_RATION
     )).toBe(true);
+  });
+
+  it('limits modifier cards to the star-chart unlocked modifier pool', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.1);
+    const player = createPlayer();
+    const weapon = createWeapon(WeaponType.MAGIC_WAND);
+    weapon.level = 5;
+    player.weapons.push(weapon);
+
+    const options = generateUpgradeOptions(player, 6, true, [GenericModifierType.SPLIT_CORE]);
+
+    const modifierOptions = options.filter((option) => option.type === 'modifier');
+    expect(modifierOptions.length).toBeGreaterThan(0);
+    expect(modifierOptions.every((option) => option.modifierType === GenericModifierType.SPLIT_CORE)).toBe(true);
   });
 
   it('applies supply effects immediately', () => {

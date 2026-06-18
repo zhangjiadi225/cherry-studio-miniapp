@@ -1,10 +1,25 @@
+import { GenericModifierType } from '../../types';
+
 export type MetaUpgradeId =
+  | 'star_core'
   | 'paid_reroll'
   | 'shop_slot_1'
   | 'shop_slot_2'
   | 'reroll_discount'
-  | 'module_cards'
-  | 'opening_gold';
+  | 'opening_gold'
+  | 'ranged_path'
+  | 'projectile_velocity'
+  | 'multi_shot'
+  | 'projectile_split'
+  | 'mechanism_path'
+  | 'chain_conductor'
+  | 'chain_burst'
+  | 'area_path'
+  | 'impact_pulse'
+  | 'repulsion_field'
+  | 'damage_path'
+  | 'death_burst'
+  | 'lightning_burst';
 
 export type DesktopTab = 'start' | 'growth' | 'skins' | 'codex';
 export type CodexTab = 'weapons' | 'passives' | 'enemies' | 'modules';
@@ -15,11 +30,15 @@ export interface MetaUpgradeNode {
   id: MetaUpgradeId;
   name: string;
   icon: string;
-  branch: 'shop' | 'build' | 'risk';
+  branch: 'core' | 'ranged' | 'mechanism' | 'area' | 'damage';
+  kind: 'small' | 'notable' | 'keystone';
   cost: number;
   desc: string;
   effect: string;
+  x: number;
+  y: number;
   requires?: MetaUpgradeId[];
+  grantsModifier?: GenericModifierType;
 }
 
 export interface CharacterSkin {
@@ -56,62 +75,259 @@ const META_STORAGE_KEY = 'survivor-game:meta:v1';
 
 export const META_UPGRADES: MetaUpgradeNode[] = [
   {
+    id: 'star_core',
+    name: '星核',
+    icon: '✦',
+    branch: 'core',
+    kind: 'keystone',
+    cost: 12,
+    desc: '点亮后开启四条星图方向，后续节点决定局内模块池。',
+    effect: '开启星图构筑',
+    x: 0,
+    y: 0,
+  },
+  {
     id: 'paid_reroll',
-    name: '黑市刷新',
+    name: '星盘调度',
     icon: '⟳',
-    branch: 'shop',
+    branch: 'core',
+    kind: 'small',
     cost: 18,
     desc: '免费刷新后，允许继续花魂晶刷新商店。',
     effect: '解锁魂晶刷新',
+    x: 0,
+    y: 0.3,
+    requires: ['star_core'],
   },
   {
     id: 'shop_slot_1',
-    name: '扩展货架 I',
+    name: '星界货架 I',
     icon: '▣',
-    branch: 'shop',
+    branch: 'core',
+    kind: 'small',
     cost: 24,
     desc: '局内等级达到 6 后，商店额外展示 1 张牌。',
     effect: 'Lv6 商店 +1 牌',
+    x: -0.22,
+    y: 0.55,
     requires: ['paid_reroll'],
   },
   {
     id: 'shop_slot_2',
-    name: '扩展货架 II',
+    name: '星界货架 II',
     icon: '▦',
-    branch: 'shop',
+    branch: 'core',
+    kind: 'notable',
     cost: 42,
     desc: '局内等级达到 11 后，商店再额外展示 1 张牌。',
     effect: 'Lv11 商店 +1 牌',
+    x: -0.42,
+    y: 0.78,
     requires: ['shop_slot_1'],
   },
   {
     id: 'reroll_discount',
-    name: '议价术',
+    name: '星火折返',
     icon: '◇',
-    branch: 'shop',
+    branch: 'core',
+    kind: 'small',
     cost: 34,
     desc: '降低魂晶刷新起价和递增幅度。',
     effect: '刷新魂晶 10/20/30 改为 5/10/15',
-    requires: ['paid_reroll'],
-  },
-  {
-    id: 'module_cards',
-    name: '模块工坊',
-    icon: '✦',
-    branch: 'build',
-    cost: 30,
-    desc: '通用模块牌进入商店，武器可以获得额外机制。',
-    effect: '解锁通用模块牌',
+    x: 0.22,
+    y: 0.55,
     requires: ['paid_reroll'],
   },
   {
     id: 'opening_gold',
-    name: '开局魂晶',
+    name: '星尘补给',
     icon: '◈',
-    branch: 'shop',
+    branch: 'core',
+    kind: 'small',
     cost: 26,
     desc: '每局开始时获得少量魂晶，第一轮商店更稳定。',
     effect: '开局 +10 魂晶',
+    x: 0.42,
+    y: 0.78,
+    requires: ['star_core'],
+  },
+  {
+    id: 'ranged_path',
+    name: '远程特化',
+    icon: '➶',
+    branch: 'ranged',
+    kind: 'notable',
+    cost: 20,
+    desc: '进入远程星座，后续节点强化弹幕、分裂和飞行速度。',
+    effect: '远程模块方向',
+    x: -0.32,
+    y: -0.26,
+    requires: ['star_core'],
+  },
+  {
+    id: 'projectile_velocity',
+    name: '疾行弹道',
+    icon: '»',
+    branch: 'ranged',
+    kind: 'small',
+    cost: 24,
+    desc: '疾行符文进入模块池，飞行投射物更快命中远处目标。',
+    effect: '解锁：子弹速度变快',
+    x: -0.54,
+    y: -0.48,
+    requires: ['ranged_path'],
+    grantsModifier: GenericModifierType.VELOCITY_RUNE,
+  },
+  {
+    id: 'multi_shot',
+    name: '多重射击',
+    icon: '✦✦',
+    branch: 'ranged',
+    kind: 'notable',
+    cost: 34,
+    desc: '双重施放进入模块池，每次发动额外生成一次弱化攻击。',
+    effect: '解锁：多重射击',
+    x: -0.78,
+    y: -0.34,
+    requires: ['projectile_velocity'],
+    grantsModifier: GenericModifierType.DOUBLE_CAST,
+  },
+  {
+    id: 'projectile_split',
+    name: '子弹分裂',
+    icon: '✧',
+    branch: 'ranged',
+    kind: 'keystone',
+    cost: 46,
+    desc: '分裂核心进入模块池，飞行投射物首次命中后分裂。',
+    effect: '解锁：子弹分裂',
+    x: -0.92,
+    y: -0.1,
+    requires: ['multi_shot'],
+    grantsModifier: GenericModifierType.SPLIT_CORE,
+  },
+  {
+    id: 'mechanism_path',
+    name: '机制特化',
+    icon: '↯',
+    branch: 'mechanism',
+    kind: 'notable',
+    cost: 20,
+    desc: '进入机制星座，后续节点强化弹射、连锁和二次触发。',
+    effect: '机制模块方向',
+    x: 0.32,
+    y: -0.26,
+    requires: ['star_core'],
+  },
+  {
+    id: 'chain_conductor',
+    name: '闪电链',
+    icon: '↯',
+    branch: 'mechanism',
+    kind: 'small',
+    cost: 28,
+    desc: '连锁导体进入模块池，命中后跳向附近敌人。',
+    effect: '解锁：子弹弹射 / 闪电链',
+    x: 0.54,
+    y: -0.48,
+    requires: ['mechanism_path'],
+    grantsModifier: GenericModifierType.CHAIN_CONDUCTOR,
+  },
+  {
+    id: 'chain_burst',
+    name: '连锁爆炸',
+    icon: '✹↝',
+    branch: 'mechanism',
+    kind: 'keystone',
+    cost: 48,
+    desc: '连锁爆炸进入模块池，击杀后向附近目标传导小爆炸。',
+    effect: '解锁：连锁爆炸',
+    x: 0.82,
+    y: -0.54,
+    requires: ['chain_conductor'],
+    grantsModifier: GenericModifierType.CHAIN_BURST,
+  },
+  {
+    id: 'area_path',
+    name: '范围特化',
+    icon: '◎',
+    branch: 'area',
+    kind: 'notable',
+    cost: 20,
+    desc: '进入范围星座，后续节点强化爆破、脉冲和控场。',
+    effect: '范围模块方向',
+    x: 0.36,
+    y: 0.18,
+    requires: ['star_core'],
+  },
+  {
+    id: 'impact_pulse',
+    name: '冲击脉冲',
+    icon: '◎',
+    branch: 'area',
+    kind: 'small',
+    cost: 28,
+    desc: '冲击脉冲进入模块池，命中点产生小范围伤害。',
+    effect: '解锁：命中脉冲',
+    x: 0.62,
+    y: 0.3,
+    requires: ['area_path'],
+    grantsModifier: GenericModifierType.IMPACT_PULSE,
+  },
+  {
+    id: 'repulsion_field',
+    name: '排斥力场',
+    icon: '⟲',
+    branch: 'area',
+    kind: 'notable',
+    cost: 34,
+    desc: '排斥力场进入模块池，命中时额外击退敌人。',
+    effect: '解锁：控场击退',
+    x: 0.88,
+    y: 0.5,
+    requires: ['impact_pulse'],
+    grantsModifier: GenericModifierType.REPULSION_FIELD,
+  },
+  {
+    id: 'damage_path',
+    name: '伤害特化',
+    icon: '✹',
+    branch: 'damage',
+    kind: 'notable',
+    cost: 20,
+    desc: '进入伤害星座，后续节点让击杀触发爆破和雷暴。',
+    effect: '伤害模块方向',
+    x: -0.32,
+    y: 0.18,
+    requires: ['star_core'],
+  },
+  {
+    id: 'death_burst',
+    name: '亡语爆炸',
+    icon: '✹',
+    branch: 'damage',
+    kind: 'small',
+    cost: 32,
+    desc: '亡语爆破进入模块池，击杀时引爆尸骸。',
+    effect: '解锁：亡语爆炸',
+    x: -0.58,
+    y: 0.38,
+    requires: ['damage_path'],
+    grantsModifier: GenericModifierType.DEATH_BURST,
+  },
+  {
+    id: 'lightning_burst',
+    name: '闪电爆炸',
+    icon: '↯✹',
+    branch: 'damage',
+    kind: 'keystone',
+    cost: 52,
+    desc: '雷鸣爆破进入模块池，击杀时释放更大范围闪电爆炸。',
+    effect: '解锁：闪电爆炸',
+    x: -0.82,
+    y: 0.58,
+    requires: ['death_burst'],
+    grantsModifier: GenericModifierType.LIGHTNING_BURST,
   },
 ];
 
@@ -196,6 +412,16 @@ export function canBuyMetaUpgrade(meta: MetaState, node: MetaUpgradeNode): boole
   return (node.requires ?? []).every((id) => hasMetaUpgrade(meta, id));
 }
 
+export function getUnlockedModifierTypes(meta: MetaState): GenericModifierType[] {
+  const modifiers: GenericModifierType[] = [];
+  for (const node of META_UPGRADES) {
+    if (node.grantsModifier && hasMetaUpgrade(meta, node.id)) {
+      modifiers.push(node.grantsModifier);
+    }
+  }
+  return modifiers;
+}
+
 export function buyMetaUpgrade(meta: MetaState, id: MetaUpgradeId): MetaState {
   const node = META_UPGRADES.find((item) => item.id === id);
   if (!node || !canBuyMetaUpgrade(meta, node)) return meta;
@@ -240,7 +466,7 @@ export function getMetaRerollCost(meta: MetaState, paidRerollsThisRound: number)
 }
 
 export function areModifierCardsUnlocked(meta: MetaState): boolean {
-  return hasMetaUpgrade(meta, 'module_cards');
+  return hasMetaUpgrade(meta, 'star_core');
 }
 
 const SOUL_FIRE_BASE_REWARD = 4;
@@ -285,8 +511,8 @@ export function applyRunReward(
   return next;
 }
 
-function filterValidUpgrades(ids?: MetaUpgradeId[]): MetaUpgradeId[] {
+function filterValidUpgrades(ids?: unknown[]): MetaUpgradeId[] {
   if (!Array.isArray(ids)) return [];
   const valid = new Set(META_UPGRADES.map((node) => node.id));
-  return ids.filter((id) => valid.has(id));
+  return [...new Set(ids.map(String).filter((id): id is MetaUpgradeId => valid.has(id as MetaUpgradeId)))];
 }

@@ -12,6 +12,7 @@ import {
   drawAudioButton as drawAudioBtn, drawPauseButton as drawPauseBtn,
   getAudioButtonRect as getAudioRect,
   getDesktopStartButtonRect as getStartButtonRect,
+  getMetaStarNodeRects as getStarNodeRects,
   getDesktopTabRects as getTabRects,
   getPauseButtonRect as getPauseRect,
   drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver,
@@ -87,6 +88,7 @@ export class Renderer {
   getAudioButtonRect() { return getAudioRect(this.w); }
   getDesktopStartButtonRect() { return getStartButtonRect(this.w, this.h); }
   getDesktopTabRects() { return getTabRects(this.w, this.h); }
+  getMetaStarNodeRects() { return getStarNodeRects(this.w, this.h); }
 
   // ─── World ───
   drawGround(cam: Camera) { this.worldRenderer.drawGround(this.rc, cam); }

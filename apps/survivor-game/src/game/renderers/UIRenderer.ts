@@ -2,7 +2,7 @@ import type { RenderContext } from './WorldRenderer';
 import type { Player, Enemy, UpgradeOption } from '../types';
 import { COLORS, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA, GENERIC_MODIFIER_DATA } from '../constants';
 import {
-  type CodexTab, type DesktopTab, type MetaState,
+  type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   META_UPGRADES, CHARACTER_SKINS, hasMetaUpgrade, canBuyMetaUpgrade,
 } from '../systems/meta/MetaProgression';
 
@@ -557,6 +557,17 @@ export function getDesktopTabRects(w: number, h: number = 720): Array<Rect & { i
   }));
 }
 
+export function getMetaStarNodeRects(w: number, h: number = 720): Array<Rect & { id: MetaUpgradeNode['id'] }> {
+  const panel = getMetaStarPanel(w, h);
+  const scale = panel.scale;
+  return META_UPGRADES.map((node) => {
+    const r = node.kind === 'keystone' ? 24 : node.kind === 'notable' ? 19 : 15;
+    const cx = panel.cx + node.x * scale;
+    const cy = panel.cy + node.y * scale;
+    return { id: node.id, x: cx - r, y: cy - r, w: r * 2, h: r * 2 };
+  });
+}
+
 function drawDesktopBackdrop(rc: RenderContext, time: number) {
   const { ctx, w, h } = rc;
   ctx.fillStyle = cachedLinearGradient(ctx, `desktop-bg-${w}-${h}`, 0, 0, w, h, [
@@ -707,7 +718,7 @@ function drawDesktopTabs(rc: RenderContext, activeTab: DesktopTab) {
   const { ctx, w, h } = rc;
   const labels: Record<DesktopTab, string> = {
     start: '地图',
-    growth: '篝火',
+    growth: '星图',
     skins: '衣橱',
     codex: '图鉴',
   };
@@ -896,10 +907,28 @@ function drawSmallPill(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.fillText(text, x + w / 2, y + 12);
 }
 
-function getBranchAccent(branch: 'shop' | 'build' | 'risk'): string {
-  if (branch === 'build') return '#d3a8ff';
-  if (branch === 'risk') return '#ff6b85';
-  return '#8fe8ff';
+function getMetaStarPanel(w: number, h: number) {
+  const panelW = Math.min(960, w - 72);
+  const panelH = Math.min(510, Math.max(430, h - 184));
+  const panelX = w / 2 - panelW / 2;
+  const panelY = 126;
+  return {
+    x: panelX,
+    y: panelY,
+    w: panelW,
+    h: panelH,
+    cx: panelX + panelW * 0.52,
+    cy: panelY + panelH * 0.48,
+    scale: Math.min(panelW * 0.35, panelH * 0.34),
+  };
+}
+
+function getBranchAccent(branch: MetaUpgradeNode['branch']): string {
+  if (branch === 'ranged') return '#8fe8ff';
+  if (branch === 'mechanism') return '#d3a8ff';
+  if (branch === 'area') return '#9dffba';
+  if (branch === 'damage') return '#ff9a76';
+  return '#ffd166';
 }
 
 function getCodexAccent(tab: CodexTab): string {
@@ -1453,78 +1482,105 @@ function drawHeroBattleScene(
 }
 
 function drawMetaGrowth(rc: RenderContext, meta: MetaState) {
-  const { ctx, w } = rc;
-  const panelW = Math.min(840, w - 72);
-  const panelX = w / 2 - panelW / 2;
-  const panelY = 142;
-  drawGlassPanel(ctx, panelX, panelY, panelW, 470, 18, 'rgba(13,18,32,0.68)');
-  drawPanelAccent(ctx, panelX, panelY, panelW, '#8fe8ff');
-  drawSectionTitle(ctx, panelX + 30, panelY + 26, '全局成长', '解锁会影响商店、开局资源和构筑机制。');
-  drawInfoPill(ctx, panelX + panelW - 164, panelY + 26, 132, '可用魂火', `${meta.soulFire}`, '#ffd166');
+  const { ctx, w, h } = rc;
+  const panel = getMetaStarPanel(w, h);
+  drawGlassPanel(ctx, panel.x, panel.y, panel.w, panel.h, 18, 'rgba(8,13,26,0.74)');
+  drawPanelAccent(ctx, panel.x, panel.y, panel.w, '#8fe8ff');
+  drawSectionTitle(ctx, panel.x + 28, panel.y + 24, '魂火星图', '从星核向四个方向点亮节点，决定局内模块池和构筑倾向。');
+  drawInfoPill(ctx, panel.x + panel.w - 168, panel.y + 22, 132, '可用魂火', `${meta.soulFire}`, '#ffd166');
 
-  const cardW = 210;
-  const cardH = 112;
-  const gap = 14;
-  const columns = 3;
-  const totalW = columns * cardW + (columns - 1) * gap;
-  const startX = w / 2 - totalW / 2;
-  const startY = 222;
+  const nodeCenters = new Map<MetaUpgradeNode['id'], { x: number; y: number }>();
+  for (const node of META_UPGRADES) {
+    nodeCenters.set(node.id, {
+      x: panel.cx + node.x * panel.scale,
+      y: panel.cy + node.y * panel.scale,
+    });
+  }
 
-  for (let i = 0; i < META_UPGRADES.length; i++) {
-    const node = META_UPGRADES[i];
-    const x = startX + (i % columns) * (cardW + gap);
-    const y = startY + Math.floor(i / columns) * (cardH + gap);
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const node of META_UPGRADES) {
+    const to = nodeCenters.get(node.id);
+    if (!to) continue;
+    for (const req of node.requires ?? []) {
+      const from = nodeCenters.get(req);
+      if (!from) continue;
+      const owned = hasMetaUpgrade(meta, node.id);
+      const available = canBuyMetaUpgrade(meta, node);
+      const accent = getBranchAccent(node.branch);
+      ctx.strokeStyle = owned ? colorWithAlpha(accent, 0.72) : available ? colorWithAlpha(accent, 0.38) : 'rgba(130,150,190,0.2)';
+      ctx.lineWidth = owned ? 3 : 2;
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  for (const node of META_UPGRADES) {
+    const center = nodeCenters.get(node.id)!;
     const owned = hasMetaUpgrade(meta, node.id);
     const available = canBuyMetaUpgrade(meta, node);
     const locked = !owned && !available;
     const accent = getBranchAccent(node.branch);
-    const cardGrad = cachedLinearGradient(ctx, `growth-card-${owned}-${available}-${x}-${y}-${cardH}`, x, y, x, y + cardH, [
-      [0, owned ? 'rgba(35,92,64,0.92)' : available ? 'rgba(42,47,78,0.94)' : 'rgba(30,38,60,0.84)'],
-      [1, owned ? 'rgba(15,45,34,0.92)' : available ? 'rgba(20,25,44,0.94)' : 'rgba(16,21,34,0.84)'],
-    ]);
+    const r = node.kind === 'keystone' ? 24 : node.kind === 'notable' ? 19 : 15;
+
     ctx.save();
-    if (available) {
-      ctx.shadowColor = colorWithAlpha(accent, 0.22);
-      ctx.shadowBlur = 12;
+    if (available || owned) {
+      ctx.shadowColor = colorWithAlpha(accent, owned ? 0.52 : 0.34);
+      ctx.shadowBlur = owned ? 18 : 12;
     }
-    ctx.fillStyle = cardGrad;
+    ctx.fillStyle = locked ? 'rgba(18,25,43,0.9)' : colorWithAlpha(accent, owned ? 0.42 : 0.22);
     ctx.beginPath();
-    ctx.roundRect(x, y, cardW, cardH, 12);
+    ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
-    ctx.strokeStyle = owned ? '#55dd88' : available ? accent : 'rgba(130,150,190,0.38)';
-    ctx.lineWidth = owned || available ? 1.7 : 1;
+
+    ctx.strokeStyle = owned ? '#88ffaa' : available ? accent : 'rgba(145,160,196,0.42)';
+    ctx.lineWidth = owned || node.kind === 'keystone' ? 2.2 : 1.4;
     ctx.beginPath();
-    ctx.roundRect(x, y, cardW, cardH, 12);
+    ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
     ctx.stroke();
 
-    ctx.fillStyle = colorWithAlpha(accent, locked ? 0.11 : 0.18);
-    ctx.fillRect(x + 1, y + 1, 5, cardH - 2);
-    ctx.fillStyle = colorWithAlpha(accent, locked ? 0.08 : 0.16);
-    ctx.beginPath();
-    ctx.arc(x + 34, y + 34, 23, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.font = '24px serif';
-    ctx.fillStyle = locked ? '#9ba9c8' : COLORS.uiText;
-    ctx.textAlign = 'left';
+    ctx.font = `${node.kind === 'keystone' ? 23 : 18}px serif`;
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(node.icon, x + 14, y + 30);
-    ctx.font = `700 14px ${DESKTOP_FONT}`;
-    ctx.fillStyle = locked ? '#c5cde0' : '#ffffff';
-    ctx.fillText(node.name, x + 48, y + 24);
-    ctx.font = `12px ${DESKTOP_FONT}`;
-    ctx.fillStyle = owned ? '#88ffaa' : available ? '#ffd166' : '#adb7d0';
-    ctx.textAlign = 'right';
-    ctx.fillText(owned ? '已点亮' : `魂火 ${node.cost}`, x + cardW - 14, y + 24);
+    ctx.fillStyle = locked ? 'rgba(210,220,245,0.58)' : '#ffffff';
+    ctx.fillText(node.icon, center.x, center.y + 1);
 
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.font = `12px ${DESKTOP_FONT}`;
-    ctx.fillStyle = locked ? '#b4bfd8' : '#d9e4ff';
-    drawWrappedText(ctx, node.effect, x + 14, y + 55, cardW - 28, 16, 2);
-    ctx.fillStyle = locked ? '#8794b0' : '#9fb0d8';
-    drawWrappedText(ctx, node.desc, x + 14, y + 84, cardW - 28, 14, 2);
+    const showLabel = node.kind !== 'small' || owned || available;
+    if (showLabel) {
+      ctx.font = `800 ${node.kind === 'small' ? 10 : 11}px ${DESKTOP_FONT}`;
+      ctx.fillStyle = owned ? '#88ffaa' : available ? '#ffd166' : 'rgba(213,224,255,0.58)';
+      ctx.fillText(node.name, center.x, center.y + r + 13);
+    }
+    ctx.font = `700 10px ${DESKTOP_FONT}`;
+    ctx.fillStyle = owned ? '#9dffba' : available ? '#ffd166' : 'rgba(213,224,255,0.42)';
+    ctx.fillText(owned ? '已点亮' : `${node.cost}`, center.x, center.y - r - 9);
+  }
+
+  const legendX = panel.x + 28;
+  const legendY = panel.y + 86;
+  const legend: Array<[string, string]> = [
+    ['➶', '远程：速度 / 多重 / 分裂'],
+    ['↯', '机制：弹射 / 连锁爆炸'],
+    ['◎', '范围：脉冲 / 击退'],
+    ['✹', '伤害：亡语 / 闪电爆炸'],
+  ];
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i < legend.length; i++) {
+    const [icon, text] = legend[i];
+    const lx = legendX + (i % 2) * 260;
+    const ly = legendY + Math.floor(i / 2) * 24;
+    ctx.fillStyle = 'rgba(10,15,27,0.54)';
+    ctx.beginPath();
+    ctx.roundRect(lx, ly - 11, 220, 22, 11);
+    ctx.fill();
+    ctx.font = `700 12px ${DESKTOP_FONT}`;
+    ctx.fillStyle = 'rgba(230,236,255,0.86)';
+    ctx.fillText(`${icon} ${text}`, lx + 12, ly);
   }
 }
 

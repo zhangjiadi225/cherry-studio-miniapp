@@ -134,7 +134,7 @@ function hasModifier(w: Weapon, modifier: GenericModifierType): boolean {
   return (w.modifierMask & GENERIC_MODIFIER_MASK[modifier]) !== 0;
 }
 
-function hasModifierEffect(w: Weapon, trigger: 'onFire', effect: 'extraCast'): boolean {
+function hasModifierEffect(w: Weapon, trigger: 'onFire', effect: 'extraCast' | 'projectileSpeed'): boolean {
   return Object.values(GENERIC_MODIFIER_DATA).some((modifier) =>
     modifier.trigger === trigger &&
     modifier.effect === effect &&
@@ -144,6 +144,10 @@ function hasModifierEffect(w: Weapon, trigger: 'onFire', effect: 'extraCast'): b
 
 function getCastDamages(w: Weapon, damage: number): number[] {
   return hasModifierEffect(w, 'onFire', 'extraCast') ? [damage, damage * 0.65] : [damage];
+}
+
+function getProjectileSpeed(w: Weapon): number {
+  return hasModifierEffect(w, 'onFire', 'projectileSpeed') ? w.speed * 1.28 : w.speed;
 }
 
 function attachWeaponModifiers(p: Projectile, w: Weapon) {
@@ -197,15 +201,16 @@ function fireTargetedProjectile(
   projectiles: Projectile[],
   config: Omit<ProjectileConfig, 'x' | 'y' | 'vx' | 'vy' | 'life' | 'pierce' | 'knockback'>
 ) {
+  const speed = getProjectileSpeed(w);
   let vx: number;
   let vy: number;
   if (target) {
     const dir = normalize({ x: target.x - player.x, y: target.y - player.y });
-    vx = dir.x * w.speed;
-    vy = dir.y * w.speed;
+    vx = dir.x * speed;
+    vy = dir.y * speed;
   } else {
-    vx = Math.cos(fallbackAngle) * w.speed;
-    vy = Math.sin(fallbackAngle) * w.speed;
+    vx = Math.cos(fallbackAngle) * speed;
+    vy = Math.sin(fallbackAngle) * speed;
   }
   spawnWeaponProjectile(w, projectiles, {
     ...config,
@@ -256,7 +261,7 @@ function fireAxe(
 ) {
   for (let i = 0; i < w.count; i++) {
     const angle = randFloat(-Math.PI * 0.8, -Math.PI * 0.2) + (i * 0.3);
-    const speed = w.speed * randFloat(0.8, 1.2);
+    const speed = getProjectileSpeed(w) * randFloat(0.8, 1.2);
     spawnWeaponProjectile(w, projectiles, {
       x: player.x + randFloat(-20, 20),
       y: player.y,

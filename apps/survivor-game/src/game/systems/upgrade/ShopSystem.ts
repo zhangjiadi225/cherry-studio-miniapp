@@ -4,6 +4,7 @@ import {
   canPaidReroll,
   getMetaRerollCost,
   getMetaShopOptionCount,
+  getUnlockedModifierTypes,
 } from '../meta/MetaProgression';
 import type { Player, UpgradeOption } from '../../types';
 import { applyUpgrade, generateUpgradeOptions } from '../weapon/Upgrade';
@@ -109,10 +110,12 @@ export class ShopSystem {
   }
 
   private generateOptions(player: Player, meta: MetaState) {
+    const unlockedModifiers = getUnlockedModifierTypes(meta);
     return generateUpgradeOptions(
       player,
       getMetaShopOptionCount(meta, player.level),
-      areModifierCardsUnlocked(meta)
+      areModifierCardsUnlocked(meta),
+      unlockedModifiers
     );
   }
 }

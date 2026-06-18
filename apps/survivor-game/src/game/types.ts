@@ -206,11 +206,24 @@ export const GenericModifierType = {
   CHAIN_CONDUCTOR: 'chain_conductor',
   IMPACT_PULSE: 'impact_pulse',
   REPULSION_FIELD: 'repulsion_field',
+  VELOCITY_RUNE: 'velocity_rune',
+  DEATH_BURST: 'death_burst',
+  LIGHTNING_BURST: 'lightning_burst',
+  CHAIN_BURST: 'chain_burst',
 } as const;
 export type GenericModifierType = typeof GenericModifierType[keyof typeof GenericModifierType];
 
 export type ModifierTrigger = 'onFire' | 'onHit' | 'onKill' | 'onTick';
-export type ModifierEffect = 'extraCast' | 'split' | 'chain' | 'pulse' | 'knockback';
+export type ModifierEffect =
+  | 'extraCast'
+  | 'split'
+  | 'chain'
+  | 'pulse'
+  | 'knockback'
+  | 'projectileSpeed'
+  | 'deathExplosion'
+  | 'lightningExplosion'
+  | 'chainExplosion';
 
 export const SupplyType = {
   FIELD_RATION: 'field_ration',
