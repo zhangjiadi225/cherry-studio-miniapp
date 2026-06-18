@@ -1,4 +1,4 @@
-import { WeaponType, PassiveType, EnemyType, MapZone } from './types';
+import { WeaponType, PassiveType, EnemyType, MapZone, GenericModifierType, GenericModifierData, WeaponFamily } from './types';
 
 // ===== Game =====
 export const GAME_DURATION = 15 * 60; // 15 minutes
@@ -29,11 +29,19 @@ export const XP_MAGNET_SPEED = 600;
 export const GEM_LIFETIME = 60;
 export const GEM_ATTRACT_RANGE = 20;
 
+// ===== Upgrade Shop =====
+export const SHOP_OPTION_COUNT = 4;
+export const SHOP_MAX_OPTION_COUNT = 6;
+export const SHOP_LEVELS_PER_EXTRA_OPTION = 5;
+export const SHOP_REROLL_BASE_COST = 10;
+export const SHOP_REROLL_COST_STEP = 10;
+
 // ===== Weapon Stats =====
 export const WEAPON_DATA: Record<WeaponType, {
   name: string;
   icon: string;
   desc: string;
+  family: WeaponFamily;
   baseDamage: number;
   baseCooldown: number;
   baseSpeed: number;
@@ -59,6 +67,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     name: '鞭子',
     icon: '🪄',
     desc: '每升1级多一节鞭身，无限成长',
+    family: 'swing',
     baseDamage: 15,
     baseCooldown: 1.5,
     baseSpeed: 0,
@@ -74,6 +83,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     name: '魔法弹',
     icon: '✦',
     desc: '向最近敌人发射魔法弹',
+    family: 'projectile',
     baseDamage: 10,
     baseCooldown: 1.2,
     baseSpeed: 400,
@@ -89,6 +99,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     name: '圣经',
     icon: '📖',
     desc: '环绕玩家旋转的圣书',
+    family: 'orbit',
     baseDamage: 15,
     baseCooldown: 8,
     baseSpeed: 200,
@@ -104,6 +115,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     name: '大蒜',
     icon: '🧄',
     desc: '持续伤害周围的敌人',
+    family: 'aura',
     baseDamage: 5,
     baseCooldown: 0.5,
     baseSpeed: 0,
@@ -119,6 +131,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     name: '火焰弹',
     icon: '🔥',
     desc: '发射爆炸的火球',
+    family: 'projectile',
     baseDamage: 25,
     baseCooldown: 2.0,
     baseSpeed: 300,
@@ -134,6 +147,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     name: '圣水',
     icon: '💧',
     desc: '在敌人位置降下伤害区域',
+    family: 'zone',
     baseDamage: 10,
     baseCooldown: 5,
     baseSpeed: 0,
@@ -149,6 +163,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     name: '闪电',
     icon: '⚡',
     desc: '随机打击屏幕内敌人',
+    family: 'strike',
     baseDamage: 30,
     baseCooldown: 3,
     baseSpeed: 0,
@@ -164,6 +179,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     name: '斧头',
     icon: '🪓',
     desc: '抛向天空的高伤害飞斧',
+    family: 'projectile',
     baseDamage: 35,
     baseCooldown: 3,
     baseSpeed: 250,
@@ -175,6 +191,78 @@ export const WEAPON_DATA: Record<WeaponType, {
     perLevel: { damage: 12, count: 1, area: 0.15 },
     maxLevel: 8,
   },
+};
+
+// ===== Generic Modifier Cards =====
+export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierData> = {
+  [GenericModifierType.DOUBLE_CAST]: {
+    id: GenericModifierType.DOUBLE_CAST,
+    name: '双重施放',
+    icon: '✦✦',
+    desc: '每次发动额外生成1次弱化攻击，伤害为65%',
+    compatibleFamilies: ['projectile', 'strike', 'zone'],
+    trigger: 'onFire',
+    effect: 'extraCast',
+    maxStacks: 1,
+    priceTier: 2,
+    unlockLevel: 3,
+  },
+  [GenericModifierType.SPLIT_CORE]: {
+    id: GenericModifierType.SPLIT_CORE,
+    name: '分裂核心',
+    icon: '✧',
+    desc: '飞行投射物首次命中后分裂出2个小投射物，伤害为40%',
+    compatibleFamilies: ['projectile'],
+    trigger: 'onHit',
+    effect: 'split',
+    maxStacks: 1,
+    priceTier: 2,
+    unlockLevel: 3,
+  },
+  [GenericModifierType.CHAIN_CONDUCTOR]: {
+    id: GenericModifierType.CHAIN_CONDUCTOR,
+    name: '连锁导体',
+    icon: '↯',
+    desc: '命中后跳向附近1个敌人，造成55%伤害',
+    compatibleFamilies: ['projectile', 'strike', 'swing'],
+    trigger: 'onHit',
+    effect: 'chain',
+    maxStacks: 1,
+    priceTier: 2,
+    unlockLevel: 3,
+  },
+  [GenericModifierType.IMPACT_PULSE]: {
+    id: GenericModifierType.IMPACT_PULSE,
+    name: '冲击脉冲',
+    icon: '◎',
+    desc: '命中点产生小范围冲击，造成35%伤害',
+    compatibleFamilies: ['projectile', 'strike', 'zone', 'swing'],
+    trigger: 'onHit',
+    effect: 'pulse',
+    maxStacks: 1,
+    priceTier: 1,
+    unlockLevel: 3,
+  },
+  [GenericModifierType.REPULSION_FIELD]: {
+    id: GenericModifierType.REPULSION_FIELD,
+    name: '排斥力场',
+    icon: '⟲',
+    desc: '命中时额外击退敌人，提升控场',
+    compatibleFamilies: ['aura', 'orbit', 'zone', 'swing'],
+    trigger: 'onHit',
+    effect: 'knockback',
+    maxStacks: 1,
+    priceTier: 1,
+    unlockLevel: 3,
+  },
+};
+
+export const GENERIC_MODIFIER_MASK: Record<GenericModifierType, number> = {
+  [GenericModifierType.DOUBLE_CAST]: 1 << 0,
+  [GenericModifierType.SPLIT_CORE]: 1 << 1,
+  [GenericModifierType.CHAIN_CONDUCTOR]: 1 << 2,
+  [GenericModifierType.IMPACT_PULSE]: 1 << 3,
+  [GenericModifierType.REPULSION_FIELD]: 1 << 4,
 };
 
 // ===== Passive Stats =====

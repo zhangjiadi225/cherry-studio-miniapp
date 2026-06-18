@@ -28,6 +28,7 @@ export function createPlayer(): Player {
     regenTimer: 0,
     luck: 1,
     curse: 1,
+    gold: 0,
     currentZone: 'storm',
     weapons: [],
     passives: [],

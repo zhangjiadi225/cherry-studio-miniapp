@@ -78,6 +78,21 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   ctx.textAlign = 'center';
   ctx.fillText(`❤️ ${Math.ceil(player.hp)}/${player.maxHp}`, barX + 120, barY + barH + 18);
 
+  // Gold display
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.beginPath();
+  ctx.roundRect(barX + 190, barY + barH + 6, 86, 24, 6);
+  ctx.fill();
+  ctx.strokeStyle = '#ffd166';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(barX + 190, barY + barH + 6, 86, 24, 6);
+  ctx.stroke();
+  ctx.font = '13px "Segoe UI", sans-serif';
+  ctx.fillStyle = '#ffd166';
+  ctx.textAlign = 'center';
+  ctx.fillText(`🪙 ${player.gold}`, barX + 233, barY + barH + 18);
+
   // Phase indicator
   const phase = elapsed < 60 ? '初期' : elapsed < 180 ? '前期' : elapsed < 300 ? '中期' : elapsed < 600 ? '后期' : '终局';
   const phaseColor = elapsed < 60 ? '#88ff88' : elapsed < 180 ? '#ffff88' : elapsed < 300 ? '#ffaa44' : elapsed < 600 ? '#ff6644' : '#ff4444';
@@ -453,7 +468,14 @@ export function drawPaused(rc: RenderContext) {
   ctx.fillText('按 ESC 或 P 继续', w / 2, h / 2 + 70);
 }
 
-export function drawUpgradeScreen(rc: RenderContext, options: UpgradeOption[], selectedIndex: number) {
+export function drawUpgradeScreen(
+  rc: RenderContext,
+  options: UpgradeOption[],
+  selectedIndex: number,
+  gold: number,
+  canFreeReroll: boolean,
+  rerollCost: number
+) {
   const { ctx, w, h } = rc;
 
   const overlayGrad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w * 0.7);
@@ -463,41 +485,55 @@ export function drawUpgradeScreen(rc: RenderContext, options: UpgradeOption[], s
   ctx.fillRect(0, 0, w, h);
 
   ctx.shadowColor = '#ffd700';
-  ctx.shadowBlur = 15;
-  ctx.font = 'bold 36px "Segoe UI", sans-serif';
+  ctx.shadowBlur = 12;
+  ctx.font = 'bold 34px "Segoe UI", sans-serif';
   ctx.fillStyle = '#ffd700';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('⬆ 升级! 选择一个强化 ⬆', w / 2, h / 2 - 160);
+  ctx.fillText('升级商店', w / 2, h / 2 - 180);
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
 
-  const cardW = Math.min(220, (w - 80) / options.length - 15);
-  const cardH = 240;
-  const totalW = options.length * (cardW + 15) - 15;
+  ctx.font = 'bold 18px "Segoe UI", sans-serif';
+  ctx.fillStyle = '#ffd166';
+  ctx.fillText(`🪙 ${gold}`, w / 2, h / 2 - 142);
+
+  const cardGap = 12;
+  const optionCount = Math.max(options.length, 1);
+  const cardW = Math.min(180, (w - 90) / optionCount - cardGap);
+  const cardH = 230;
+  const totalW = options.length * (cardW + cardGap) - cardGap;
   const startX = (w - totalW) / 2;
+  const cardY = h / 2 - cardH / 2 - 5;
 
   for (let i = 0; i < options.length; i++) {
     const opt = options[i];
-    const x = startX + i * (cardW + 15);
-    const y = h / 2 - cardH / 2;
+    const x = startX + i * (cardW + cardGap);
+    const y = cardY;
     const selected = i === selectedIndex;
-    const hoverScale = selected ? 1.05 : 1;
+    const affordable = gold >= opt.cost;
+    const sold = !!opt.purchased;
+    const unavailable = sold || !affordable;
+    const isModifier = opt.type === 'modifier';
 
     ctx.save();
-    ctx.translate(x + cardW / 2, y + cardH / 2);
-    ctx.scale(hoverScale, hoverScale);
-    ctx.translate(-cardW / 2, -cardH / 2);
+    ctx.translate(x, y);
 
     if (selected) {
-      ctx.shadowColor = '#6666ff';
-      ctx.shadowBlur = 20;
+      ctx.shadowColor = affordable && !sold ? '#ffd166' : '#6666ff';
+      ctx.shadowBlur = 16;
     }
 
     const cardGrad = ctx.createLinearGradient(0, 0, 0, cardH);
-    if (selected) {
-      cardGrad.addColorStop(0, 'rgba(80,80,180,0.95)');
-      cardGrad.addColorStop(1, 'rgba(40,40,100,0.95)');
+    if (sold) {
+      cardGrad.addColorStop(0, 'rgba(45,85,60,0.92)');
+      cardGrad.addColorStop(1, 'rgba(25,50,35,0.92)');
+    } else if (isModifier) {
+      cardGrad.addColorStop(0, selected ? 'rgba(95,55,145,0.96)' : 'rgba(70,45,115,0.92)');
+      cardGrad.addColorStop(1, selected ? 'rgba(50,35,92,0.96)' : 'rgba(36,28,68,0.92)');
+    } else if (selected) {
+      cardGrad.addColorStop(0, 'rgba(85,75,135,0.95)');
+      cardGrad.addColorStop(1, 'rgba(45,42,82,0.95)');
     } else {
       cardGrad.addColorStop(0, 'rgba(50,50,80,0.9)');
       cardGrad.addColorStop(1, 'rgba(30,30,50,0.9)');
@@ -507,7 +543,7 @@ export function drawUpgradeScreen(rc: RenderContext, options: UpgradeOption[], s
     ctx.roundRect(0, 0, cardW, cardH, 12);
     ctx.fill();
 
-    ctx.strokeStyle = selected ? '#8888ff' : 'rgba(100,100,150,0.5)';
+    ctx.strokeStyle = selected ? '#ffd166' : isModifier ? '#b277ff' : 'rgba(100,100,150,0.5)';
     ctx.lineWidth = selected ? 2 : 1;
     ctx.beginPath();
     ctx.roundRect(0, 0, cardW, cardH, 12);
@@ -516,32 +552,33 @@ export function drawUpgradeScreen(rc: RenderContext, options: UpgradeOption[], s
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
 
-    if (selected) {
-      ctx.fillStyle = 'rgba(100,100,255,0.1)';
+    if (unavailable) {
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
       ctx.beginPath();
       ctx.roundRect(0, 0, cardW, cardH, 12);
       ctx.fill();
     }
 
-    ctx.fillStyle = selected ? 'rgba(100,100,255,0.2)' : 'rgba(80,80,120,0.3)';
+    ctx.fillStyle = isModifier ? 'rgba(178,119,255,0.22)' : selected ? 'rgba(255,209,102,0.18)' : 'rgba(80,80,120,0.3)';
     ctx.beginPath();
-    ctx.arc(cardW / 2, 70, 40, 0, Math.PI * 2);
+    ctx.arc(cardW / 2, 46, 32, 0, Math.PI * 2);
     ctx.fill();
 
-    ctx.font = '52px serif';
+    ctx.font = '42px serif';
     ctx.textAlign = 'center';
-    ctx.fillStyle = COLORS.uiText;
-    ctx.fillText(opt.icon, cardW / 2, 75);
+    ctx.fillStyle = unavailable ? 'rgba(255,255,255,0.65)' : COLORS.uiText;
+    ctx.fillText(opt.icon, cardW / 2, 53);
 
-    ctx.font = 'bold 16px "Segoe UI", sans-serif';
-    ctx.fillStyle = selected ? '#ffffff' : '#cccccc';
-    ctx.fillText(opt.title, cardW / 2, 135);
+    ctx.font = 'bold 15px "Segoe UI", sans-serif';
+    ctx.fillStyle = unavailable ? '#999999' : selected ? '#ffffff' : '#dddddd';
+    ctx.fillText(opt.title, cardW / 2, 96);
 
     ctx.font = '12px "Segoe UI", sans-serif';
-    ctx.fillStyle = '#aaaaaa';
+    ctx.fillStyle = unavailable ? '#888888' : '#aaaaaa';
     const words = opt.description.split('');
     let line = '';
-    let lineY = 165;
+    let lineY = 122;
+    let lines = 0;
     const maxLineWidth = cardW - 30;
     for (const char of words) {
       const testLine = line + char;
@@ -549,25 +586,80 @@ export function drawUpgradeScreen(rc: RenderContext, options: UpgradeOption[], s
         ctx.fillText(line, cardW / 2, lineY);
         line = char;
         lineY += 18;
+        lines++;
+        if (lines >= 3) break;
       } else {
         line = testLine;
       }
     }
-    ctx.fillText(line, cardW / 2, lineY);
+    if (line && lines < 3) ctx.fillText(line, cardW / 2, lineY);
 
-    const badgeY = cardH - 25;
-    const badgeText = opt.type === 'weapon' ? '⚔️ 武器' : '🛡️ 被动';
+    const badgeY = 180;
+    const badgeText = opt.type === 'weapon' ? '⚔️ 武器' :
+                      opt.type === 'passive' ? '🛡️ 被动' :
+                      opt.type === 'modifier' ? '✦ 通用模块' : '❤️ 治疗';
     ctx.font = '11px "Segoe UI", sans-serif';
-    ctx.fillStyle = opt.type === 'weapon' ? '#ff8888' : '#88ff88';
+    ctx.fillStyle = opt.type === 'weapon' ? '#ff9999' :
+                    opt.type === 'passive' ? '#88ff88' :
+                    opt.type === 'modifier' ? '#d3a8ff' : '#ffb3c1';
     ctx.fillText(badgeText, cardW / 2, badgeY);
+
+    const priceW = cardW - 34;
+    const priceX = 17;
+    const priceY = cardH - 38;
+    ctx.fillStyle = sold ? 'rgba(68,255,136,0.14)' : affordable ? 'rgba(255,209,102,0.14)' : 'rgba(255,80,80,0.14)';
+    ctx.beginPath();
+    ctx.roundRect(priceX, priceY, priceW, 26, 13);
+    ctx.fill();
+    ctx.strokeStyle = sold ? '#44ff88' : affordable ? '#ffd166' : '#ff7777';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(priceX, priceY, priceW, 26, 13);
+    ctx.stroke();
+    ctx.font = 'bold 13px "Segoe UI", sans-serif';
+    ctx.fillStyle = sold ? '#88ff88' : affordable ? '#ffd166' : '#ff8888';
+    ctx.fillText(sold ? (isModifier ? '已安装' : '已购买') : `🪙 ${opt.cost}`, cardW / 2, priceY + 13);
 
     ctx.restore();
   }
 
-  ctx.font = '15px "Segoe UI", sans-serif';
-  ctx.fillStyle = COLORS.uiDim;
+  const btnY = h / 2 + 155;
+  const btnW = 150;
+  const btnH = 38;
+  const canReroll = canFreeReroll || gold >= rerollCost;
+  const rerollLabel = canFreeReroll ? '免费刷新' : `刷新 🪙 ${rerollCost}`;
+
   ctx.textAlign = 'center';
-  ctx.fillText('← → 或 点击选择   |   Enter 或 点击确认', w / 2, h / 2 + 160);
+  ctx.textBaseline = 'middle';
+
+  ctx.fillStyle = canReroll ? 'rgba(255,209,102,0.18)' : 'rgba(80,80,100,0.45)';
+  ctx.beginPath();
+  ctx.roundRect(w / 2 - 165, btnY, btnW, btnH, 8);
+  ctx.fill();
+  ctx.strokeStyle = canReroll ? '#ffd166' : 'rgba(160,160,180,0.45)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(w / 2 - 165, btnY, btnW, btnH, 8);
+  ctx.stroke();
+  ctx.font = 'bold 14px "Segoe UI", sans-serif';
+  ctx.fillStyle = canReroll ? '#ffd166' : '#999999';
+  ctx.fillText(rerollLabel, w / 2 - 90, btnY + btnH / 2);
+
+  ctx.fillStyle = 'rgba(100,140,255,0.18)';
+  ctx.beginPath();
+  ctx.roundRect(w / 2 + 15, btnY, btnW, btnH, 8);
+  ctx.fill();
+  ctx.strokeStyle = '#88aaff';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(w / 2 + 15, btnY, btnW, btnH, 8);
+  ctx.stroke();
+  ctx.fillStyle = '#dde6ff';
+  ctx.fillText('继续战斗', w / 2 + 90, btnY + btnH / 2);
+
+  ctx.font = '14px "Segoe UI", sans-serif';
+  ctx.fillStyle = COLORS.uiDim;
+  ctx.fillText('← → 选择 | Enter 购买 | R 刷新 | Space/Esc 继续', w / 2, btnY + 60);
 }
 
 export function drawGameOver(rc: RenderContext, stats: { time: number; kills: number; level: number; weaponNames: string[] }) {

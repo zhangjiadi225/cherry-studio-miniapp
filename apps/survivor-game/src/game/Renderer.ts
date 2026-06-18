@@ -102,6 +102,8 @@ export class Renderer {
   drawPauseButton() { drawPauseBtn(this.rc); }
   drawMenu() { drawMenu(this.rc); }
   drawPaused() { drawPaused(this.rc); }
-  drawUpgradeScreen(options: UpgradeOption[], selectedIndex: number) { drawUpgradeScreen(this.rc, options, selectedIndex); }
+  drawUpgradeScreen(options: UpgradeOption[], selectedIndex: number, gold: number, canFreeReroll: boolean, rerollCost: number) {
+    drawUpgradeScreen(this.rc, options, selectedIndex, gold, canFreeReroll, rerollCost);
+  }
   drawGameOver(stats: { time: number; kills: number; level: number; weaponNames: string[] }) { drawGameOver(this.rc, stats); }
 }

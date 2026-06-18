@@ -1,5 +1,5 @@
-import { Weapon, WeaponType, Player, Enemy, Projectile } from '../../types';
-import { WEAPON_DATA, FIND_ENEMY_RANGE, LIGHTNING_RANGE, HOLY_WATER_RANGE } from '../../constants';
+import { Weapon, WeaponType, Player, Enemy, Projectile, GenericModifierType } from '../../types';
+import { WEAPON_DATA, FIND_ENEMY_RANGE, LIGHTNING_RANGE, HOLY_WATER_RANGE, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from '../../constants';
 import { dist, normalize, randFloat } from '../../utils/math';
 import { pools } from '../../utils/PoolManager';
 
@@ -7,6 +7,7 @@ export function createWeapon(type: WeaponType): Weapon {
   const d = WEAPON_DATA[type];
   return {
     type,
+    family: d.family,
     level: 1,
     cooldown: d.baseCooldown,
     timer: 0,
@@ -17,6 +18,8 @@ export function createWeapon(type: WeaponType): Weapon {
     pierce: d.basePierce,
     duration: d.baseDuration,
     knockback: d.baseKnockback,
+    modifiers: [],
+    modifierMask: 0,
   };
 }
 
@@ -52,28 +55,35 @@ export function updateWeapon(
   const effectiveDamage = w.damage * player.might;
   const effectiveArea = w.area * player.area;
 
-  let fired = true;
+  const castDamages = getCastDamages(w, effectiveDamage);
+  let fired = false;
   switch (w.type) {
     case WeaponType.MAGIC_WAND:
-      fireMagicWand(w, player, enemies, projectiles, effectiveDamage, effectiveArea);
+      for (const damage of castDamages) fireMagicWand(w, player, enemies, projectiles, damage, effectiveArea);
+      fired = true;
       break;
     case WeaponType.FIRE_WAND:
-      fireFireWand(w, player, enemies, projectiles, effectiveDamage, effectiveArea);
+      for (const damage of castDamages) fireFireWand(w, player, enemies, projectiles, damage, effectiveArea);
+      fired = true;
       break;
     case WeaponType.AXE:
-      fireAxe(w, player, projectiles, effectiveDamage, effectiveArea);
+      for (const damage of castDamages) fireAxe(w, player, projectiles, damage, effectiveArea);
+      fired = true;
       break;
     case WeaponType.LIGHTNING:
-      fired = fireLightning(w, player, enemies, projectiles, effectiveDamage, effectiveArea);
+      for (const damage of castDamages) fired = fireLightning(w, player, enemies, projectiles, damage, effectiveArea) || fired;
       break;
     case WeaponType.WHIP:
       fireWhip(w, player, projectiles, effectiveDamage, effectiveArea);
+      fired = true;
       break;
     case WeaponType.BIBLE:
       fireBible(w, player, projectiles, effectiveDamage, effectiveArea);
+      fired = true;
       break;
     case WeaponType.HOLY_WATER:
-      fireHolyWater(w, player, enemies, projectiles, effectiveDamage, effectiveArea);
+      for (const damage of castDamages) fireHolyWater(w, player, enemies, projectiles, damage, effectiveArea);
+      fired = true;
       break;
   }
   if (fired) w.timer = 0;
@@ -96,6 +106,29 @@ function findNearestEnemies(
 
 function acquireProjectile(): Projectile {
   return pools.projectiles.acquire();
+}
+
+function hasModifier(w: Weapon, modifier: GenericModifierType): boolean {
+  return (w.modifierMask & GENERIC_MODIFIER_MASK[modifier]) !== 0;
+}
+
+function hasModifierEffect(w: Weapon, trigger: 'onFire', effect: 'extraCast'): boolean {
+  return Object.values(GENERIC_MODIFIER_DATA).some((modifier) =>
+    modifier.trigger === trigger &&
+    modifier.effect === effect &&
+    hasModifier(w, modifier.id)
+  );
+}
+
+function getCastDamages(w: Weapon, damage: number): number[] {
+  return hasModifierEffect(w, 'onFire', 'extraCast') ? [damage, damage * 0.65] : [damage];
+}
+
+function attachWeaponModifiers(p: Projectile, w: Weapon) {
+  p.modifierMask = w.modifierMask;
+  p.splitDone = false;
+  p.chainDone = false;
+  p.pulseDone = false;
 }
 
 function fireMagicWand(
@@ -125,6 +158,7 @@ function fireMagicWand(
     p.type = WeaponType.MAGIC_WAND;
     p.knockback = w.knockback;
     p.animTimer = 0;
+    attachWeaponModifiers(p, w);
     projectiles.push(p);
   }
 }
@@ -156,6 +190,7 @@ function fireFireWand(
     p.type = WeaponType.FIRE_WAND;
     p.knockback = w.knockback;
     p.animTimer = 0;
+    attachWeaponModifiers(p, w);
     projectiles.push(p);
   }
 }
@@ -179,6 +214,7 @@ function fireAxe(
     p.knockback = w.knockback;
     p.animTimer = Math.random() * Math.PI * 2;
     p.gravY = 400;
+    attachWeaponModifiers(p, w);
     projectiles.push(p);
   }
 }
@@ -203,6 +239,7 @@ function fireLightning(
       p.knockback = w.knockback;
       p.animTimer = 0;
       p.lightningSeed = Math.random() * 1000;
+      attachWeaponModifiers(p, w);
       projectiles.push(p);
     }
   }
@@ -229,6 +266,7 @@ function fireWhip(
   p.animTimer = 0;
   p.count = segments;
   p.segScale = area;
+  attachWeaponModifiers(p, w);
   projectiles.push(p);
 }
 
@@ -254,6 +292,7 @@ function fireBible(
     p.orbitSpeed = 3;
     p.originX = player.x;
     p.originY = player.y;
+    attachWeaponModifiers(p, w);
     projectiles.push(p);
   }
 }
@@ -277,6 +316,7 @@ function fireHolyWater(
     p.type = WeaponType.HOLY_WATER;
     p.knockback = w.knockback;
     p.animTimer = 0;
+    attachWeaponModifiers(p, w);
     projectiles.push(p);
   }
 }
@@ -348,11 +388,17 @@ export function updateGarlicAura(
 
   const radius = getGarlicRadius(garlicWeapon, player);
   const dmg = garlicWeapon.damage * player.might;
+  const hasRepulsion = hasModifier(garlicWeapon, GenericModifierType.REPULSION_FIELD);
   for (const e of enemies) {
     if (e.hp <= 0) continue;
     if (dist(e, player) < radius + e.radius) {
       e.hp -= dmg;
       e.hitFlash = 1;
+      if (hasRepulsion) {
+        const dir = normalize({ x: e.x - player.x, y: e.y - player.y });
+        e.knockbackX += dir.x * 120;
+        e.knockbackY += dir.y * 120;
+      }
       hits.push({ x: e.x, y: e.y, dmg });
     }
   }

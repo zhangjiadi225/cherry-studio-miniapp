@@ -1,11 +1,12 @@
 import {
   GameState, Enemy, Projectile, XPGem, Particle, DamageNumber,
-  Camera, UpgradeOption, WeaponType, PassiveType
+  Camera, UpgradeOption, WeaponType, PassiveType, GenericModifierType
 } from './types';
 import {
   GAME_DURATION, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
   HEALTH_DROP_CHANCE, HEALTH_DROP_AMOUNT, CONTACT_COOLDOWN,
   MAGIC_CIRCLE_HEAL_RATE, MAGIC_CIRCLE_RADIUS,
+  GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK,
 } from './constants';
 import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
@@ -24,7 +25,7 @@ import {
 } from './effects/Particle';
 import { createDamageNumber, updateDamageNumber } from './effects/DamageNumber';
 import { circlesOverlap, compactArray } from './utils/math';
-import { generateUpgradeOptions, applyUpgrade } from './systems/weapon/Upgrade';
+import { generateUpgradeOptions, applyUpgrade, getRerollCost, getShopOptionCount } from './systems/weapon/Upgrade';
 import { MapSystem } from './systems/map/MapSystem';
 import { pools, clearAllPools } from './utils/PoolManager';
 import { eventBus, gameState, GameEvent } from './events';
@@ -47,6 +48,8 @@ export class Game {
   private killCount = 0;
   private upgradeOptions: UpgradeOption[] = [];
   private selectedUpgrade = 0;
+  private shopFreeRerollAvailable = true;
+  private shopPaidRerollsThisRound = 0;
   private garlicTickTimer = { value: 0 };
   private lastTime = 0;
   private levelUpQueue = 0;
@@ -55,6 +58,8 @@ export class Game {
   private bossWarningShown = new Set<number>();
   private damageFlashTimer = 0;
   private levelUpFlashTimer = 0;
+  private enemyGrid = new Map<string, Enemy[]>();
+  private readonly enemyGridCellSize = 240;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -85,9 +90,15 @@ export class Game {
           this.selectedUpgrade = Math.max(0, this.selectedUpgrade - 1);
         } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
           this.selectedUpgrade = Math.min(this.upgradeOptions.length - 1, this.selectedUpgrade + 1);
-        } else if (e.code === 'Enter' || e.code === 'Space') {
+        } else if (e.code === 'Enter') {
           e.preventDefault();
-          this.selectUpgrade();
+          this.buySelectedUpgrade();
+        } else if (e.code === 'KeyR') {
+          e.preventDefault();
+          this.rerollShop();
+        } else if (e.code === 'Space' || e.code === 'Escape') {
+          e.preventDefault();
+          this.finishShop();
         }
         break;
       case 'paused':
@@ -146,6 +157,8 @@ export class Game {
     this.difficulty = 0;
     this.killCount = 0;
     this.levelUpQueue = 0;
+    this.shopFreeRerollAvailable = true;
+    this.shopPaidRerollsThisRound = 0;
     this.garlicTickTimer.value = 0;
     this.bossWarningTimer = 0;
     this.bossWarningName = '';
@@ -341,7 +354,10 @@ export class Game {
   }
 
   private updateProjectiles(dt: number) {
-    for (const p of this.projectiles) {
+    this.rebuildEnemyGrid();
+    const projectileCount = this.projectiles.length;
+    for (let i = 0; i < projectileCount; i++) {
+      const p = this.projectiles[i];
       if (p.life <= 0) continue;
       if (!updateProjectile(p, dt)) { p.life = 0; continue; }
       if (p.orbitAngle === undefined && this.mapSystem.handleProjectileCollision(p.x, p.y, p.radius)) {
@@ -351,29 +367,7 @@ export class Game {
         if (e.hp <= 0) continue;
         if (p.hitEnemies.has(e.id)) continue;
         if (circlesOverlap(p.x, p.y, p.radius, e.x, e.y, e.radius)) {
-          p.hitEnemies.add(e.id);
-          const dir = { x: e.x - p.x, y: e.y - p.y };
-          const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
-          const isDead = damageEnemy(e, p.damage, (dir.x / len) * p.knockback, (dir.y / len) * p.knockback);
-          const hitColor = ENEMY_DATA[e.type].color;
-          spawnHitParticles(this.particles, e.x, e.y, hitColor, 6, {
-            speed: 150, life: 0.5, radius: 3, type: 'spark', glow: true,
-          });
-          if (p.type === WeaponType.FIRE_WAND) {
-            spawnHitParticles(this.particles, e.x, e.y, '#ff8800', 4, {
-              speed: 100, life: 0.4, radius: 4, type: 'circle', glow: true,
-            });
-          }
-          if (p.type === WeaponType.LIGHTNING) {
-            spawnHitParticles(this.particles, e.x, e.y, '#ffff88', 3, {
-              speed: 120, life: 0.3, radius: 2, type: 'star', glow: true,
-            });
-          }
-          const dmgColor = p.type === WeaponType.FIRE_WAND ? '#ff8844' :
-                          p.type === WeaponType.LIGHTNING ? '#ffff88' :
-                          p.type === WeaponType.HOLY_WATER ? '#88ccff' : '#ffffff';
-          const dmgSize = p.damage >= 30 ? 18 : p.damage >= 20 ? 16 : 14;
-          this.damageNumbers.push(createDamageNumber(e.x, e.y, p.damage, dmgColor, dmgSize));
+          const isDead = this.applyProjectileHit(p, e);
           p.pierceCount++;
           if (p.pierceCount > p.pierce) {
             if (p.type === WeaponType.FIRE_WAND && isDead) {
@@ -391,15 +385,206 @@ export class Game {
     this.releaseDeadProjectiles();
   }
 
+  private rebuildEnemyGrid() {
+    this.enemyGrid.clear();
+    for (const enemy of this.enemies) {
+      if (enemy.hp <= 0) continue;
+      const key = this.getEnemyGridKey(enemy.x, enemy.y);
+      let bucket = this.enemyGrid.get(key);
+      if (!bucket) {
+        bucket = [];
+        this.enemyGrid.set(key, bucket);
+      }
+      bucket.push(enemy);
+    }
+  }
+
+  private getEnemyGridKey(x: number, y: number): string {
+    const gx = Math.floor(x / this.enemyGridCellSize);
+    const gy = Math.floor(y / this.enemyGridCellSize);
+    return `${gx}:${gy}`;
+  }
+
+  private forNearbyEnemies(x: number, y: number, radius: number, visit: (enemy: Enemy) => void) {
+    const minX = Math.floor((x - radius) / this.enemyGridCellSize);
+    const maxX = Math.floor((x + radius) / this.enemyGridCellSize);
+    const minY = Math.floor((y - radius) / this.enemyGridCellSize);
+    const maxY = Math.floor((y + radius) / this.enemyGridCellSize);
+
+    for (let gx = minX; gx <= maxX; gx++) {
+      for (let gy = minY; gy <= maxY; gy++) {
+        const bucket = this.enemyGrid.get(`${gx}:${gy}`);
+        if (!bucket) continue;
+        for (const enemy of bucket) {
+          if (enemy.hp <= 0) continue;
+          const dx = enemy.x - x;
+          const dy = enemy.y - y;
+          const hitRadius = radius + enemy.radius;
+          if (dx * dx + dy * dy <= hitRadius * hitRadius) visit(enemy);
+        }
+      }
+    }
+  }
+
+  private applyProjectileHit(p: Projectile, e: Enemy): boolean {
+    p.hitEnemies.add(e.id);
+    const dir = { x: e.x - p.x, y: e.y - p.y };
+    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
+    const knockback = p.knockback + (this.projectileHasEffect(p, 'knockback') ? 120 : 0);
+    const isDead = damageEnemy(e, p.damage, (dir.x / len) * knockback, (dir.y / len) * knockback);
+    const hitColor = ENEMY_DATA[e.type].color;
+
+    spawnHitParticles(this.particles, e.x, e.y, hitColor, 6, {
+      speed: 150, life: 0.5, radius: 3, type: 'spark', glow: true,
+    });
+    if (p.type === WeaponType.FIRE_WAND) {
+      spawnHitParticles(this.particles, e.x, e.y, '#ff8800', 4, {
+        speed: 100, life: 0.4, radius: 4, type: 'circle', glow: true,
+      });
+    }
+    if (p.type === WeaponType.LIGHTNING) {
+      spawnHitParticles(this.particles, e.x, e.y, '#ffff88', 3, {
+        speed: 120, life: 0.3, radius: 2, type: 'star', glow: true,
+      });
+    }
+
+    const dmgColor = this.getProjectileDamageColor(p);
+    const dmgSize = p.damage >= 30 ? 18 : p.damage >= 20 ? 16 : 14;
+    this.damageNumbers.push(createDamageNumber(e.x, e.y, p.damage, dmgColor, dmgSize));
+    this.triggerProjectileModifiers(p, e);
+    return isDead;
+  }
+
+  private triggerProjectileModifiers(p: Projectile, e: Enemy) {
+    for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
+      if (modifier.trigger !== 'onHit') continue;
+      if (!this.projectileHasModifier(p, modifier.id)) continue;
+
+      switch (modifier.effect) {
+        case 'pulse':
+          if (!p.pulseDone) {
+            p.pulseDone = true;
+            this.spawnImpactPulse(p);
+          }
+          break;
+        case 'chain':
+          if (!p.chainDone) {
+            p.chainDone = true;
+            this.spawnChainHit(p, e);
+          }
+          break;
+        case 'split':
+          if (!p.splitDone && this.canSplitProjectile(p)) {
+            p.splitDone = true;
+            this.spawnSplitProjectiles(p);
+          }
+          break;
+      }
+    }
+  }
+
+  private projectileHasModifier(p: Projectile, modifier: GenericModifierType): boolean {
+    return (p.modifierMask & GENERIC_MODIFIER_MASK[modifier]) !== 0;
+  }
+
+  private projectileHasEffect(p: Projectile, effect: 'knockback'): boolean {
+    return Object.values(GENERIC_MODIFIER_DATA).some((modifier) =>
+      modifier.effect === effect &&
+      this.projectileHasModifier(p, modifier.id)
+    );
+  }
+
+  private getProjectileDamageColor(p: Projectile): string {
+    return p.type === WeaponType.FIRE_WAND ? '#ff8844' :
+           p.type === WeaponType.LIGHTNING ? '#ffff88' :
+           p.type === WeaponType.HOLY_WATER ? '#88ccff' : '#ffffff';
+  }
+
+  private spawnImpactPulse(p: Projectile) {
+    const radius = Math.max(36, p.radius * 1.8);
+    const damage = p.damage * 0.35;
+    spawnExplosionParticles(this.particles, p.x, p.y, '#b277ff', 10, {
+      speed: 120, life: 0.45, radius: 3, type: 'spark', glow: true,
+      innerColor: '#f0ddff', ringCount: 5,
+    });
+
+    this.forNearbyEnemies(p.x, p.y, radius, (target) => {
+      const dir = { x: target.x - p.x, y: target.y - p.y };
+      const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
+      damageEnemy(target, damage, (dir.x / len) * p.knockback * 0.4, (dir.y / len) * p.knockback * 0.4);
+      this.damageNumbers.push(createDamageNumber(target.x, target.y, damage, '#c49cff', 12));
+    });
+  }
+
+  private spawnChainHit(p: Projectile, source: Enemy) {
+    let best: Enemy | undefined;
+    let bestDist = Infinity;
+    this.forNearbyEnemies(source.x, source.y, 240, (target) => {
+      if (target.hp <= 0 || target.id === source.id || p.hitEnemies.has(target.id)) return;
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 240 && d < bestDist) {
+        best = target;
+        bestDist = d;
+      }
+    });
+    if (!best) return;
+
+    p.hitEnemies.add(best.id);
+    const dir = { x: best.x - source.x, y: best.y - source.y };
+    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
+    const damage = p.damage * 0.55;
+    damageEnemy(best, damage, (dir.x / len) * p.knockback * 0.7, (dir.y / len) * p.knockback * 0.7);
+    spawnHitParticles(this.particles, best.x, best.y, '#bde7ff', 6, {
+      speed: 130, life: 0.35, radius: 2.5, type: 'star', glow: true,
+    });
+    this.damageNumbers.push(createDamageNumber(best.x, best.y, damage, '#bde7ff', 13));
+  }
+
+  private canSplitProjectile(p: Projectile): boolean {
+    return p.type === WeaponType.MAGIC_WAND || p.type === WeaponType.FIRE_WAND || p.type === WeaponType.AXE;
+  }
+
+  private spawnSplitProjectiles(p: Projectile) {
+    const speed = Math.max(220, Math.sqrt(p.vx * p.vx + p.vy * p.vy) || 320);
+    const baseAngle = Math.atan2(p.vy, p.vx || 1);
+    for (const offset of [-0.45, 0.45]) {
+      const child = pools.projectiles.acquire();
+      const angle = baseAngle + offset;
+      child.x = p.x;
+      child.y = p.y;
+      child.vx = Math.cos(angle) * speed;
+      child.vy = Math.sin(angle) * speed;
+      child.damage = p.damage * 0.4;
+      child.radius = Math.max(4, p.radius * 0.65);
+      child.life = Math.min(1.1, Math.max(0.55, p.maxLife * 0.55));
+      child.maxLife = child.life;
+      child.pierce = 0;
+      child.pierceCount = 0;
+      child.type = p.type;
+      child.hitEnemies.clear();
+      child.knockback = p.knockback * 0.6;
+      child.animTimer = 0;
+      child.modifierMask = p.modifierMask;
+      child.splitDone = true;
+      child.chainDone = false;
+      child.pulseDone = false;
+      if (p.type === WeaponType.AXE) child.gravY = p.gravY;
+      this.projectiles.push(child);
+    }
+  }
+
   private updateXPGems(dt: number) {
     const hasMagnet = hasPassive(this.player, PassiveType.MAGNET);
     for (const gem of this.xpGems) {
       if (gem.life <= 0) continue;
-        const result = updateXPGem(gem, this.player, dt, hasMagnet);
+      const result = updateXPGem(gem, this.player, dt, hasMagnet);
       if (result.collected) {
         spawnXPParticles(this.particles, gem.x, gem.y, 5, {
           speed: 80, life: 0.4, radius: 2.5, color: '#88ffaa', glow: true,
         });
+        this.player.gold += result.value;
         const leveled = addXP(this.player, result.value);
         eventBus.emit(GameEvent.XP_COLLECTED, result.value);
         if (leveled) {
@@ -474,14 +659,40 @@ export class Game {
 
   private showUpgradeScreen() {
     gameState.transition('upgrade');
-    this.upgradeOptions = generateUpgradeOptions(this.player);
+    this.upgradeOptions = generateUpgradeOptions(this.player, getShopOptionCount(this.player));
+    this.selectedUpgrade = 0;
+    this.shopFreeRerollAvailable = true;
+    this.shopPaidRerollsThisRound = 0;
+  }
+
+  private buySelectedUpgrade() {
+    if (this.selectedUpgrade >= this.upgradeOptions.length) return;
+    const option = this.upgradeOptions[this.selectedUpgrade];
+    if (option.purchased || this.player.gold < option.cost) return;
+
+    this.player.gold -= option.cost;
+    applyUpgrade(this.player, option);
+    option.purchased = true;
+    eventBus.emit(GameEvent.UPGRADE_SELECT, option);
+
+    const nextAvailable = this.upgradeOptions.findIndex((o) => !o.purchased);
+    if (nextAvailable >= 0) this.selectedUpgrade = nextAvailable;
+  }
+
+  private rerollShop() {
+    if (this.shopFreeRerollAvailable) {
+      this.shopFreeRerollAvailable = false;
+    } else {
+      const cost = getRerollCost(this.shopPaidRerollsThisRound);
+      if (this.player.gold < cost) return;
+      this.player.gold -= cost;
+      this.shopPaidRerollsThisRound++;
+    }
+    this.upgradeOptions = generateUpgradeOptions(this.player, getShopOptionCount(this.player));
     this.selectedUpgrade = 0;
   }
 
-  private selectUpgrade() {
-    if (this.selectedUpgrade >= this.upgradeOptions.length) return;
-    applyUpgrade(this.player, this.upgradeOptions[this.selectedUpgrade]);
-    eventBus.emit(GameEvent.UPGRADE_SELECT, this.upgradeOptions[this.selectedUpgrade]);
+  private finishShop() {
     gameState.transition('finishUpgrade');
     if (this.levelUpQueue > 0) {
       setTimeout(() => this.showUpgradeScreen(), 100);
@@ -502,18 +713,34 @@ export class Game {
     const y = clientY - rect.top;
     const w = this.renderer.getWidth();
     const h = this.renderer.getHeight();
-    const cardW = Math.min(200, (w - 60) / this.upgradeOptions.length - 10);
-    const cardH = 200;
-    const totalW = this.upgradeOptions.length * (cardW + 10) - 10;
+    if (this.upgradeOptions.length === 0) return;
+
+    const cardGap = 12;
+    const cardW = Math.min(180, (w - 90) / this.upgradeOptions.length - cardGap);
+    const cardH = 230;
+    const totalW = this.upgradeOptions.length * (cardW + cardGap) - cardGap;
     const startX = (w - totalW) / 2;
+    const cardY = h / 2 - cardH / 2 - 5;
     for (let i = 0; i < this.upgradeOptions.length; i++) {
-      const cx = startX + i * (cardW + 10);
-      const cy = h / 2 - cardH / 2;
-      if (x >= cx && x <= cx + cardW && y >= cy && y <= cy + cardH) {
+      const cx = startX + i * (cardW + cardGap);
+      if (x >= cx && x <= cx + cardW && y >= cardY && y <= cardY + cardH) {
         this.selectedUpgrade = i;
-        this.selectUpgrade();
+        this.buySelectedUpgrade();
         return;
       }
+    }
+
+    const btnY = h / 2 + 155;
+    const btnW = 150;
+    const btnH = 38;
+    const rerollX = w / 2 - 165;
+    const continueX = w / 2 + 15;
+    if (x >= rerollX && x <= rerollX + btnW && y >= btnY && y <= btnY + btnH) {
+      this.rerollShop();
+      return;
+    }
+    if (x >= continueX && x <= continueX + btnW && y >= btnY && y <= btnY + btnH) {
+      this.finishShop();
     }
   }
 
@@ -581,7 +808,13 @@ export class Game {
     if (gameState.is('paused')) {
       this.renderer.drawPaused();
     } else if (gameState.is('upgrading')) {
-      this.renderer.drawUpgradeScreen(this.upgradeOptions, this.selectedUpgrade);
+      this.renderer.drawUpgradeScreen(
+        this.upgradeOptions,
+        this.selectedUpgrade,
+        this.player.gold,
+        this.shopFreeRerollAvailable,
+        getRerollCost(this.shopPaidRerollsThisRound)
+      );
     } else if (gameState.is('gameover')) {
       this.renderer.drawGameOver({
         time: this.elapsed,

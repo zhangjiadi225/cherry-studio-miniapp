@@ -558,7 +558,9 @@ function seededRandom(seed: number): number {
 
 export function drawProjectile(rc: RenderContext, p: Projectile) {
   const { ctx } = rc;
-  const alpha = Math.min(1, p.life / (p.maxLife * 0.3));
+  if (p.radius <= 0 || p.maxLife <= 0 || p.life <= 0) return;
+  const lifeRatio = Math.max(0, Math.min(1, p.life / p.maxLife));
+  const alpha = Math.min(1, lifeRatio / 0.3);
 
   switch (p.type) {
     case WeaponType.MAGIC_WAND:
@@ -630,7 +632,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       break;
 
     case WeaponType.LIGHTNING: {
-      const progress = 1 - p.life / p.maxLife;
+      const progress = 1 - lifeRatio;
       const seed = p.lightningSeed ?? 42;
       ctx.fillStyle = `rgba(255,255,100,${alpha * 0.3})`;
       ctx.beginPath();
@@ -675,13 +677,13 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
 
     case WeaponType.WHIP: {
       const swingDir = p.vx >= 0 ? 1 : -1;
-      const isSecondHalf = p.life < p.maxLife / 2;
+      const isSecondHalf = lifeRatio < 0.5;
       const segCount = Math.max(1, p.count ?? 1);
       const whipLen = p.radius;
       const scale = p.segScale ?? 1;
       const originX = p.x - swingDir * 12;
       const originY = p.y + 4;
-      const swingPhase = isSecondHalf ? p.life / (p.maxLife / 2) : 1 - p.life / (p.maxLife / 2);
+      const swingPhase = isSecondHalf ? lifeRatio * 2 : (1 - lifeRatio) * 2;
       const arcH = whipLen * 0.2 * scale;
       const controlPts: { x: number; y: number }[] = [{ x: originX, y: originY }];
       for (let i = 1; i <= segCount; i++) {
@@ -788,7 +790,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       }
       // Tip glow & impact
       const tip = knots[knots.length - 1];
-      const glowI = Math.min(1, swingPhase * 1.5);
+      const glowI = Math.max(0, Math.min(1, swingPhase * 1.5));
       const tipGlowR = 16 + glowI * whipLen * 0.08;
       const tipGrad = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, tipGlowR);
       tipGrad.addColorStop(0, `rgba(255,230,120,${alpha * glowI * 0.75})`);
@@ -875,7 +877,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       break;
 
     case WeaponType.HOLY_WATER: {
-      const progress = 1 - p.life / p.maxLife;
+      const progress = 1 - lifeRatio;
       ctx.fillStyle = `rgba(100,150,255,${alpha * (1 - progress * 0.5)})`;
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.radius * (0.5 + progress * 0.5), 0, Math.PI * 2);

@@ -1,10 +1,14 @@
-import { Player, UpgradeOption, WeaponType, PassiveType, Weapon } from '../../types';
-import { WEAPON_DATA, PASSIVE_DATA } from '../../constants';
+import { Player, UpgradeOption, WeaponType, PassiveType, Weapon, GenericModifierType } from '../../types';
+import {
+  SHOP_OPTION_COUNT, SHOP_MAX_OPTION_COUNT, SHOP_LEVELS_PER_EXTRA_OPTION,
+  SHOP_REROLL_BASE_COST, SHOP_REROLL_COST_STEP,
+  WEAPON_DATA, PASSIVE_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK
+} from '../../constants';
 import { createWeapon, upgradeWeapon } from './Weapon';
 import { applyPassive, getPassiveLevel } from '../player/Player';
 import { shuffleArray } from '../../utils/math';
 
-export function generateUpgradeOptions(player: Player, count: number = 3): UpgradeOption[] {
+export function generateUpgradeOptions(player: Player, count: number = getShopOptionCount(player)): UpgradeOption[] {
   const allOptions: UpgradeOption[] = [];
 
   for (const w of player.weapons) {
@@ -16,6 +20,7 @@ export function generateUpgradeOptions(player: Player, count: number = 3): Upgra
         icon: data.icon,
         type: 'weapon',
         weaponType: w.type,
+        cost: getWeaponUpgradeCost(player, w),
         isMaxed: false,
       });
     }
@@ -31,6 +36,7 @@ export function generateUpgradeOptions(player: Player, count: number = 3): Upgra
           icon: data.icon,
           type: 'weapon',
           weaponType: type as WeaponType,
+          cost: getNewWeaponCost(player),
           isMaxed: false,
         });
       }
@@ -46,6 +52,7 @@ export function generateUpgradeOptions(player: Player, count: number = 3): Upgra
         icon: data.icon,
         type: 'passive',
         passiveType: type as PassiveType,
+        cost: getPassiveCost(player, currentLevel),
         isMaxed: false,
       });
     }
@@ -69,17 +76,52 @@ export function generateUpgradeOptions(player: Player, count: number = 3): Upgra
     result.push(remaining.shift()!);
   }
 
+  const modifierOption = rollModifierOption(player);
+  if (modifierOption) {
+    if (result.length < count) {
+      result.push(modifierOption);
+    } else if (result.length > 1) {
+      result[result.length - 1] = modifierOption;
+    }
+  }
+
   if (result.length === 0) {
     result.push({
       title: '恢复生命',
       description: '恢复30%最大生命值',
       icon: '❤️‍🩹',
-      type: 'heal' as any,
+      type: 'heal',
+      cost: getHealCost(player),
       isMaxed: true,
     });
   }
 
   return result.slice(0, count);
+}
+
+function getWeaponUpgradeCost(player: Player, weapon: Weapon): number {
+  return 6 + (weapon.level + 1) * 2 + Math.floor(player.level / 3);
+}
+
+function getNewWeaponCost(player: Player): number {
+  return 8 + player.weapons.length * 3 + Math.floor(player.level / 2);
+}
+
+function getPassiveCost(player: Player, currentLevel: number): number {
+  return 5 + (currentLevel + 1) * 2 + Math.floor(player.level / 4);
+}
+
+function getHealCost(player: Player): number {
+  return 6 + Math.floor(player.level / 2);
+}
+
+export function getShopOptionCount(player: Player): number {
+  const extraOptions = Math.floor(Math.max(0, player.level - 1) / SHOP_LEVELS_PER_EXTRA_OPTION);
+  return Math.min(SHOP_MAX_OPTION_COUNT, SHOP_OPTION_COUNT + extraOptions);
+}
+
+export function getRerollCost(paidRerollsThisRound: number): number {
+  return SHOP_REROLL_BASE_COST + Math.max(0, paidRerollsThisRound) * SHOP_REROLL_COST_STEP;
 }
 
 export function applyUpgrade(player: Player, option: UpgradeOption) {
@@ -89,6 +131,12 @@ export function applyUpgrade(player: Player, option: UpgradeOption) {
       upgradeWeapon(existing);
     } else {
       player.weapons.push(createWeapon(option.weaponType));
+    }
+  } else if (option.type === 'modifier' && option.weaponType && option.modifierType) {
+    const weapon = player.weapons.find(w => w.type === option.weaponType);
+    if (weapon && !weapon.modifiers.includes(option.modifierType)) {
+      weapon.modifiers.push(option.modifierType);
+      weapon.modifierMask |= GENERIC_MODIFIER_MASK[option.modifierType];
     }
   } else if (option.type === 'passive' && option.passiveType) {
     applyPassive(player, option.passiveType);
@@ -110,4 +158,38 @@ function getWeaponUpgradeDesc(w: Weapon): string {
   if (p.cooldown && p.cooldown < 0) parts.push(`冷却${p.cooldown}s`);
   if (p.growthLabel) parts.push(p.growthLabel);
   return parts.join(' ');
+}
+
+function rollModifierOption(player: Player): UpgradeOption | undefined {
+  if (Math.random() >= 0.4) return undefined;
+
+  const options: UpgradeOption[] = [];
+  for (const weapon of player.weapons) {
+    const weaponData = WEAPON_DATA[weapon.type];
+    for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
+      if (weapon.level < modifier.unlockLevel) continue;
+      if (!modifier.compatibleFamilies.includes(weapon.family)) continue;
+      if (weapon.modifiers.filter(m => m === modifier.id).length >= modifier.maxStacks) continue;
+
+      options.push({
+        title: `${modifier.name} · ${weaponData.name}`,
+        description: modifier.desc,
+        icon: modifier.icon,
+        type: 'modifier',
+        weaponType: weapon.type,
+        modifierType: modifier.id,
+        cost: getModifierCost(weapon, modifier.id),
+        isMaxed: false,
+      });
+    }
+  }
+
+  if (options.length === 0) return undefined;
+  shuffleArray(options);
+  return options[0];
+}
+
+function getModifierCost(weapon: Weapon, modifierType: GenericModifierType): number {
+  const modifier = GENERIC_MODIFIER_DATA[modifierType];
+  return 12 + weapon.level * 3 + modifier.priceTier * 4;
 }

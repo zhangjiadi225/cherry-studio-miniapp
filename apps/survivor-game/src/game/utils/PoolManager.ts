@@ -45,6 +45,10 @@ function resetProjectile(p: Projectile) {
   p.type = 'magic_wand';
   p.hitEnemies.clear();
   p.knockback = 0;
+  p.modifierMask = 0;
+  p.splitDone = false;
+  p.chainDone = false;
+  p.pulseDone = false;
   p.gravY = undefined;
   p.animTimer = 0;
   p.orbitAngle = undefined;
@@ -101,6 +105,7 @@ export const pools = {
       type: 'magic_wand' as any,
       hitEnemies: new Set<number>(),
       knockback: 0,
+      modifierMask: 0,
       animTimer: 0,
     }),
     resetProjectile,

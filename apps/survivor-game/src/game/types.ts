@@ -37,6 +37,7 @@ export interface Player {
   regenTimer: number;
   luck: number;
   curse: number;
+  gold: number;
   currentZone: MapZone;
   weapons: Weapon[];
   passives: PassiveUpgrade[];
@@ -46,6 +47,7 @@ export interface Player {
 
 export interface Weapon {
   type: WeaponType;
+  family: WeaponFamily;
   level: number;
   cooldown: number;
   timer: number;
@@ -56,6 +58,8 @@ export interface Weapon {
   pierce: number;
   duration: number;
   knockback: number;
+  modifiers: GenericModifierType[];
+  modifierMask: number;
 }
 
 export interface PassiveUpgrade {
@@ -97,6 +101,10 @@ export interface Projectile {
   type: WeaponType;
   hitEnemies: Set<number>;
   knockback: number;
+  modifierMask: number;
+  splitDone?: boolean;
+  chainDone?: boolean;
+  pulseDone?: boolean;
   gravY?: number;
   animTimer: number;
   orbitAngle?: number;
@@ -154,10 +162,13 @@ export interface UpgradeOption {
   title: string;
   description: string;
   icon: string;
-  type: 'weapon' | 'passive';
+  type: 'weapon' | 'passive' | 'heal' | 'modifier';
   weaponType?: WeaponType;
   passiveType?: PassiveType;
+  modifierType?: GenericModifierType;
+  cost: number;
   isMaxed: boolean;
+  purchased?: boolean;
 }
 
 export interface ScreenShake {
@@ -178,6 +189,33 @@ export const WeaponType = {
   AXE: 'axe',
 } as const;
 export type WeaponType = typeof WeaponType[keyof typeof WeaponType];
+
+export type WeaponFamily = 'projectile' | 'strike' | 'aura' | 'orbit' | 'zone' | 'swing';
+
+export const GenericModifierType = {
+  DOUBLE_CAST: 'double_cast',
+  SPLIT_CORE: 'split_core',
+  CHAIN_CONDUCTOR: 'chain_conductor',
+  IMPACT_PULSE: 'impact_pulse',
+  REPULSION_FIELD: 'repulsion_field',
+} as const;
+export type GenericModifierType = typeof GenericModifierType[keyof typeof GenericModifierType];
+
+export type ModifierTrigger = 'onFire' | 'onHit' | 'onKill' | 'onTick';
+export type ModifierEffect = 'extraCast' | 'split' | 'chain' | 'pulse' | 'knockback';
+
+export interface GenericModifierData {
+  id: GenericModifierType;
+  name: string;
+  icon: string;
+  desc: string;
+  compatibleFamilies: WeaponFamily[];
+  trigger: ModifierTrigger;
+  effect: ModifierEffect;
+  maxStacks: number;
+  priceTier: number;
+  unlockLevel: number;
+}
 
 export const PassiveType = {
   MIGHT: 'might',
