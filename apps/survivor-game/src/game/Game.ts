@@ -212,10 +212,14 @@ export class Game {
     }
 
     if (this.desktopTab === 'start') {
+      const panelW = Math.min(980, w - 72);
+      const panelH = Math.min(420, h - 214);
+      const panelX = w / 2 - panelW / 2;
+      const panelY = 144;
       const btnW = 240;
       const btnH = 56;
-      const btnX = w / 2 - btnW / 2;
-      const btnY = h / 2 + 88;
+      const btnX = panelX + 38;
+      const btnY = panelY + panelH - 72;
       if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
         this.startGame();
       }

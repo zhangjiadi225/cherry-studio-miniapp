@@ -383,7 +383,7 @@ export function drawDesktop(rc: RenderContext, meta: MetaState, activeTab: Deskt
   drawDesktopTabs(rc, activeTab);
 
   if (activeTab === 'start') {
-    drawDesktopStart(rc, meta);
+    drawDesktopStart(rc, meta, time);
   } else if (activeTab === 'growth') {
     drawMetaGrowth(rc, meta);
   } else if (activeTab === 'skins') {
@@ -730,64 +730,73 @@ function colorWithAlpha(color: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-function drawDesktopStart(rc: RenderContext, meta: MetaState) {
+function drawDesktopStart(rc: RenderContext, meta: MetaState, time: number) {
   const { ctx, w, h } = rc;
-  const panelW = Math.min(930, w - 72);
-  const panelH = 304;
+  const panelW = Math.min(980, w - 72);
+  const panelH = Math.min(420, h - 214);
   const panelX = w / 2 - panelW / 2;
-  const panelY = 146;
+  const panelY = 144;
   drawGlassPanel(ctx, panelX, panelY, panelW, panelH, 18, 'rgba(13,18,32,0.74)');
   drawPanelAccent(ctx, panelX, panelY, panelW, '#ffd166');
 
+  const leftX = panelX + 38;
+  const rightX = panelX + panelW * 0.48;
+  const rightW = panelW - (rightX - panelX) - 34;
+  const stageX = rightX + rightW / 2;
+  const stageY = panelY + panelH * 0.5 + 8;
+
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.font = `800 24px ${DESKTOP_FONT}`;
+  ctx.font = `800 16px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#ffd166';
+  ctx.fillText('NIGHT DEPLOYMENT', leftX, panelY + 30);
+  ctx.font = `900 36px ${DESKTOP_FONT}`;
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('下一局部署', panelX + 34, panelY + 30);
+  ctx.fillText('准备出击', leftX, panelY + 54);
   ctx.font = `13px ${DESKTOP_FONT}`;
-  ctx.fillStyle = 'rgba(213,224,255,0.66)';
-  ctx.fillText('把局外成长、商店机制和角色外观带入下一次战斗。', panelX + 34, panelY + 62);
+  ctx.fillStyle = 'rgba(213,224,255,0.7)';
+  ctx.fillText('局外成长已经接入商店、开局资源和构筑模块。', leftX, panelY + 100);
+
+  drawLoadoutStrip(ctx, leftX, panelY + 132);
 
   const bestMinutes = Math.floor(meta.bestTime / 60);
   const bestSeconds = Math.floor(meta.bestTime % 60).toString().padStart(2, '0');
   const stats = [
     ['魂火储备', `${meta.soulFire}`, '#ffd166'],
     ['点亮节点', `${meta.unlockedUpgrades.length}/${META_UPGRADES.length}`, '#8fe8ff'],
-    ['完成局数', `${meta.runs}`, '#9dffba'],
     ['最佳时间', `${bestMinutes}:${bestSeconds}`, '#ff9a76'],
     ['最高击杀', `${meta.bestKills}`, '#ff6b85'],
-    ['最高等级', `${meta.bestLevel}`, '#d3a8ff'],
   ];
   for (let i = 0; i < stats.length; i++) {
-    const col = i % 3;
-    const row = Math.floor(i / 3);
-    const x = panelX + 34 + col * 158;
-    const y = panelY + 110 + row * 78;
-    drawMetricTile(ctx, x, y, 136, 54, stats[i][0], stats[i][1], stats[i][2]);
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const x = leftX + col * 150;
+    const y = panelY + 178 + row * 64;
+    drawMetricTile(ctx, x, y, 132, 48, stats[i][0], stats[i][1], stats[i][2]);
   }
 
   const skin = CHARACTER_SKINS.find((item) => item.id === meta.selectedSkin) ?? CHARACTER_SKINS[0];
-  const showcaseX = panelX + panelW - 330;
-  const showcaseY = panelY + 34;
-  drawGlassPanel(ctx, showcaseX, showcaseY, 292, 216, 16, 'rgba(8,12,24,0.58)');
-  const skinGlow = ctx.createRadialGradient(showcaseX + 146, showcaseY + 88, 8, showcaseX + 146, showcaseY + 88, 128);
-  skinGlow.addColorStop(0, `${skin.glow}0.34)`);
+  drawDeploymentStage(ctx, rightX, panelY + 34, rightW, panelH - 68, skin, time);
+
+  const skinGlow = ctx.createRadialGradient(stageX, stageY - 8, 8, stageX, stageY - 8, 150);
+  skinGlow.addColorStop(0, `${skin.glow}0.42)`);
   skinGlow.addColorStop(1, `${skin.glow}0)`);
   ctx.fillStyle = skinGlow;
-  ctx.fillRect(showcaseX + 10, showcaseY + 8, 272, 148);
-  drawSkinPreview(ctx, skin.id, showcaseX + 146, showcaseY + 94, 1.78, skin.body, skin.outline);
-  ctx.font = `700 18px ${DESKTOP_FONT}`;
+  ctx.fillRect(rightX, panelY + 34, rightW, panelH - 68);
+  drawSkinPreview(ctx, skin.id, stageX, stageY - 10 + Math.sin(time * 2.1) * 3, 2.35, skin.body, skin.outline);
+  ctx.font = `800 20px ${DESKTOP_FONT}`;
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
-  ctx.fillText(skin.name, showcaseX + 146, showcaseY + 162);
+  ctx.textBaseline = 'middle';
+  ctx.fillText(skin.name, stageX, panelY + panelH - 92);
   ctx.font = `12px ${DESKTOP_FONT}`;
   ctx.fillStyle = 'rgba(213,224,255,0.68)';
-  ctx.fillText(skin.archetype, showcaseX + 146, showcaseY + 184);
+  ctx.fillText(skin.archetype, stageX, panelY + panelH - 70);
 
   const btnW = 240;
   const btnH = 56;
-  const btnX = w / 2 - btnW / 2;
-  const btnY = h / 2 + 88;
+  const btnX = leftX;
+  const btnY = panelY + panelH - 72;
 
   ctx.save();
   ctx.shadowColor = 'rgba(255,209,102,0.28)';
@@ -811,11 +820,109 @@ function drawDesktopStart(rc: RenderContext, meta: MetaState) {
   ctx.fillStyle = '#151018';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('开始新一局', w / 2, btnY + btnH / 2);
+  ctx.fillText('开始新一局', btnX + btnW / 2, btnY + btnH / 2);
 
   ctx.font = `13px ${DESKTOP_FONT}`;
   ctx.fillStyle = 'rgba(213,224,255,0.55)';
-  ctx.fillText('WASD / 方向键移动 | 武器自动攻击 | 商店能力来自全局成长', w / 2, btnY + 84);
+  ctx.textAlign = 'left';
+  ctx.fillText('Enter 快速开始', btnX + btnW + 18, btnY + 20);
+  ctx.fillText('WASD / 方向键移动', btnX + btnW + 18, btnY + 40);
+}
+
+function drawLoadoutStrip(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  const items = [
+    ['🪄', '魔法弹幕', '#ffb36b'],
+    ['🪙', '商店构筑', '#ffd166'],
+    ['✦', '模块机制', '#d3a8ff'],
+  ];
+  for (let i = 0; i < items.length; i++) {
+    const itemX = x + i * 104;
+    ctx.fillStyle = 'rgba(8,12,24,0.52)';
+    ctx.beginPath();
+    ctx.roundRect(itemX, y, 92, 32, 10);
+    ctx.fill();
+    ctx.strokeStyle = colorWithAlpha(items[i][2], 0.32);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(itemX, y, 92, 32, 10);
+    ctx.stroke();
+    ctx.font = '16px serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(items[i][0], itemX + 10, y + 16);
+    ctx.font = `700 11px ${DESKTOP_FONT}`;
+    ctx.fillStyle = items[i][2];
+    ctx.fillText(items[i][1], itemX + 34, y + 16);
+  }
+}
+
+function drawDeploymentStage(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  skin: (typeof CHARACTER_SKINS)[number],
+  time: number
+) {
+  drawGlassPanel(ctx, x, y, w, h, 18, 'rgba(7,12,24,0.58)');
+
+  const cx = x + w / 2;
+  const cy = y + h / 2 + 18;
+  const scanner = ctx.createRadialGradient(cx, cy, 10, cx, cy, Math.min(w, h) * 0.62);
+  scanner.addColorStop(0, `${skin.glow}0.1)`);
+  scanner.addColorStop(0.52, 'rgba(80,126,190,0.08)');
+  scanner.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = scanner;
+  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(143,232,255,0.13)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 4; i++) {
+    const radiusX = 70 + i * 42 + Math.sin(time * 1.6 + i) * 3;
+    const radiusY = 20 + i * 13;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 34, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  const enemies: Array<[number, number, number, string]> = [
+    [-148, -44, 13, '#ff6b6b'],
+    [-110, 72, 9, '#ff9a76'],
+    [136, -38, 11, '#b277ff'],
+    [164, 74, 8, '#88ff88'],
+    [20, -98, 7, '#ffd166'],
+  ];
+  for (let i = 0; i < enemies.length; i++) {
+    const [dx, dy, r, color] = enemies[i];
+    const pulse = 1 + Math.sin(time * 2.2 + i) * 0.08;
+    ctx.fillStyle = colorWithAlpha(color, 0.14);
+    ctx.beginPath();
+    ctx.arc(cx + dx, cy + dy, r * 2.1 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = colorWithAlpha(color, 0.72);
+    ctx.beginPath();
+    ctx.arc(cx + dx, cy + dy, r * pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = `${skin.glow}0.42)`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + 54, 86, 18, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = `700 12px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(213,224,255,0.62)';
+  ctx.fillText('SURVIVOR LOCKED', x + 20, y + 18);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffd166';
+  ctx.fillText('15:00', x + w - 20, y + 18);
 }
 
 function drawMetaGrowth(rc: RenderContext, meta: MetaState) {
