@@ -24,7 +24,15 @@ describe('weapon output model', () => {
     expect(projectedOutput(WeaponType.LIGHTNING, 8)).toBeLessThan(450);
   });
 
-  it('keeps max-level bible above the decorative damage band', () => {
+  it('keeps level 8 bible above the decorative damage band', () => {
     expect(projectedOutput(WeaponType.BIBLE, 8)).toBeGreaterThan(70);
+  });
+
+  it('lets weapons keep scaling after the old level cap band', () => {
+    const weapon = weaponAtLevel(WeaponType.MAGIC_WAND, 12);
+
+    expect(weapon.level).toBe(12);
+    expect(upgradeWeapon(weapon)).toBe(true);
+    expect(weapon.level).toBe(13);
   });
 });

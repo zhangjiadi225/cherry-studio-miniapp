@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WEAPON_DATA } from '../../constants';
+import { PASSIVE_DATA } from '../../constants';
 import { SupplyType, WeaponType } from '../../types';
 import { createPlayer } from '../player/Player';
 import { createWeapon } from './Weapon';
@@ -23,11 +23,11 @@ describe('generateUpgradeOptions', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it('does not offer upgrades for max-level weapons', () => {
+  it('keeps offering weapon upgrades after the old level cap band', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.42);
     const player = createPlayer();
     const weapon = createWeapon(WeaponType.MAGIC_WAND);
-    weapon.level = WEAPON_DATA[WeaponType.MAGIC_WAND].maxLevel;
+    weapon.level = 12;
     player.weapons.push(weapon);
 
     const options = generateUpgradeOptions(player, 6, false);
@@ -36,36 +36,26 @@ describe('generateUpgradeOptions', () => {
       option.type === 'weapon' &&
       option.weaponType === WeaponType.MAGIC_WAND &&
       option.title.includes(`Lv${weapon.level + 1}`)
-    )).toBe(false);
+    )).toBe(true);
   });
 
-  it('falls back to healing when every upgrade is maxed', () => {
+  it('does not exhaust the shop while owned weapons can keep scaling', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.42);
     const player = createPlayer();
     for (const type of Object.values(WeaponType)) {
       const weapon = createWeapon(type);
-      weapon.level = WEAPON_DATA[type].maxLevel;
+      weapon.level = 30;
       player.weapons.push(weapon);
     }
-    player.passives = [
-      { type: 'might', level: 5 },
-      { type: 'speed', level: 5 },
-      { type: 'max_hp', level: 5 },
-      { type: 'armor', level: 5 },
-      { type: 'cooldown', level: 5 },
-      { type: 'area', level: 5 },
-      { type: 'pickup_range', level: 5 },
-      { type: 'regen', level: 5 },
-      { type: 'luck', level: 5 },
-      { type: 'magnet', level: 1 },
-      { type: 'curse', level: 5 },
-      { type: 'revive', level: 1 },
-    ];
+    player.passives = Object.entries(PASSIVE_DATA).map(([type, data]) => ({
+      type: type as keyof typeof PASSIVE_DATA,
+      level: data.maxLevel,
+    }));
 
     const options = generateUpgradeOptions(player, 4, false);
 
-    expect(options).toHaveLength(1);
-    expect(options[0].type).toBe('heal');
+    expect(options.some((option) => option.type === 'weapon')).toBe(true);
+    expect(options.every((option) => option.type !== 'heal')).toBe(true);
   });
 
   it('offers a field ration when the player is badly hurt', () => {

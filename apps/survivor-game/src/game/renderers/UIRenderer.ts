@@ -190,23 +190,29 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   ctx.fillText(`💀 ${killCount}`, w - 56, 60);
 
   if (objective) {
-    const toastW = Math.min(460, w - 48);
+    ctx.font = 'bold 14px "Segoe UI", sans-serif';
+    const toastW = Math.min(420, w - 32);
+    const objectiveLines = getWrappedLines(ctx, objective, toastW - 28, 2);
+    const lineHeight = 16;
+    const toastH = objectiveLines.length > 1 ? 52 : 36;
     const toastX = w / 2 - toastW / 2;
-    const toastY = 50;
+    const toastY = 82;
     ctx.fillStyle = 'rgba(5,10,22,0.82)';
     ctx.beginPath();
-    ctx.roundRect(toastX, toastY, toastW, 34, 8);
+    ctx.roundRect(toastX, toastY, toastW, toastH, 8);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,209,102,0.58)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.roundRect(toastX, toastY, toastW, 34, 8);
+    ctx.roundRect(toastX, toastY, toastW, toastH, 8);
     ctx.stroke();
-    ctx.font = 'bold 14px "Segoe UI", sans-serif';
     ctx.fillStyle = '#ffd166';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(objective, w / 2, toastY + 17);
+    const textY = toastY + toastH / 2 - ((objectiveLines.length - 1) * lineHeight) / 2;
+    objectiveLines.forEach((line, index) => {
+      ctx.fillText(line, w / 2, textY + index * lineHeight);
+    });
   }
 
   // Weapon icons (bottom left)
@@ -463,6 +469,7 @@ type DesktopStartLayout = {
   hero: Rect;
   left: Rect;
   stage: Rect;
+  board: Rect;
   button: Rect;
 };
 
@@ -474,28 +481,34 @@ function getDesktopStartLayout(w: number, h: number): DesktopStartLayout {
   const compact = w < 760;
   const side = compact ? 22 : Math.max(44, Math.min(78, w * 0.06));
   const heroX = side;
-  const heroY = compact ? 132 : 138;
-  const heroW = Math.max(280, w - side * 2);
-  const heroH = Math.max(compact ? 430 : 470, Math.min(compact ? 590 : 610, h - heroY - 62));
-  const leftW = compact ? heroW - 52 : Math.min(560, heroW * 0.48);
+  const heroY = compact ? 118 : 106;
+  const heroW = compact ? Math.max(280, Math.min(346, w - side * 2)) : Math.max(280, w - side * 2);
+  const tabReserve = compact ? 92 : 112;
+  const heroH = Math.max(compact ? 470 : 500, h - heroY - tabReserve);
+  const boardW = compact ? heroW - 48 : Math.min(320, Math.max(270, heroW * 0.23));
+  const leftW = compact ? heroW - 48 : Math.min(410, heroW * 0.32);
   const left: Rect = {
-    x: heroX + (compact ? 26 : 44),
-    y: heroY + (compact ? 28 : 46),
+    x: heroX + (compact ? 24 : 30),
+    y: heroY + (compact ? 22 : 30),
     w: leftW,
-    h: compact ? 156 : heroH - 106,
+    h: compact ? 176 : heroH - 58,
   };
+  const board: Rect = compact
+    ? { x: heroX + 24, y: heroY + heroH - 124, w: boardW, h: 98 }
+    : { x: heroX + heroW - boardW - 30, y: heroY + 34, w: boardW, h: heroH - 92 };
   const stage: Rect = compact
-    ? { x: heroX + 18, y: heroY + 190, w: heroW - 36, h: Math.max(184, heroH - 348) }
-    : { x: heroX + leftW + 36, y: heroY + 34, w: heroW - leftW - 68, h: heroH - 78 };
+    ? { x: heroX + 18, y: heroY + 214, w: heroW - 36, h: Math.max(190, heroH - 358) }
+    : { x: left.x + left.w + 24, y: heroY + 34, w: board.x - left.x - left.w - 48, h: heroH - 92 };
   const button: Rect = compact
-    ? { x: heroX + 26, y: heroY + heroH - 76, w: Math.min(268, heroW - 52), h: 56 }
-    : { x: heroX + 44, y: heroY + heroH - 84, w: 270, h: 58 };
+    ? { x: left.x, y: left.y + 104, w: Math.min(282, left.w), h: 58 }
+    : { x: left.x, y: left.y + 214, w: Math.min(310, left.w), h: 70 };
 
   return {
     compact,
     hero: { x: heroX, y: heroY, w: heroW, h: heroH },
     left,
     stage,
+    board,
     button,
   };
 }
@@ -507,8 +520,6 @@ export function drawDesktop(rc: RenderContext, meta: MetaState, activeTab: Deskt
   drawDesktopBackdrop(rc, time);
   drawDesktopHeader(rc, meta);
 
-  drawDesktopTabs(rc, activeTab);
-
   if (activeTab === 'start') {
     drawDesktopStart(rc, meta, time);
   } else if (activeTab === 'growth') {
@@ -519,21 +530,24 @@ export function drawDesktop(rc: RenderContext, meta: MetaState, activeTab: Deskt
     drawCodexPanel(rc, activeCodexTab);
   }
 
+  drawDesktopTabs(rc, activeTab);
+
   ctx.font = `12px ${DESKTOP_FONT}`;
   ctx.fillStyle = 'rgba(220,230,255,0.42)';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('远征档案同步完成 · 商店矩阵待命 · 图鉴数据库在线', w / 2, h - 18);
+  if (h > 620) ctx.fillText('营地已整备 · 点击物件切换局外功能', w / 2, h - 12);
 }
 
-export function getDesktopTabRects(w: number): Array<Rect & { id: DesktopTab }> {
+export function getDesktopTabRects(w: number, h: number = 720): Array<Rect & { id: DesktopTab }> {
   const tabs: DesktopTab[] = ['start', 'growth', 'skins', 'codex'];
-  const tabGap = w < 620 ? 8 : 12;
-  const tabH = 42;
-  const tabW = Math.min(132, Math.max(74, (w - 44 - (tabs.length - 1) * tabGap) / tabs.length));
+  const narrow = w < 560;
+  const tabGap = w < 620 ? 8 : 14;
+  const tabH = w < 620 ? 58 : 66;
+  const tabW = narrow ? 78 : Math.min(156, Math.max(76, (w - 52 - (tabs.length - 1) * tabGap) / tabs.length));
   const totalW = tabs.length * tabW + (tabs.length - 1) * tabGap;
-  const startX = w / 2 - totalW / 2;
-  const y = 82;
+  const startX = narrow ? 26 : w / 2 - totalW / 2;
+  const y = Math.max(92, h - tabH - 28);
   return tabs.map((id, index) => ({
     id,
     x: startX + index * (tabW + tabGap),
@@ -546,85 +560,95 @@ export function getDesktopTabRects(w: number): Array<Rect & { id: DesktopTab }> 
 function drawDesktopBackdrop(rc: RenderContext, time: number) {
   const { ctx, w, h } = rc;
   ctx.fillStyle = cachedLinearGradient(ctx, `desktop-bg-${w}-${h}`, 0, 0, w, h, [
-    [0, '#050711'],
-    [0.42, '#0d1727'],
-    [0.72, '#151322'],
-    [1, '#06080d'],
+    [0, '#101522'],
+    [0.42, '#172840'],
+    [0.74, '#223422'],
+    [1, '#0b100c'],
   ]);
   ctx.fillRect(0, 0, w, h);
 
-  const horizonY = h * 0.56;
-  ctx.fillStyle = cachedLinearGradient(ctx, `desktop-horizon-${w}-${h}`, 0, horizonY - 90, 0, horizonY + 140, [
-    [0, 'rgba(143,232,255,0)'],
-    [0.38, 'rgba(143,232,255,0.08)'],
-    [0.48, 'rgba(255,209,102,0.18)'],
-    [0.56, 'rgba(255,122,69,0.1)'],
-    [1, 'rgba(0,0,0,0)'],
-  ]);
-  ctx.fillRect(0, horizonY - 90, w, 230);
-
+  const moonX = w * 0.78;
+  const moonY = Math.max(72, h * 0.15);
+  const moonR = Math.max(34, Math.min(70, w * 0.045));
   ctx.save();
-  ctx.globalAlpha = 0.28;
-  ctx.strokeStyle = 'rgba(255,209,102,0.2)';
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 6; i++) {
-    const y = horizonY + i * 34 + Math.sin(time * 0.5 + i) * 2;
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y - i * 5);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  ctx.save();
-  ctx.globalAlpha = 0.2;
-  ctx.strokeStyle = 'rgba(143,232,255,0.2)';
-  ctx.lineWidth = 1;
-  const vanishingX = w * 0.58;
-  const vanishingY = horizonY - 8;
-  for (let i = -9; i <= 9; i++) {
-    const x = w / 2 + i * 78 + Math.sin(time * 0.18 + i) * 5;
-    ctx.beginPath();
-    ctx.moveTo(vanishingX, vanishingY);
-    ctx.lineTo(x, h + 40);
-    ctx.stroke();
-  }
-  for (let i = 0; i < 14; i++) {
-    const t = i / 13;
-    const y = vanishingY + Math.pow(t, 1.9) * (h - vanishingY + 70);
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(w, y);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  ctx.save();
-  ctx.globalAlpha = 0.58;
-  for (let i = 0; i < 38; i++) {
-    const x = ((i * 127.1 + time * 10) % (w + 180)) - 90;
-    const y = 84 + ((i * 53.7 + time * 4) % Math.max(220, h * 0.52));
-    const len = 12 + (i % 4) * 5;
-    ctx.strokeStyle = i % 4 === 0 ? 'rgba(255,209,102,0.32)' : 'rgba(143,232,255,0.22)';
-    ctx.lineWidth = i % 4 === 0 ? 1.4 : 1;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + len, y - len * 0.24);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  ctx.save();
-  ctx.globalAlpha = 0.9;
-  ctx.strokeStyle = 'rgba(255,209,102,0.12)';
-  ctx.lineWidth = 2;
+  ctx.shadowColor = 'rgba(255,241,181,0.32)';
+  ctx.shadowBlur = 28;
+  ctx.fillStyle = '#fff1b5';
   ctx.beginPath();
-  ctx.moveTo(w * 0.12, horizonY + 2);
-  ctx.lineTo(w * 0.3, horizonY - 30);
-  ctx.lineTo(w * 0.46, horizonY + 2);
-  ctx.lineTo(w * 0.64, horizonY - 44);
-  ctx.lineTo(w * 0.86, horizonY + 6);
-  ctx.stroke();
+  ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = 'rgba(22,40,64,0.55)';
+  ctx.beginPath();
+  ctx.arc(moonX - moonR * 0.38, moonY - moonR * 0.16, moonR * 0.92, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.globalAlpha = 0.34;
+  for (let i = 0; i < 4; i++) {
+    const cloudX = (w * (0.1 + i * 0.23) + Math.sin(time * 0.2 + i) * 18) % (w + 120) - 60;
+    const cloudY = 90 + i * 26;
+    ctx.fillStyle = 'rgba(198,223,226,0.12)';
+    ctx.beginPath();
+    ctx.ellipse(cloudX, cloudY, 70, 18, -0.1, 0, Math.PI * 2);
+    ctx.ellipse(cloudX + 52, cloudY + 8, 86, 22, 0.04, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  const horizonY = h * 0.54;
+  ctx.fillStyle = '#0c1820';
+  ctx.beginPath();
+  ctx.moveTo(0, horizonY + 18);
+  for (let x = 0; x <= w; x += 90) {
+    ctx.lineTo(x, horizonY + Math.sin(x * 0.012) * 22);
+  }
+  ctx.lineTo(w, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = cachedLinearGradient(ctx, `desktop-yard-${w}-${h}`, 0, horizonY, 0, h, [
+    [0, '#1d321f'],
+    [0.52, '#162817'],
+    [1, '#091009'],
+  ]);
+  ctx.fillRect(0, horizonY, w, h - horizonY);
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(95,65,36,0.72)';
+  ctx.lineWidth = 5;
+  for (let i = 0; i < 9; i++) {
+    const y = horizonY + 18 + i * 24;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y - i * 3);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(58,38,25,0.85)';
+  ctx.lineWidth = 7;
+  for (let i = -2; i <= 12; i++) {
+    const x = i * 92 + Math.sin(time * 0.25 + i) * 2;
+    ctx.beginPath();
+    ctx.moveTo(x, horizonY - 24);
+    ctx.lineTo(x + 12, horizonY + 56);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.72;
+  for (let i = 0; i < 34; i++) {
+    const x = ((i * 131.7 + time * 8) % (w + 120)) - 60;
+    const y = horizonY + 20 + ((i * 41.3 + time * 2) % Math.max(120, h - horizonY - 80));
+    ctx.fillStyle = i % 3 === 0 ? 'rgba(255,209,102,0.42)' : 'rgba(143,232,255,0.3)';
+    ctx.beginPath();
+    ctx.arc(x, y, 1.4 + (i % 3), 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.restore();
 }
 
@@ -680,48 +704,59 @@ function drawDesktopHeader(rc: RenderContext, meta: MetaState) {
 }
 
 function drawDesktopTabs(rc: RenderContext, activeTab: DesktopTab) {
-  const { ctx, w } = rc;
+  const { ctx, w, h } = rc;
   const labels: Record<DesktopTab, string> = {
-    start: '作战',
-    growth: '成长',
-    skins: '皮肤',
+    start: '地图',
+    growth: '篝火',
+    skins: '衣橱',
     codex: '图鉴',
   };
-  const tabs = getDesktopTabRects(w);
+  const icons: Record<DesktopTab, string> = {
+    start: '✦',
+    growth: '◆',
+    skins: '●',
+    codex: '▣',
+  };
+  const tabs = getDesktopTabRects(w, h);
 
   for (let i = 0; i < tabs.length; i++) {
     const tab = tabs[i];
     const { x, y, w: tabW, h: tabH } = tab;
     const active = tab.id === activeTab;
-    const tabGrad = cachedLinearGradient(ctx, `desktop-tab-${active}-${x}-${y}-${tabH}`, x, y, x, y + tabH, active ? [
-      [0, 'rgba(255,209,102,0.32)'],
-      [1, 'rgba(255,122,69,0.16)'],
+    const tabGrad = cachedLinearGradient(ctx, `desktop-tab-wood-${active}-${x}-${y}-${tabH}`, x, y, x, y + tabH, active ? [
+      [0, '#8a5431'],
+      [0.5, '#6a3924'],
+      [1, '#3b2118'],
     ] : [
-      [0, 'rgba(25,33,55,0.82)'],
-      [1, 'rgba(12,17,30,0.82)'],
+      [0, '#4c3424'],
+      [1, '#241713'],
     ]);
     ctx.save();
     if (active) {
-      ctx.shadowColor = 'rgba(255,209,102,0.25)';
-      ctx.shadowBlur = 12;
+      ctx.shadowColor = 'rgba(255,209,102,0.34)';
+      ctx.shadowBlur = 16;
     }
     ctx.fillStyle = tabGrad;
     ctx.beginPath();
-    ctx.roundRect(x, y, tabW, tabH, 10);
+    ctx.roundRect(x, y + (active ? -5 : 0), tabW, tabH + (active ? 5 : 0), 12);
     ctx.fill();
     ctx.restore();
-    ctx.strokeStyle = active ? 'rgba(255,226,142,0.92)' : 'rgba(119,143,196,0.34)';
+    ctx.strokeStyle = active ? 'rgba(255,226,142,0.94)' : 'rgba(180,130,84,0.46)';
     ctx.lineWidth = active ? 2 : 1;
     ctx.beginPath();
-    ctx.roundRect(x, y, tabW, tabH, 10);
+    ctx.roundRect(x, y + (active ? -5 : 0), tabW, tabH + (active ? 5 : 0), 12);
     ctx.stroke();
-    ctx.fillStyle = active ? 'rgba(255,209,102,0.8)' : 'rgba(120,150,210,0.36)';
-    ctx.fillRect(x + 14, y + tabH - 5, tabW - 28, 2);
-    ctx.font = `700 15px ${DESKTOP_FONT}`;
-    ctx.fillStyle = active ? '#ffd166' : COLORS.uiText;
+    ctx.fillStyle = active ? '#ffd166' : '#d1b083';
+    ctx.font = `22px serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`${i + 1}  ${labels[tab.id]}`, x + tabW / 2, y + tabH / 2);
+    ctx.fillText(icons[tab.id], x + tabW / 2, y + 20);
+    ctx.font = `800 13px ${DESKTOP_FONT}`;
+    ctx.fillStyle = active ? '#fff1bd' : '#dcc7a6';
+    ctx.fillText(labels[tab.id], x + tabW / 2, y + 43);
+    ctx.font = `10px ${DESKTOP_FONT}`;
+    ctx.fillStyle = active ? 'rgba(255,241,189,0.74)' : 'rgba(220,199,166,0.46)';
+    ctx.fillText(`${i + 1}`, x + tabW - 14, y + 13);
   }
 }
 
@@ -891,123 +926,215 @@ function colorWithAlpha(color: string, alpha: number): string {
 function drawDesktopStart(rc: RenderContext, meta: MetaState, time: number) {
   const { ctx, w, h } = rc;
   const layout = getDesktopStartLayout(w, h);
-  const { hero, left, stage, button, compact } = layout;
+  const { hero, left, stage, board, button, compact } = layout;
+  const skin = CHARACTER_SKINS.find((item) => item.id === meta.selectedSkin) ?? CHARACTER_SKINS[0];
 
   ctx.save();
   ctx.shadowColor = 'rgba(0,0,0,0.48)';
-  ctx.shadowBlur = 30;
+  ctx.shadowBlur = 34;
   ctx.shadowOffsetY = 18;
-  ctx.fillStyle = cachedLinearGradient(ctx, `hero-shell-${hero.x}-${hero.y}-${hero.w}-${hero.h}`, hero.x, hero.y, hero.x + hero.w, hero.y + hero.h, [
-    [0, 'rgba(18,27,45,0.82)'],
-    [0.42, 'rgba(10,16,29,0.62)'],
-    [1, 'rgba(24,14,24,0.76)'],
+  ctx.fillStyle = cachedLinearGradient(ctx, `hub-yard-shell-${hero.x}-${hero.y}-${hero.w}-${hero.h}`, hero.x, hero.y, hero.x, hero.y + hero.h, [
+    [0, 'rgba(63,46,30,0.74)'],
+    [0.36, 'rgba(24,40,30,0.68)'],
+    [1, 'rgba(10,15,12,0.82)'],
   ]);
   ctx.beginPath();
-  ctx.roundRect(hero.x, hero.y, hero.w, hero.h, compact ? 22 : 30);
+  ctx.roundRect(hero.x, hero.y, hero.w, hero.h, 24);
   ctx.fill();
   ctx.restore();
-  ctx.strokeStyle = 'rgba(255,209,102,0.32)';
+  ctx.strokeStyle = 'rgba(255,209,102,0.34)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.roundRect(hero.x, hero.y, hero.w, hero.h, compact ? 22 : 30);
+  ctx.roundRect(hero.x, hero.y, hero.w, hero.h, 24);
   ctx.stroke();
-  drawPanelAccent(ctx, hero.x, hero.y, hero.w, '#ffd166');
 
-  const skin = CHARACTER_SKINS.find((item) => item.id === meta.selectedSkin) ?? CHARACTER_SKINS[0];
-  drawHeroBattleScene(ctx, stage, skin, time, compact);
+  drawCampScene(ctx, stage, skin, time, compact);
+  drawCommandSign(ctx, left, button, compact, skin);
+  drawRunLedger(ctx, board, meta, compact);
+}
+
+function drawCommandSign(
+  ctx: CanvasRenderingContext2D,
+  rect: Rect,
+  button: Rect,
+  compact: boolean,
+  skin: (typeof CHARACTER_SKINS)[number]
+) {
+  const { x, y, w, h } = rect;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.38)';
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 10;
+  ctx.fillStyle = cachedLinearGradient(ctx, `command-sign-${x}-${y}-${w}-${h}`, x, y, x, y + h, [
+    [0, '#6d432a'],
+    [0.5, '#4b2b1d'],
+    [1, '#2c1a14'],
+  ]);
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 18);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = 'rgba(255,218,137,0.58)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 18);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(44,24,14,0.55)';
+  ctx.lineWidth = 5;
+  for (let i = 1; i < 5; i++) {
+    const yy = y + i * (h / 5);
+    ctx.beginPath();
+    ctx.moveTo(x + 18, yy);
+    ctx.lineTo(x + w - 18, yy + Math.sin(i) * 2);
+    ctx.stroke();
+  }
 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.font = `800 ${compact ? 13 : 15}px ${DESKTOP_FONT}`;
+  ctx.font = `900 ${compact ? 12 : 13}px ${DESKTOP_FONT}`;
   ctx.fillStyle = '#ffd166';
-  ctx.fillText('NIGHTFALL COMMAND', left.x, left.y);
+  ctx.fillText('NIGHTFALL CAMP', x + 24, y + 20);
 
   ctx.save();
   ctx.shadowColor = 'rgba(255,209,102,0.28)';
-  ctx.shadowBlur = 18;
-  ctx.font = `900 ${compact ? 38 : 68}px ${DESKTOP_FONT}`;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('暗夜幸存者', left.x, left.y + (compact ? 24 : 30));
+  ctx.shadowBlur = 16;
+  ctx.font = `900 ${compact ? 34 : 54}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#fff5cf';
+  ctx.fillText('暗夜幸存者', x + 24, y + (compact ? 42 : 48));
   ctx.restore();
 
-  if (!compact) {
-    ctx.font = `800 34px ${DESKTOP_FONT}`;
-    ctx.fillStyle = '#8fe8ff';
-    ctx.fillText('远征指挥台', left.x, left.y + 100);
-  }
-
   ctx.font = `${compact ? 13 : 15}px ${DESKTOP_FONT}`;
-  ctx.fillStyle = 'rgba(229,237,255,0.76)';
+  ctx.fillStyle = 'rgba(255,239,203,0.78)';
   drawWrappedText(
     ctx,
-    compact ? '带着全局成长进入夜潮。' : '带着全局成长、商店机制和武器模块进入夜潮，把每一局变成下一次远征的筹码。',
-    left.x,
-    left.y + (compact ? 78 : 150),
-    compact ? left.w : Math.min(520, left.w),
-    compact ? 20 : 22,
+    compact ? '整备武器，进入下一轮夜潮。' : '在营地整备武器、补给和成长路线。每一局都要带回能改变下一局的筹码。',
+    x + 25,
+    y + (compact ? 84 : 120),
+    w - 50,
+    compact ? 19 : 22,
     compact ? 2 : 3
   );
 
-  const bestMinutes = Math.floor(meta.bestTime / 60);
-  const bestSeconds = Math.floor(meta.bestTime % 60).toString().padStart(2, '0');
-  const stats: Array<[string, string, string]> = [
-    ['魂火储备', `${meta.soulFire}`, '#ffd166'],
-    ['点亮节点', `${meta.unlockedUpgrades.length}/${META_UPGRADES.length}`, '#8fe8ff'],
-    ['最佳时间', `${bestMinutes}:${bestSeconds}`, '#ff9a76'],
-    ['最高击杀', `${meta.bestKills}`, '#ff6b85'],
-  ];
-  if (compact && hero.h > 520) {
-    const compactStats = [stats[0], stats[3]];
-    const statY = button.y - 58;
-    const statW = (button.w - 10) / 2;
-    for (let i = 0; i < compactStats.length; i++) {
-      drawHeroMetric(ctx, button.x + i * (statW + 10), statY, statW, 44, compactStats[i][0], compactStats[i][1], compactStats[i][2]);
-    }
-  } else if (!compact) {
-    drawLoadoutStrip(ctx, left.x, left.y + 206);
-    const statY = button.y - 82;
-    for (let i = 0; i < stats.length; i++) {
-      drawHeroMetric(ctx, left.x + i * 136, statY, 124, 50, stats[i][0], stats[i][1], stats[i][2]);
-    }
-  }
-
-  ctx.save();
-  ctx.shadowColor = 'rgba(255,209,102,0.28)';
-  ctx.shadowBlur = 24;
-  ctx.fillStyle = cachedLinearGradient(ctx, `start-btn-${button.x}-${button.y}-${button.h}`, button.x, button.y, button.x, button.y + button.h, [
-    [0, '#ffd166'],
-    [0.5, '#e99345'],
-    [1, '#ba5f36'],
-  ]);
-  ctx.beginPath();
-  ctx.roundRect(button.x, button.y, button.w, button.h, 14);
-  ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.roundRect(button.x, button.y, button.w, button.h, 14);
-  ctx.stroke();
-
-  ctx.font = `900 ${compact ? 18 : 21}px ${DESKTOP_FONT}`;
-  ctx.fillStyle = '#151018';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('开始新一局', button.x + button.w / 2 - 8, button.y + button.h / 2);
-  ctx.fillStyle = 'rgba(21,16,24,0.72)';
-  ctx.beginPath();
-  ctx.moveTo(button.x + button.w - 42, button.y + button.h / 2 - 7);
-  ctx.lineTo(button.x + button.w - 28, button.y + button.h / 2);
-  ctx.lineTo(button.x + button.w - 42, button.y + button.h / 2 + 7);
-  ctx.closePath();
-  ctx.fill();
+  drawWoodStartButton(ctx, button);
 
   if (!compact) {
+    drawLoadoutStrip(ctx, x + 24, button.y + button.h + 24);
     ctx.font = `12px ${DESKTOP_FONT}`;
-    ctx.fillStyle = 'rgba(229,237,255,0.52)';
+    ctx.fillStyle = 'rgba(255,239,203,0.58)';
+    ctx.fillText(`当前外观：${skin.name} · ${skin.archetype}`, x + 26, button.y + button.h + 70);
+  }
+}
+
+function drawWoodStartButton(ctx: CanvasRenderingContext2D, button: Rect) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,209,102,0.38)';
+  ctx.shadowBlur = 22;
+  ctx.shadowOffsetY = 4;
+  ctx.fillStyle = cachedLinearGradient(ctx, `wood-start-${button.x}-${button.y}-${button.w}-${button.h}`, button.x, button.y, button.x, button.y + button.h, [
+    [0, '#ffe08b'],
+    [0.42, '#d9903f'],
+    [1, '#8a4524'],
+  ]);
+  ctx.beginPath();
+  ctx.roundRect(button.x, button.y, button.w, button.h, 16);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = 'rgba(57,25,10,0.7)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.roundRect(button.x + 2, button.y + 2, button.w - 4, button.h - 4, 14);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.48)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(button.x + 7, button.y + 7, button.w - 14, button.h - 14, 12);
+  ctx.stroke();
+
+  ctx.font = `900 23px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#24120b';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('开始远征', button.x + button.w / 2 - 12, button.y + button.h / 2);
+  ctx.fillStyle = 'rgba(36,18,11,0.76)';
+  ctx.beginPath();
+  ctx.moveTo(button.x + button.w - 42, button.y + button.h / 2 - 8);
+  ctx.lineTo(button.x + button.w - 25, button.y + button.h / 2);
+  ctx.lineTo(button.x + button.w - 42, button.y + button.h / 2 + 8);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawRunLedger(ctx: CanvasRenderingContext2D, rect: Rect, meta: MetaState, compact: boolean) {
+  const { x, y, w, h } = rect;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.34)';
+  ctx.shadowBlur = 16;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = '#d8b978';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 18);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = cachedLinearGradient(ctx, `ledger-paper-${x}-${y}-${w}-${h}`, x, y, x + w, y + h, [
+    [0, '#f1d795'],
+    [0.55, '#c89c58'],
+    [1, '#8f6234'],
+  ]);
+  ctx.beginPath();
+  ctx.roundRect(x + 8, y + 8, w - 16, h - 16, 14);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(75,45,20,0.48)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x + 8, y + 8, w - 16, h - 16, 14);
+  ctx.stroke();
+
+  ctx.font = `900 ${compact ? 13 : 16}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#422512';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('远征账本', x + 24, y + 24);
+
+  const bestMinutes = Math.floor(meta.bestTime / 60);
+  const bestSeconds = Math.floor(meta.bestTime % 60).toString().padStart(2, '0');
+  const rows: Array<[string, string, string]> = compact
+    ? [['魂火', `${meta.soulFire}`, '✦'], ['最高击杀', `${meta.bestKills}`, '◆']]
+    : [
+      ['魂火储备', `${meta.soulFire}`, '✦'],
+      ['已点亮节点', `${meta.unlockedUpgrades.length}/${META_UPGRADES.length}`, '◆'],
+      ['最佳时间', `${bestMinutes}:${bestSeconds}`, '◷'],
+      ['最高击杀', `${meta.bestKills}`, '◇'],
+      ['远征次数', `${meta.runs}`, '●'],
+    ];
+  const rowStart = y + (compact ? 48 : 70);
+  const rowGap = compact ? 28 : 45;
+  for (let i = 0; i < rows.length; i++) {
+    const yy = rowStart + i * rowGap;
+    ctx.fillStyle = 'rgba(69,39,17,0.12)';
+    ctx.beginPath();
+    ctx.roundRect(x + 20, yy - 6, w - 40, compact ? 24 : 32, 9);
+    ctx.fill();
+    ctx.fillStyle = '#5b3318';
+    ctx.font = `${compact ? 12 : 13}px ${DESKTOP_FONT}`;
     ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`当前外观：${skin.name} · ${skin.archetype}`, button.x + button.w + 22, button.y + button.h / 2);
+    ctx.fillText(`${rows[i][2]} ${rows[i][0]}`, x + 32, yy);
+    ctx.textAlign = 'right';
+    ctx.font = `900 ${compact ? 14 : 18}px ${DESKTOP_FONT}`;
+    ctx.fillText(rows[i][1], x + w - 32, yy - 2);
+  }
+
+  if (!compact) {
+    const last = meta.lastRun;
+    ctx.textAlign = 'left';
+    ctx.font = `12px ${DESKTOP_FONT}`;
+    ctx.fillStyle = 'rgba(66,37,18,0.72)';
+    const note = last
+      ? `上次：${Math.floor(last.time / 60)}:${Math.floor(last.time % 60).toString().padStart(2, '0')} · Lv.${last.level} · +${last.soulFireEarned}魂火`
+      : '完成第一局后，这里会记录你的上次远征。';
+    drawWrappedText(ctx, note, x + 24, y + h - 76, w - 48, 18, 3);
   }
 }
 
@@ -1068,6 +1195,157 @@ function drawHeroMetric(
   ctx.font = `800 ${h < 46 ? 16 : 18}px ${DESKTOP_FONT}`;
   ctx.fillStyle = accent;
   ctx.fillText(value, x + 12, y + (h < 46 ? 25 : 28));
+}
+
+function drawCampScene(
+  ctx: CanvasRenderingContext2D,
+  rect: Rect,
+  skin: (typeof CHARACTER_SKINS)[number],
+  time: number,
+  compact: boolean
+) {
+  const { x, y, w, h } = rect;
+  const cx = x + w / 2;
+  const groundY = y + h * 0.68;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 22);
+  ctx.clip();
+
+  ctx.fillStyle = cachedLinearGradient(ctx, `camp-sky-${x}-${y}-${w}-${h}`, x, y, x, y + h, [
+    [0, 'rgba(12,23,39,0.92)'],
+    [0.56, 'rgba(30,49,44,0.86)'],
+    [1, 'rgba(8,12,10,0.96)'],
+  ]);
+  ctx.fillRect(x, y, w, h);
+
+  ctx.fillStyle = 'rgba(255,239,176,0.14)';
+  ctx.beginPath();
+  ctx.arc(x + w * 0.78, y + h * 0.18, compact ? 28 : 44, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#26351f';
+  ctx.beginPath();
+  ctx.moveTo(x, groundY + 20);
+  ctx.quadraticCurveTo(cx, groundY - 34, x + w, groundY + 16);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(89,54,30,0.82)';
+  ctx.lineWidth = compact ? 4 : 6;
+  for (let i = 0; i < 8; i++) {
+    const px = x + 28 + i * (w - 56) / 7;
+    ctx.beginPath();
+    ctx.moveTo(px, groundY - 36 + Math.sin(i) * 6);
+    ctx.lineTo(px + 8, groundY + 20);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(113,75,42,0.82)';
+  ctx.lineWidth = compact ? 3 : 5;
+  ctx.beginPath();
+  ctx.moveTo(x + 18, groundY - 10);
+  ctx.lineTo(x + w - 18, groundY - 24);
+  ctx.stroke();
+
+  drawCampLantern(ctx, x + w * 0.23, groundY - 48, time);
+  drawCampLantern(ctx, x + w * 0.71, groundY - 56, time + 1.7);
+  drawWeaponRack(ctx, x + w * 0.14, groundY + 4, compact ? 0.75 : 1);
+
+  const heroY = groundY + (compact ? 24 : 16) + Math.sin(time * 2.1) * 2;
+  ctx.strokeStyle = `${skin.glow}0.5)`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(cx, heroY + (compact ? 34 : 48), compact ? 72 : 100, compact ? 16 : 22, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  drawSkinPreview(ctx, skin.id, cx, heroY, compact ? 1.55 : 2.45, skin.body, skin.outline);
+
+  const monsters: Array<[number, number, number, string]> = [
+    [0.36, -0.09, 11, '#ff6b6b'],
+    [0.42, 0.1, 8, '#ffd166'],
+    [-0.36, 0.07, 9, '#b277ff'],
+    [-0.27, -0.1, 7, '#8fe8ff'],
+  ];
+  for (let i = 0; i < monsters.length; i++) {
+    const [dx, dy, r, color] = monsters[i];
+    const mx = cx + dx * w;
+    const my = groundY + dy * h + Math.sin(time * 2 + i) * 3;
+    ctx.fillStyle = colorWithAlpha(color, 0.18);
+    ctx.beginPath();
+    ctx.arc(mx, my, r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = colorWithAlpha(color, 0.72);
+    ctx.beginPath();
+    ctx.arc(mx, my, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.fillRect(mx - r * 0.4, my - 2, r * 0.25, 2);
+    ctx.fillRect(mx + r * 0.15, my - 2, r * 0.25, 2);
+  }
+
+  ctx.restore();
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = `700 12px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(213,224,255,0.62)';
+  ctx.fillText('营地待命', x + 20, y + 18);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffd166';
+  ctx.fillText('15:00', x + w - 20, y + 18);
+
+  ctx.textAlign = 'center';
+  ctx.font = `900 ${compact ? 18 : 22}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(skin.name, cx, y + h - (compact ? 42 : 56));
+  ctx.font = `12px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(213,224,255,0.68)';
+  ctx.fillText(skin.archetype, cx, y + h - (compact ? 22 : 34));
+}
+
+function drawCampLantern(ctx: CanvasRenderingContext2D, x: number, y: number, time: number) {
+  const glow = 1 + Math.sin(time * 4) * 0.08;
+  ctx.fillStyle = `rgba(255,198,91,${0.18 * glow})`;
+  ctx.beginPath();
+  ctx.arc(x, y, 36 * glow, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#6b3b1e';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x, y - 42);
+  ctx.lineTo(x, y - 12);
+  ctx.stroke();
+  ctx.fillStyle = '#362012';
+  ctx.beginPath();
+  ctx.roundRect(x - 11, y - 14, 22, 28, 5);
+  ctx.fill();
+  ctx.fillStyle = '#ffd166';
+  ctx.beginPath();
+  ctx.roundRect(x - 6, y - 8, 12, 16, 4);
+  ctx.fill();
+}
+
+function drawWeaponRack(ctx: CanvasRenderingContext2D, x: number, y: number, scale: number) {
+  ctx.strokeStyle = '#6b4329';
+  ctx.lineWidth = 5 * scale;
+  ctx.beginPath();
+  ctx.moveTo(x, y - 42 * scale);
+  ctx.lineTo(x + 58 * scale, y - 54 * scale);
+  ctx.moveTo(x + 8 * scale, y);
+  ctx.lineTo(x + 18 * scale, y - 82 * scale);
+  ctx.moveTo(x + 52 * scale, y);
+  ctx.lineTo(x + 42 * scale, y - 88 * scale);
+  ctx.stroke();
+  ctx.strokeStyle = '#d7c6a1';
+  ctx.lineWidth = 3 * scale;
+  ctx.beginPath();
+  ctx.moveTo(x + 22 * scale, y - 76 * scale);
+  ctx.lineTo(x + 2 * scale, y - 24 * scale);
+  ctx.moveTo(x + 38 * scale, y - 80 * scale);
+  ctx.lineTo(x + 68 * scale, y - 28 * scale);
+  ctx.stroke();
 }
 
 function drawHeroBattleScene(
@@ -1439,7 +1717,7 @@ function getCodexCards(tab: CodexTab): CodexCard[] {
     return Object.values(WEAPON_DATA).map((data) => ({
       icon: data.icon,
       title: data.name,
-      tag: `${data.family} | Lv.${data.maxLevel}`,
+      tag: `${data.family} | 无限成长`,
       desc: data.desc,
       accent: '#ff9999',
     }));
@@ -1619,20 +1897,32 @@ function drawWrappedText(
   lineHeight: number,
   maxLines: number
 ) {
+  const wrappedLines = getWrappedLines(ctx, text, maxWidth, maxLines);
+  wrappedLines.forEach((line, index) => {
+    ctx.fillText(line, x, y + index * lineHeight);
+  });
+}
+
+function getWrappedLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number
+): string[] {
+  const lines: string[] = [];
   let line = '';
-  let lines = 0;
   for (const char of text) {
     const next = line + char;
-    if (ctx.measureText(next).width > maxWidth) {
-      ctx.fillText(line, x, y + lines * lineHeight);
+    if (line && ctx.measureText(next).width > maxWidth) {
+      lines.push(line);
       line = char;
-      lines++;
-      if (lines >= maxLines) return;
+      if (lines.length >= maxLines) return lines;
     } else {
       line = next;
     }
   }
-  if (line && lines < maxLines) ctx.fillText(line, x, y + lines * lineHeight);
+  if (line && lines.length < maxLines) lines.push(line);
+  return lines;
 }
 
 export function drawPaused(rc: RenderContext) {

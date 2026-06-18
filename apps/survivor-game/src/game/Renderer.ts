@@ -86,7 +86,7 @@ export class Renderer {
   getPauseButtonRect() { return getPauseRect(this.w); }
   getAudioButtonRect() { return getAudioRect(this.w); }
   getDesktopStartButtonRect() { return getStartButtonRect(this.w, this.h); }
-  getDesktopTabRects() { return getTabRects(this.w); }
+  getDesktopTabRects() { return getTabRects(this.w, this.h); }
 
   // ─── World ───
   drawGround(cam: Camera) { this.worldRenderer.drawGround(this.rc, cam); }

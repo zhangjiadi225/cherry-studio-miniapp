@@ -18,7 +18,7 @@ export function generateUpgradeOptions(
 
   for (const w of player.weapons) {
     const data = WEAPON_DATA[w.type];
-    if (w.level < data.maxLevel) {
+    if (data.maxLevel === undefined || w.level < data.maxLevel) {
       allOptions.push({
         title: `${data.name} Lv${w.level + 1}`,
         description: getWeaponUpgradeDesc(w),

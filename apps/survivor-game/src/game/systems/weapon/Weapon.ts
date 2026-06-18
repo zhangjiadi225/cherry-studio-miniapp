@@ -26,7 +26,7 @@ export function createWeapon(type: WeaponType): Weapon {
 
 export function upgradeWeapon(w: Weapon): boolean {
   const d = WEAPON_DATA[w.type];
-  if (w.level >= d.maxLevel) return false;
+  if (d.maxLevel !== undefined && w.level >= d.maxLevel) return false;
   w.level++;
   const p = d.perLevel;
   if (p.damage) w.damage += p.damage;

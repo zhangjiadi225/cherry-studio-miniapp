@@ -43,7 +43,7 @@ type ObjectiveBeat = {
 };
 
 const OBJECTIVE_BEATS: ObjectiveBeat[] = [
-  { time: 12, message: '目标：收集经验，买下第一张升级牌' },
+  { time: 12, message: '目标：收集经验，攒金币准备升级' },
   { time: 90, message: '目标：准备补给，夜潮精英将在3:00出现' },
   { time: 180, message: '夜潮精英出现，击败它获取金币奖励', eliteAmbush: 2 },
   { time: 260, message: 'Boss即将到来，保留金币购买补给' },
