@@ -3,7 +3,6 @@ import {
   ENEMY_DATA, SPAWN_DISTANCE,
   BOSS_TIMES, MAX_ENEMIES,
   BOSS_HP_MULT, BOSS_DMG_MULT, BOSS_XP_MULT, BOSS_MINION_COUNT,
-  SPAWN_WAVE_GROWTH_INTERVAL,
 } from '../../constants';
 import { createEnemy, getAvailableEnemyTypes } from './Enemy';
 import { randFloat, randInt, weightedRandom } from '../../utils/math';
@@ -12,18 +11,36 @@ import { getDifficultyParams, type DifficultyParams } from '../../data/difficult
 export class Spawner {
   private spawnTimer = 0;
   private bossSpawned = new Set<number>();
-  private waveCount = 0;
   private totalKills = 0;
 
   reset() {
     this.spawnTimer = 0;
     this.bossSpawned.clear();
-    this.waveCount = 0;
     this.totalKills = 0;
   }
 
   addKill() {
     this.totalKills++;
+  }
+
+  spawnEliteAmbush(
+    enemies: Enemy[],
+    player: Player,
+    elapsed: number,
+    difficulty: number,
+    curseMult: number = 1,
+    count: number = 1
+  ) {
+    const difficultyParams = getDifficultyParams(elapsed);
+    const available = getAvailableEnemyTypes(elapsed, difficulty);
+    if (available.length === 0) return;
+
+    for (let i = 0; i < count; i++) {
+      if (enemies.length >= MAX_ENEMIES) break;
+      const type = this.pickEnemyType(available, elapsed, difficulty);
+      const pos = this.getSpawnPosition(player);
+      enemies.push(createEnemy(type, pos.x, pos.y, difficulty, curseMult, true, false, difficultyParams));
+    }
   }
 
   update(
@@ -46,7 +63,6 @@ export class Spawner {
     this.spawnTimer += dt;
     if (this.spawnTimer >= interval) {
       this.spawnTimer -= interval;
-      this.waveCount++;
       this.spawnWave(enemies, player, elapsed, difficulty, curseMult, difficultyParams);
     }
 
@@ -64,10 +80,10 @@ export class Spawner {
     const available = getAvailableEnemyTypes(elapsed, difficulty);
     if (available.length === 0) return;
 
-    const count = Math.min(
-      difficultyParams.waveMaxCount,
-      difficultyParams.waveBaseCount + Math.floor(this.waveCount / SPAWN_WAVE_GROWTH_INTERVAL)
-    );
+    const availableSlots = difficultyParams.activeEnemyCap - enemies.length;
+    if (availableSlots <= 0) return;
+
+    const count = Math.min(difficultyParams.waveBaseCount, availableSlots);
 
     for (let i = 0; i < count; i++) {
       if (enemies.length >= MAX_ENEMIES) break;

@@ -53,7 +53,7 @@ function cachedRadialGradient(
 
 // ──────────────────────────── HUD ────────────────────────────
 
-export function drawUI(rc: RenderContext, player: Player, elapsed: number, killCount: number) {
+export function drawUI(rc: RenderContext, player: Player, elapsed: number, killCount: number, objective?: string) {
   const { ctx, w, h } = rc;
   const padding = 16;
   const barW = Math.min(320, w - 32);
@@ -188,6 +188,26 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   ctx.textAlign = 'center';
   ctx.fillStyle = COLORS.uiDim;
   ctx.fillText(`💀 ${killCount}`, w - 56, 60);
+
+  if (objective) {
+    const toastW = Math.min(460, w - 48);
+    const toastX = w / 2 - toastW / 2;
+    const toastY = 50;
+    ctx.fillStyle = 'rgba(5,10,22,0.82)';
+    ctx.beginPath();
+    ctx.roundRect(toastX, toastY, toastW, 34, 8);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,209,102,0.58)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(toastX, toastY, toastW, 34, 8);
+    ctx.stroke();
+    ctx.font = 'bold 14px "Segoe UI", sans-serif';
+    ctx.fillStyle = '#ffd166';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(objective, w / 2, toastY + 17);
+  }
 
   // Weapon icons (bottom left)
   const weaponY = h - 55;
@@ -436,6 +456,50 @@ export function getAudioButtonRect(w: number): { x: number; y: number; w: number
 
 const DESKTOP_FONT = '"Segoe UI", "PingFang SC", sans-serif';
 
+type Rect = { x: number; y: number; w: number; h: number };
+
+type DesktopStartLayout = {
+  compact: boolean;
+  hero: Rect;
+  left: Rect;
+  stage: Rect;
+  button: Rect;
+};
+
+export function getDesktopStartButtonRect(w: number, h: number): Rect {
+  return getDesktopStartLayout(w, h).button;
+}
+
+function getDesktopStartLayout(w: number, h: number): DesktopStartLayout {
+  const compact = w < 760;
+  const side = compact ? 22 : Math.max(44, Math.min(78, w * 0.06));
+  const heroX = side;
+  const heroY = compact ? 132 : 138;
+  const heroW = Math.max(280, w - side * 2);
+  const heroH = Math.max(compact ? 430 : 470, Math.min(compact ? 590 : 610, h - heroY - 62));
+  const leftW = compact ? heroW - 52 : Math.min(560, heroW * 0.48);
+  const left: Rect = {
+    x: heroX + (compact ? 26 : 44),
+    y: heroY + (compact ? 28 : 46),
+    w: leftW,
+    h: compact ? 156 : heroH - 106,
+  };
+  const stage: Rect = compact
+    ? { x: heroX + 18, y: heroY + 190, w: heroW - 36, h: Math.max(184, heroH - 348) }
+    : { x: heroX + leftW + 36, y: heroY + 34, w: heroW - leftW - 68, h: heroH - 78 };
+  const button: Rect = compact
+    ? { x: heroX + 26, y: heroY + heroH - 76, w: Math.min(268, heroW - 52), h: 56 }
+    : { x: heroX + 44, y: heroY + heroH - 84, w: 270, h: 58 };
+
+  return {
+    compact,
+    hero: { x: heroX, y: heroY, w: heroW, h: heroH },
+    left,
+    stage,
+    button,
+  };
+}
+
 export function drawDesktop(rc: RenderContext, meta: MetaState, activeTab: DesktopTab, activeCodexTab: CodexTab) {
   const { ctx, w, h } = rc;
   const time = Date.now() * 0.001;
@@ -459,81 +523,115 @@ export function drawDesktop(rc: RenderContext, meta: MetaState, activeTab: Deskt
   ctx.fillStyle = 'rgba(220,230,255,0.42)';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('1-4 切换页签 | Q/E 切换图鉴分页 | Enter 开始游戏', w / 2, h - 18);
+  ctx.fillText('远征档案同步完成 · 商店矩阵待命 · 图鉴数据库在线', w / 2, h - 18);
+}
+
+export function getDesktopTabRects(w: number): Array<Rect & { id: DesktopTab }> {
+  const tabs: DesktopTab[] = ['start', 'growth', 'skins', 'codex'];
+  const tabGap = w < 620 ? 8 : 12;
+  const tabH = 42;
+  const tabW = Math.min(132, Math.max(74, (w - 44 - (tabs.length - 1) * tabGap) / tabs.length));
+  const totalW = tabs.length * tabW + (tabs.length - 1) * tabGap;
+  const startX = w / 2 - totalW / 2;
+  const y = 82;
+  return tabs.map((id, index) => ({
+    id,
+    x: startX + index * (tabW + tabGap),
+    y,
+    w: tabW,
+    h: tabH,
+  }));
 }
 
 function drawDesktopBackdrop(rc: RenderContext, time: number) {
   const { ctx, w, h } = rc;
   ctx.fillStyle = cachedLinearGradient(ctx, `desktop-bg-${w}-${h}`, 0, 0, w, h, [
-    [0, '#080b14'],
-    [0.52, '#111a2d'],
-    [1, '#091016'],
+    [0, '#050711'],
+    [0.42, '#0d1727'],
+    [0.72, '#151322'],
+    [1, '#06080d'],
   ]);
   ctx.fillRect(0, 0, w, h);
 
-  ctx.fillStyle = cachedRadialGradient(ctx, `desktop-glow-a-${w}-${h}`, w * 0.18, h * 0.18, 20, w * 0.18, h * 0.18, Math.max(w, h) * 0.55, [
-    [0, 'rgba(255,122,69,0.18)'],
-    [0.42, 'rgba(74,158,255,0.06)'],
+  const horizonY = h * 0.56;
+  ctx.fillStyle = cachedLinearGradient(ctx, `desktop-horizon-${w}-${h}`, 0, horizonY - 90, 0, horizonY + 140, [
+    [0, 'rgba(143,232,255,0)'],
+    [0.38, 'rgba(143,232,255,0.08)'],
+    [0.48, 'rgba(255,209,102,0.18)'],
+    [0.56, 'rgba(255,122,69,0.1)'],
     [1, 'rgba(0,0,0,0)'],
   ]);
-  ctx.fillRect(0, 0, w, h);
-
-  ctx.fillStyle = cachedRadialGradient(ctx, `desktop-glow-b-${w}-${h}`, w * 0.78, h * 0.28, 0, w * 0.78, h * 0.28, Math.max(w, h) * 0.46, [
-    [0, 'rgba(157,123,255,0.2)'],
-    [0.5, 'rgba(70,210,190,0.05)'],
-    [1, 'rgba(0,0,0,0)'],
-  ]);
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillRect(0, horizonY - 90, w, 230);
 
   ctx.save();
-  ctx.globalAlpha = 0.22;
-  ctx.strokeStyle = 'rgba(170,196,255,0.18)';
+  ctx.globalAlpha = 0.28;
+  ctx.strokeStyle = 'rgba(255,209,102,0.2)';
   ctx.lineWidth = 1;
-  const grid = 42;
-  const offset = (time * 8) % grid;
-  for (let x = -grid + offset; x < w + grid; x += grid) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x - h * 0.38, h);
-    ctx.stroke();
-  }
-  for (let y = -grid + offset; y < h + grid; y += grid) {
+  for (let i = 0; i < 6; i++) {
+    const y = horizonY + i * 34 + Math.sin(time * 0.5 + i) * 2;
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.lineTo(w, y - w * 0.1);
+    ctx.lineTo(w, y - i * 5);
     ctx.stroke();
   }
   ctx.restore();
 
   ctx.save();
-  ctx.globalAlpha = 0.55;
-  for (let i = 0; i < 52; i++) {
-    const x = (Math.sin(i * 9.7 + time * 0.18) * 0.5 + 0.5) * w;
-    const y = (Math.cos(i * 6.1 + time * 0.12) * 0.5 + 0.5) * h;
-    const r = 0.8 + Math.sin(i + time) * 0.35;
-    ctx.fillStyle = i % 5 === 0 ? 'rgba(255,209,102,0.36)' : 'rgba(190,215,255,0.26)';
+  ctx.globalAlpha = 0.2;
+  ctx.strokeStyle = 'rgba(143,232,255,0.2)';
+  ctx.lineWidth = 1;
+  const vanishingX = w * 0.58;
+  const vanishingY = horizonY - 8;
+  for (let i = -9; i <= 9; i++) {
+    const x = w / 2 + i * 78 + Math.sin(time * 0.18 + i) * 5;
     ctx.beginPath();
-    ctx.arc(x, y, Math.max(0.4, r), 0, Math.PI * 2);
-    ctx.fill();
+    ctx.moveTo(vanishingX, vanishingY);
+    ctx.lineTo(x, h + 40);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 14; i++) {
+    const t = i / 13;
+    const y = vanishingY + Math.pow(t, 1.9) * (h - vanishingY + 70);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
   }
   ctx.restore();
 
   ctx.save();
-  ctx.strokeStyle = 'rgba(255,209,102,0.1)';
-  ctx.lineWidth = 1;
+  ctx.globalAlpha = 0.58;
+  for (let i = 0; i < 38; i++) {
+    const x = ((i * 127.1 + time * 10) % (w + 180)) - 90;
+    const y = 84 + ((i * 53.7 + time * 4) % Math.max(220, h * 0.52));
+    const len = 12 + (i % 4) * 5;
+    ctx.strokeStyle = i % 4 === 0 ? 'rgba(255,209,102,0.32)' : 'rgba(143,232,255,0.22)';
+    ctx.lineWidth = i % 4 === 0 ? 1.4 : 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + len, y - len * 0.24);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = 'rgba(255,209,102,0.12)';
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.ellipse(w / 2, h + 68, w * 0.44, 96, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(120,170,255,0.08)';
-  ctx.beginPath();
-  ctx.ellipse(w / 2, h + 50, w * 0.32, 62, 0, 0, Math.PI * 2);
+  ctx.moveTo(w * 0.12, horizonY + 2);
+  ctx.lineTo(w * 0.3, horizonY - 30);
+  ctx.lineTo(w * 0.46, horizonY + 2);
+  ctx.lineTo(w * 0.64, horizonY - 44);
+  ctx.lineTo(w * 0.86, horizonY + 6);
   ctx.stroke();
   ctx.restore();
 }
 
 function drawDesktopHeader(rc: RenderContext, meta: MetaState) {
   const { ctx, w } = rc;
-  const x = 36;
+  const compact = w < 760;
+  const x = compact ? 24 : 36;
   const y = 22;
   const panelW = Math.min(520, w - 72);
   const titleGrad = cachedLinearGradient(ctx, `desktop-title-${x}-${y}-${panelW}`, x, y, x + panelW, y, [
@@ -546,7 +644,7 @@ function drawDesktopHeader(rc: RenderContext, meta: MetaState) {
   ctx.shadowColor = 'rgba(255,209,102,0.32)';
   ctx.shadowBlur = 18;
   ctx.fillStyle = titleGrad;
-  ctx.font = `800 34px ${DESKTOP_FONT}`;
+  ctx.font = `${compact ? 800 : 900} ${compact ? 26 : 34}px ${DESKTOP_FONT}`;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillText('暗夜幸存者', x + 58, y + 1);
@@ -571,7 +669,9 @@ function drawDesktopHeader(rc: RenderContext, meta: MetaState) {
   ctx.fillStyle = 'rgba(210,224,255,0.62)';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.fillText('局外桌面 / 长期成长 / 收藏图鉴', x + 60, y + 41);
+  ctx.fillText('局外远征指挥台', x + 60, y + 41);
+
+  if (compact) return;
 
   const pillY = 24;
   drawInfoPill(ctx, w - 346, pillY, 94, '魂火', `${meta.soulFire}`, '#ffd166');
@@ -581,22 +681,17 @@ function drawDesktopHeader(rc: RenderContext, meta: MetaState) {
 
 function drawDesktopTabs(rc: RenderContext, activeTab: DesktopTab) {
   const { ctx, w } = rc;
-  const tabs: Array<{ id: DesktopTab; label: string }> = [
-    { id: 'start', label: '作战' },
-    { id: 'growth', label: '成长' },
-    { id: 'skins', label: '皮肤' },
-    { id: 'codex', label: '图鉴' },
-  ];
-  const tabW = 132;
-  const tabH = 42;
-  const tabGap = 12;
-  const totalW = tabs.length * tabW + (tabs.length - 1) * tabGap;
-  const startX = w / 2 - totalW / 2;
-  const y = 82;
+  const labels: Record<DesktopTab, string> = {
+    start: '作战',
+    growth: '成长',
+    skins: '皮肤',
+    codex: '图鉴',
+  };
+  const tabs = getDesktopTabRects(w);
 
   for (let i = 0; i < tabs.length; i++) {
     const tab = tabs[i];
-    const x = startX + i * (tabW + tabGap);
+    const { x, y, w: tabW, h: tabH } = tab;
     const active = tab.id === activeTab;
     const tabGrad = cachedLinearGradient(ctx, `desktop-tab-${active}-${x}-${y}-${tabH}`, x, y, x, y + tabH, active ? [
       [0, 'rgba(255,209,102,0.32)'],
@@ -626,7 +721,7 @@ function drawDesktopTabs(rc: RenderContext, activeTab: DesktopTab) {
     ctx.fillStyle = active ? '#ffd166' : COLORS.uiText;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`${i + 1}  ${tab.label}`, x + tabW / 2, y + tabH / 2);
+    ctx.fillText(`${i + 1}  ${labels[tab.id]}`, x + tabW / 2, y + tabH / 2);
   }
 }
 
@@ -795,101 +890,125 @@ function colorWithAlpha(color: string, alpha: number): string {
 
 function drawDesktopStart(rc: RenderContext, meta: MetaState, time: number) {
   const { ctx, w, h } = rc;
-  const panelW = Math.min(980, w - 72);
-  const panelH = Math.min(420, h - 214);
-  const panelX = w / 2 - panelW / 2;
-  const panelY = 144;
-  drawGlassPanel(ctx, panelX, panelY, panelW, panelH, 18, 'rgba(13,18,32,0.74)');
-  drawPanelAccent(ctx, panelX, panelY, panelW, '#ffd166');
+  const layout = getDesktopStartLayout(w, h);
+  const { hero, left, stage, button, compact } = layout;
 
-  const leftX = panelX + 38;
-  const rightX = panelX + panelW * 0.48;
-  const rightW = panelW - (rightX - panelX) - 34;
-  const stageX = rightX + rightW / 2;
-  const stageY = panelY + panelH * 0.5 + 8;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.48)';
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 18;
+  ctx.fillStyle = cachedLinearGradient(ctx, `hero-shell-${hero.x}-${hero.y}-${hero.w}-${hero.h}`, hero.x, hero.y, hero.x + hero.w, hero.y + hero.h, [
+    [0, 'rgba(18,27,45,0.82)'],
+    [0.42, 'rgba(10,16,29,0.62)'],
+    [1, 'rgba(24,14,24,0.76)'],
+  ]);
+  ctx.beginPath();
+  ctx.roundRect(hero.x, hero.y, hero.w, hero.h, compact ? 22 : 30);
+  ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(255,209,102,0.32)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.roundRect(hero.x, hero.y, hero.w, hero.h, compact ? 22 : 30);
+  ctx.stroke();
+  drawPanelAccent(ctx, hero.x, hero.y, hero.w, '#ffd166');
+
+  const skin = CHARACTER_SKINS.find((item) => item.id === meta.selectedSkin) ?? CHARACTER_SKINS[0];
+  drawHeroBattleScene(ctx, stage, skin, time, compact);
 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
-  ctx.font = `800 16px ${DESKTOP_FONT}`;
+  ctx.font = `800 ${compact ? 13 : 15}px ${DESKTOP_FONT}`;
   ctx.fillStyle = '#ffd166';
-  ctx.fillText('NIGHT DEPLOYMENT', leftX, panelY + 30);
-  ctx.font = `900 36px ${DESKTOP_FONT}`;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('准备出击', leftX, panelY + 54);
-  ctx.font = `13px ${DESKTOP_FONT}`;
-  ctx.fillStyle = 'rgba(213,224,255,0.7)';
-  ctx.fillText('局外成长已经接入商店、开局资源和构筑模块。', leftX, panelY + 100);
+  ctx.fillText('NIGHTFALL COMMAND', left.x, left.y);
 
-  drawLoadoutStrip(ctx, leftX, panelY + 132);
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,209,102,0.28)';
+  ctx.shadowBlur = 18;
+  ctx.font = `900 ${compact ? 38 : 68}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('暗夜幸存者', left.x, left.y + (compact ? 24 : 30));
+  ctx.restore();
+
+  if (!compact) {
+    ctx.font = `800 34px ${DESKTOP_FONT}`;
+    ctx.fillStyle = '#8fe8ff';
+    ctx.fillText('远征指挥台', left.x, left.y + 100);
+  }
+
+  ctx.font = `${compact ? 13 : 15}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(229,237,255,0.76)';
+  drawWrappedText(
+    ctx,
+    compact ? '带着全局成长进入夜潮。' : '带着全局成长、商店机制和武器模块进入夜潮，把每一局变成下一次远征的筹码。',
+    left.x,
+    left.y + (compact ? 78 : 150),
+    compact ? left.w : Math.min(520, left.w),
+    compact ? 20 : 22,
+    compact ? 2 : 3
+  );
 
   const bestMinutes = Math.floor(meta.bestTime / 60);
   const bestSeconds = Math.floor(meta.bestTime % 60).toString().padStart(2, '0');
-  const stats = [
+  const stats: Array<[string, string, string]> = [
     ['魂火储备', `${meta.soulFire}`, '#ffd166'],
     ['点亮节点', `${meta.unlockedUpgrades.length}/${META_UPGRADES.length}`, '#8fe8ff'],
     ['最佳时间', `${bestMinutes}:${bestSeconds}`, '#ff9a76'],
     ['最高击杀', `${meta.bestKills}`, '#ff6b85'],
   ];
-  for (let i = 0; i < stats.length; i++) {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const x = leftX + col * 150;
-    const y = panelY + 178 + row * 64;
-    drawMetricTile(ctx, x, y, 132, 48, stats[i][0], stats[i][1], stats[i][2]);
+  if (compact && hero.h > 520) {
+    const compactStats = [stats[0], stats[3]];
+    const statY = button.y - 58;
+    const statW = (button.w - 10) / 2;
+    for (let i = 0; i < compactStats.length; i++) {
+      drawHeroMetric(ctx, button.x + i * (statW + 10), statY, statW, 44, compactStats[i][0], compactStats[i][1], compactStats[i][2]);
+    }
+  } else if (!compact) {
+    drawLoadoutStrip(ctx, left.x, left.y + 206);
+    const statY = button.y - 82;
+    for (let i = 0; i < stats.length; i++) {
+      drawHeroMetric(ctx, left.x + i * 136, statY, 124, 50, stats[i][0], stats[i][1], stats[i][2]);
+    }
   }
-
-  const skin = CHARACTER_SKINS.find((item) => item.id === meta.selectedSkin) ?? CHARACTER_SKINS[0];
-  drawDeploymentStage(ctx, rightX, panelY + 34, rightW, panelH - 68, skin, time);
-
-  ctx.fillStyle = cachedRadialGradient(ctx, `skin-glow-${skin.id}-${stageX}-${stageY}`, stageX, stageY - 8, 8, stageX, stageY - 8, 150, [
-    [0, `${skin.glow}0.42)`],
-    [1, `${skin.glow}0)`],
-  ]);
-  ctx.fillRect(rightX, panelY + 34, rightW, panelH - 68);
-  drawSkinPreview(ctx, skin.id, stageX, stageY - 10 + Math.sin(time * 2.1) * 3, 2.35, skin.body, skin.outline);
-  ctx.font = `800 20px ${DESKTOP_FONT}`;
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(skin.name, stageX, panelY + panelH - 92);
-  ctx.font = `12px ${DESKTOP_FONT}`;
-  ctx.fillStyle = 'rgba(213,224,255,0.68)';
-  ctx.fillText(skin.archetype, stageX, panelY + panelH - 70);
-
-  const btnW = 240;
-  const btnH = 56;
-  const btnX = leftX;
-  const btnY = panelY + panelH - 72;
 
   ctx.save();
   ctx.shadowColor = 'rgba(255,209,102,0.28)';
-  ctx.shadowBlur = 20;
-  ctx.fillStyle = cachedLinearGradient(ctx, `start-btn-${btnX}-${btnY}-${btnH}`, btnX, btnY, btnX, btnY + btnH, [
+  ctx.shadowBlur = 24;
+  ctx.fillStyle = cachedLinearGradient(ctx, `start-btn-${button.x}-${button.y}-${button.h}`, button.x, button.y, button.x, button.y + button.h, [
     [0, '#ffd166'],
     [0.5, '#e99345'],
     [1, '#ba5f36'],
   ]);
   ctx.beginPath();
-  ctx.roundRect(btnX, btnY, btnW, btnH, 14);
+  ctx.roundRect(button.x, button.y, button.w, button.h, 14);
   ctx.fill();
   ctx.restore();
   ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.roundRect(btnX, btnY, btnW, btnH, 14);
+  ctx.roundRect(button.x, button.y, button.w, button.h, 14);
   ctx.stroke();
 
-  ctx.font = `800 22px ${DESKTOP_FONT}`;
+  ctx.font = `900 ${compact ? 18 : 21}px ${DESKTOP_FONT}`;
   ctx.fillStyle = '#151018';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('开始新一局', btnX + btnW / 2, btnY + btnH / 2);
+  ctx.fillText('开始新一局', button.x + button.w / 2 - 8, button.y + button.h / 2);
+  ctx.fillStyle = 'rgba(21,16,24,0.72)';
+  ctx.beginPath();
+  ctx.moveTo(button.x + button.w - 42, button.y + button.h / 2 - 7);
+  ctx.lineTo(button.x + button.w - 28, button.y + button.h / 2);
+  ctx.lineTo(button.x + button.w - 42, button.y + button.h / 2 + 7);
+  ctx.closePath();
+  ctx.fill();
 
-  ctx.font = `13px ${DESKTOP_FONT}`;
-  ctx.fillStyle = 'rgba(213,224,255,0.55)';
-  ctx.textAlign = 'left';
-  ctx.fillText('Enter 快速开始', btnX + btnW + 18, btnY + 20);
-  ctx.fillText('WASD / 方向键移动', btnX + btnW + 18, btnY + 40);
+  if (!compact) {
+    ctx.font = `12px ${DESKTOP_FONT}`;
+    ctx.fillStyle = 'rgba(229,237,255,0.52)';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`当前外观：${skin.name} · ${skin.archetype}`, button.x + button.w + 22, button.y + button.h / 2);
+  }
 }
 
 function drawLoadoutStrip(ctx: CanvasRenderingContext2D, x: number, y: number) {
@@ -920,72 +1039,139 @@ function drawLoadoutStrip(ctx: CanvasRenderingContext2D, x: number, y: number) {
   }
 }
 
-function drawDeploymentStage(
+function drawHeroMetric(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   w: number,
   h: number,
-  skin: (typeof CHARACTER_SKINS)[number],
-  time: number
+  label: string,
+  value: string,
+  accent: string
 ) {
-  drawGlassPanel(ctx, x, y, w, h, 18, 'rgba(7,12,24,0.58)');
+  ctx.fillStyle = 'rgba(5,9,18,0.56)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 12);
+  ctx.fill();
+  ctx.strokeStyle = colorWithAlpha(accent, 0.32);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 12);
+  ctx.stroke();
+  ctx.fillStyle = colorWithAlpha(accent, 0.82);
+  ctx.fillRect(x + 12, y + 9, 22, 2);
+  ctx.font = `10px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(216,228,255,0.58)';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(label, x + 12, y + 16);
+  ctx.font = `800 ${h < 46 ? 16 : 18}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = accent;
+  ctx.fillText(value, x + 12, y + (h < 46 ? 25 : 28));
+}
 
+function drawHeroBattleScene(
+  ctx: CanvasRenderingContext2D,
+  rect: Rect,
+  skin: (typeof CHARACTER_SKINS)[number],
+  time: number,
+  compact: boolean
+) {
+  const { x, y, w, h } = rect;
   const cx = x + w / 2;
-  const cy = y + h / 2 + 18;
-  ctx.fillStyle = cachedRadialGradient(ctx, `deployment-scanner-${skin.id}-${x}-${y}-${w}-${h}`, cx, cy, 10, cx, cy, Math.min(w, h) * 0.62, [
-    [0, `${skin.glow}0.1)`],
-    [0.52, 'rgba(80,126,190,0.08)'],
-    [1, 'rgba(0,0,0,0)'],
-  ]);
-  ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
+  const floorY = y + h * 0.72;
 
   ctx.save();
-  ctx.strokeStyle = 'rgba(143,232,255,0.13)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, compact ? 18 : 24);
+  ctx.clip();
+
+  ctx.fillStyle = cachedLinearGradient(ctx, `hero-stage-bg-${x}-${y}-${w}-${h}`, x, y, x, y + h, [
+    [0, 'rgba(4,8,18,0.18)'],
+    [0.46, 'rgba(12,21,38,0.64)'],
+    [1, 'rgba(5,8,14,0.92)'],
+  ]);
+  ctx.fillRect(x, y, w, h);
+
+  ctx.fillStyle = cachedLinearGradient(ctx, `hero-stage-haze-${x}-${y}-${w}-${h}`, x, y + h * 0.18, x + w, y + h * 0.78, [
+    [0, `${skin.glow}0.02)`],
+    [0.45, `${skin.glow}0.22)`],
+    [1, 'rgba(255,209,102,0.04)'],
+  ]);
+  ctx.fillRect(x, y, w, h);
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(143,232,255,0.16)';
   ctx.lineWidth = 1;
-  for (let i = 0; i < 4; i++) {
-    const radiusX = 70 + i * 42 + Math.sin(time * 1.6 + i) * 3;
-    const radiusY = 20 + i * 13;
+  for (let i = 0; i < 6; i++) {
+    const yy = floorY + i * 22;
     ctx.beginPath();
-    ctx.ellipse(cx, cy + 34, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.moveTo(x + 24 + i * 8, yy);
+    ctx.lineTo(x + w - 24 - i * 8, yy);
+    ctx.stroke();
+  }
+  for (let i = -4; i <= 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(cx, floorY - 18);
+    ctx.lineTo(cx + i * w * 0.16, y + h + 22);
     ctx.stroke();
   }
   ctx.restore();
 
   const enemies: Array<[number, number, number, string]> = [
-    [-148, -44, 13, '#ff6b6b'],
-    [-110, 72, 9, '#ff9a76'],
-    [136, -38, 11, '#b277ff'],
-    [164, 74, 8, '#88ff88'],
-    [20, -98, 7, '#ffd166'],
+    [-0.36, -0.1, 13, '#ff6b6b'],
+    [-0.28, 0.24, 9, '#ff9a76'],
+    [0.32, -0.08, 11, '#b277ff'],
+    [0.38, 0.25, 8, '#88ff88'],
+    [0.06, -0.34, 7, '#ffd166'],
   ];
   for (let i = 0; i < enemies.length; i++) {
     const [dx, dy, r, color] = enemies[i];
     const pulse = 1 + Math.sin(time * 2.2 + i) * 0.08;
     ctx.fillStyle = colorWithAlpha(color, 0.14);
     ctx.beginPath();
-    ctx.arc(cx + dx, cy + dy, r * 2.1 * pulse, 0, Math.PI * 2);
+    ctx.arc(cx + dx * w, floorY + dy * h, r * 2.1 * pulse, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = colorWithAlpha(color, 0.72);
     ctx.beginPath();
-    ctx.arc(cx + dx, cy + dy, r * pulse, 0, Math.PI * 2);
+    ctx.arc(cx + dx * w, floorY + dy * h, r * pulse, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  ctx.strokeStyle = `${skin.glow}0.42)`;
+  ctx.strokeStyle = `${skin.glow}0.5)`;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.ellipse(cx, cy + 54, 86, 18, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, floorY + 36, compact ? 70 : 96, compact ? 15 : 22, 0, 0, Math.PI * 2);
   ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,209,102,0.28)';
+  ctx.beginPath();
+  ctx.arc(cx, floorY - 24, compact ? 78 : 110, -0.75, 0.45);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(143,232,255,0.24)';
+  ctx.beginPath();
+  ctx.arc(cx, floorY - 24, compact ? 106 : 150, Math.PI + 0.25, Math.PI * 1.84);
+  ctx.stroke();
+
+  drawSkinPreview(ctx, skin.id, cx, floorY - (compact ? 34 : 46) + Math.sin(time * 2.1) * 3, compact ? 1.7 : 2.75, skin.body, skin.outline);
+
+  ctx.restore();
 
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.font = `700 12px ${DESKTOP_FONT}`;
   ctx.fillStyle = 'rgba(213,224,255,0.62)';
-  ctx.fillText('SURVIVOR LOCKED', x + 20, y + 18);
+  ctx.fillText('SELECTED SURVIVOR', x + 20, y + 18);
   ctx.textAlign = 'right';
   ctx.fillStyle = '#ffd166';
   ctx.fillText('15:00', x + w - 20, y + 18);
+
+  ctx.textAlign = 'center';
+  ctx.font = `900 ${compact ? 18 : 22}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(skin.name, cx, y + h - (compact ? 42 : 56));
+  ctx.font = `12px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(213,224,255,0.68)';
+  ctx.fillText(skin.archetype, cx, y + h - (compact ? 22 : 34));
 }
 
 function drawMetaGrowth(rc: RenderContext, meta: MetaState) {
@@ -1604,11 +1790,13 @@ export function drawUpgradeScreen(
     const badgeY = 180;
     const badgeText = opt.type === 'weapon' ? '⚔️ 武器' :
                       opt.type === 'passive' ? '🛡️ 被动' :
-                      opt.type === 'modifier' ? '✦ 通用模块' : '❤️ 治疗';
+                      opt.type === 'modifier' ? '✦ 通用模块' :
+                      opt.type === 'supply' ? '✚ 战术补给' : '❤️ 治疗';
     ctx.font = '11px "Segoe UI", sans-serif';
     ctx.fillStyle = opt.type === 'weapon' ? '#ff9999' :
                     opt.type === 'passive' ? '#88ff88' :
-                    opt.type === 'modifier' ? '#d3a8ff' : '#ffb3c1';
+                    opt.type === 'modifier' ? '#d3a8ff' :
+                    opt.type === 'supply' ? '#ffd166' : '#ffb3c1';
     ctx.fillText(badgeText, cardW / 2, badgeY);
 
     const priceW = cardW - 34;
@@ -1676,6 +1864,8 @@ export function drawGameOver(rc: RenderContext, stats: {
   weaponNames: string[];
   soulFireEarned: number;
   totalSoulFire: number;
+  deathCause?: string;
+  advice?: string;
 }) {
   const { ctx, w, h } = rc;
   const isVictory = stats.time >= 900;
@@ -1704,7 +1894,7 @@ export function drawGameOver(rc: RenderContext, stats: {
   }
 
   const containerW = 300;
-  const containerH = 220;
+  const containerH = 270;
   const containerX = w / 2 - containerW / 2;
   const containerY = h / 2 - 40;
 
@@ -1747,6 +1937,21 @@ export function drawGameOver(rc: RenderContext, stats: {
   ctx.textAlign = 'right';
   ctx.font = '16px "Segoe UI", sans-serif';
   ctx.fillText(stats.weaponNames.join(', ') || '无', containerX + containerW - 20, statsY + 160);
+
+  ctx.font = '14px "Segoe UI", sans-serif';
+  if (stats.deathCause) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = COLORS.uiDim;
+    ctx.fillText('死因:', containerX + 20, statsY + 194);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ff9a76';
+    ctx.fillText(stats.deathCause, containerX + containerW - 20, statsY + 194);
+  }
+  if (stats.advice) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#8fe8ff';
+    drawWrappedText(ctx, stats.advice, containerX + 20, statsY + 218, containerW - 40, 17, 2);
+  }
 
   const btnW = 200;
   const btnH = 45;

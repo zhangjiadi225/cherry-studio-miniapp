@@ -1,9 +1,10 @@
-import { Player, UpgradeOption, WeaponType, PassiveType, Weapon, GenericModifierType } from '../../types';
+import { Player, UpgradeOption, WeaponType, PassiveType, Weapon, GenericModifierType, SupplyType } from '../../types';
 import {
   SHOP_OPTION_COUNT, SHOP_MAX_OPTION_COUNT, SHOP_LEVELS_PER_EXTRA_OPTION,
   SHOP_REROLL_BASE_COST, SHOP_REROLL_COST_STEP,
   WEAPON_DATA, PASSIVE_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK
 } from '../../constants';
+import { SUPPLY_DATA, getSupplyCost } from '../../data/supplies';
 import { createWeapon, upgradeWeapon } from './Weapon';
 import { applyPassive, getPassiveLevel } from '../player/Player';
 import { shuffleArray } from '../../utils/math';
@@ -89,6 +90,15 @@ export function generateUpgradeOptions(
     }
   }
 
+  const supplyOption = rollSupplyOption(player);
+  if (supplyOption) {
+    if (result.length < count) {
+      result.push(supplyOption);
+    } else if (result.length > 2) {
+      result[result.length - 1] = supplyOption;
+    }
+  }
+
   if (result.length === 0) {
     result.push({
       title: '恢复生命',
@@ -142,6 +152,8 @@ export function applyUpgrade(player: Player, option: UpgradeOption) {
       weapon.modifiers.push(option.modifierType);
       weapon.modifierMask |= GENERIC_MODIFIER_MASK[option.modifierType];
     }
+  } else if (option.type === 'supply' && option.supplyType) {
+    applySupply(player, option.supplyType);
   } else if (option.type === 'passive' && option.passiveType) {
     applyPassive(player, option.passiveType);
   } else {
@@ -196,4 +208,45 @@ function rollModifierOption(player: Player): UpgradeOption | undefined {
 function getModifierCost(weapon: Weapon, modifierType: GenericModifierType): number {
   const modifier = GENERIC_MODIFIER_DATA[modifierType];
   return 12 + weapon.level * 3 + modifier.priceTier * 4;
+}
+
+function rollSupplyOption(player: Player): UpgradeOption | undefined {
+  if (player.hp <= player.maxHp * 0.65) {
+    return createSupplyOption(SupplyType.FIELD_RATION, player.level);
+  }
+  if (player.level < 4 || Math.random() >= 0.35) return undefined;
+
+  return createSupplyOption(
+    Math.random() < 0.5 ? SupplyType.OVERCLOCK : SupplyType.AEGIS_CHARM,
+    player.level
+  );
+}
+
+function createSupplyOption(type: SupplyType, playerLevel: number): UpgradeOption {
+  const data = SUPPLY_DATA[type];
+  return {
+    title: data.name,
+    description: data.desc,
+    icon: data.icon,
+    type: 'supply',
+    supplyType: type,
+    cost: getSupplyCost(type, playerLevel),
+    isMaxed: false,
+  };
+}
+
+function applySupply(player: Player, type: SupplyType) {
+  switch (type) {
+    case SupplyType.FIELD_RATION:
+      player.hp = Math.min(player.maxHp, player.hp + player.maxHp * 0.45);
+      break;
+    case SupplyType.AEGIS_CHARM:
+      player.invTime = Math.max(player.invTime, 3);
+      break;
+    case SupplyType.OVERCLOCK:
+      for (const weapon of player.weapons) {
+        weapon.timer = Math.max(weapon.timer, weapon.cooldown);
+      }
+      break;
+  }
 }

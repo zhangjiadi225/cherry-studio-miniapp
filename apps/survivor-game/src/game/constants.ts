@@ -4,6 +4,7 @@ export { COLORS, ZONE_COLORS } from './data/colors';
 export { ENEMY_DATA } from './data/enemies';
 export { GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from './data/modifiers';
 export { PASSIVE_DATA } from './data/passives';
+export { SUPPLY_DATA } from './data/supplies';
 export { WEAPON_DATA } from './data/weapons';
 
 // ===== Game =====
@@ -16,7 +17,6 @@ export const SPAWN_INTERVAL_MIN = 0.25;
 export const SPAWN_DISTANCE = 600;
 export const BOSS_TIMES = [300, 600]; // 5min, 10min
 export const MAX_ENEMIES = 800;
-export const SPAWN_WAVE_GROWTH_INTERVAL = 20;
 
 // ===== Player =====
 export const PLAYER_RADIUS = 14;

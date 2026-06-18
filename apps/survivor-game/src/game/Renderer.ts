@@ -10,7 +10,10 @@ import { drawParticle, drawDamageNumber, drawDamageFlash, drawLevelUpFlash, draw
 import {
   drawUI, drawMinimap, drawBossBar,
   drawAudioButton as drawAudioBtn, drawPauseButton as drawPauseBtn,
-  getAudioButtonRect as getAudioRect, getPauseButtonRect as getPauseRect,
+  getAudioButtonRect as getAudioRect,
+  getDesktopStartButtonRect as getStartButtonRect,
+  getDesktopTabRects as getTabRects,
+  getPauseButtonRect as getPauseRect,
   drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver,
 } from './renderers/UIRenderer';
 
@@ -82,6 +85,8 @@ export class Renderer {
 
   getPauseButtonRect() { return getPauseRect(this.w); }
   getAudioButtonRect() { return getAudioRect(this.w); }
+  getDesktopStartButtonRect() { return getStartButtonRect(this.w, this.h); }
+  getDesktopTabRects() { return getTabRects(this.w); }
 
   // ─── World ───
   drawGround(cam: Camera) { this.worldRenderer.drawGround(this.rc, cam); }
@@ -104,7 +109,9 @@ export class Renderer {
   drawBossWarning(name: string, timer: number) { drawBossWarning(this.rc, name, timer); }
 
   // ─── UI ───
-  drawUI(player: Player, elapsed: number, killCount: number) { drawUI(this.rc, player, elapsed, killCount); }
+  drawUI(player: Player, elapsed: number, killCount: number, objective?: string) {
+    drawUI(this.rc, player, elapsed, killCount, objective);
+  }
   drawMinimap(player: Player, enemies: Enemy[]) { drawMinimap(this.rc, player, enemies); }
   drawBossBar(name: string, hp: number, maxHp: number) { drawBossBar(this.rc, name, hp, maxHp); }
   drawAudioButton(muted: boolean) { drawAudioBtn(this.rc, muted); }
@@ -114,5 +121,14 @@ export class Renderer {
   drawUpgradeScreen(options: UpgradeOption[], selectedIndex: number, gold: number, canFreeReroll: boolean, rerollCost: number, canPaidReroll: boolean) {
     drawUpgradeScreen(this.rc, options, selectedIndex, gold, canFreeReroll, rerollCost, canPaidReroll);
   }
-  drawGameOver(stats: { time: number; kills: number; level: number; weaponNames: string[]; soulFireEarned: number; totalSoulFire: number }) { drawGameOver(this.rc, stats); }
+  drawGameOver(stats: {
+    time: number;
+    kills: number;
+    level: number;
+    weaponNames: string[];
+    soulFireEarned: number;
+    totalSoulFire: number;
+    deathCause?: string;
+    advice?: string;
+  }) { drawGameOver(this.rc, stats); }
 }

@@ -63,7 +63,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '📖',
     desc: '环绕玩家旋转的圣书',
     family: 'orbit',
-    baseDamage: 15,
+    baseDamage: 18,
     baseCooldown: 8,
     baseSpeed: 200,
     baseArea: 1.0,
@@ -71,7 +71,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     basePierce: 999,
     baseDuration: 4,
     baseKnockback: 60,
-    perLevel: { damage: 5, count: 1, duration: 0.5, area: 0.1 },
+    perLevel: { damage: 7, count: 1, duration: 0.5, area: 0.1, cooldown: -0.15 },
     maxLevel: 8,
   },
   [WeaponType.GARLIC]: {
@@ -135,7 +135,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     basePierce: 1,
     baseDuration: 0.1,
     baseKnockback: 100,
-    perLevel: { damage: 10, count: 1, cooldown: -0.3 },
+    perLevel: { damage: 8, count: 1, cooldown: -0.15 },
     maxLevel: 8,
   },
   [WeaponType.AXE]: {

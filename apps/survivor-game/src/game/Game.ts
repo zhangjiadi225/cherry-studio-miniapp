@@ -21,6 +21,7 @@ import { ProjectileCombat } from './systems/combat/ProjectileCombat';
 import { ShopSystem } from './systems/upgrade/ShopSystem';
 import { createCamera, updateCamera, shakeCamera } from './systems/camera/Camera';
 import { createXPGem, updateXPGem } from './systems/player/XPGem';
+import { rollEnemyGoldReward } from './data/economy';
 import {
   updateParticle, spawnHitParticles, spawnDeathParticles, spawnXPParticles,
   spawnExplosionParticles, spawnHealParticles, spawnLevelUpParticles
@@ -34,6 +35,19 @@ import {
 import { MapSystem } from './systems/map/MapSystem';
 import { pools, clearAllPools } from './utils/PoolManager';
 import { eventBus, gameState, GameEvent } from './events';
+
+type ObjectiveBeat = {
+  time: number;
+  message: string;
+  eliteAmbush?: number;
+};
+
+const OBJECTIVE_BEATS: ObjectiveBeat[] = [
+  { time: 12, message: '目标：收集经验，买下第一张升级牌' },
+  { time: 90, message: '目标：准备补给，夜潮精英将在3:00出现' },
+  { time: 180, message: '夜潮精英出现，击败它获取金币奖励', eliteAmbush: 2 },
+  { time: 260, message: 'Boss即将到来，保留金币购买补给' },
+];
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -65,10 +79,14 @@ export class Game {
   private bossWarningTimer = 0;
   private bossWarningName = '';
   private bossWarningShown = new Set<number>();
+  private objectiveShown = new Set<number>();
+  private objectiveMessage = '';
+  private objectiveTimer = 0;
   private damageFlashTimer = 0;
   private levelUpFlashTimer = 0;
   private garlicWeapon?: Weapon;
   private activeBoss?: Enemy;
+  private lastDamageSource?: { enemyName: string; damage: number; time: number };
   private gameOverStats?: {
     time: number;
     kills: number;
@@ -76,6 +94,8 @@ export class Game {
     weaponNames: string[];
     soulFireEarned: number;
     totalSoulFire: number;
+    deathCause?: string;
+    advice?: string;
   };
   private readonly handleKeyDown = (e: KeyboardEvent) => this.onKeyDown(e);
   private readonly handleCanvasClick = (e: MouseEvent) => this.onClick(e);
@@ -232,31 +252,17 @@ export class Game {
     const w = this.renderer.getWidth();
     const h = this.renderer.getHeight();
 
-    const tabs: DesktopTab[] = ['start', 'growth', 'skins', 'codex'];
-    const tabW = 132;
-    const tabH = 42;
-    const tabGap = 12;
-    const tabsW = tabs.length * tabW + (tabs.length - 1) * tabGap;
-    const tabsX = w / 2 - tabsW / 2;
-    const tabsY = 82;
-    for (let i = 0; i < tabs.length; i++) {
-      const tx = tabsX + i * (tabW + tabGap);
-      if (x >= tx && x <= tx + tabW && y >= tabsY && y <= tabsY + tabH) {
-        this.desktopTab = tabs[i];
+    const tabs = this.renderer.getDesktopTabRects();
+    for (const tab of tabs) {
+      if (x >= tab.x && x <= tab.x + tab.w && y >= tab.y && y <= tab.y + tab.h) {
+        this.desktopTab = tab.id;
         return;
       }
     }
 
     if (this.desktopTab === 'start') {
-      const panelW = Math.min(980, w - 72);
-      const panelH = Math.min(420, h - 214);
-      const panelX = w / 2 - panelW / 2;
-      const panelY = 144;
-      const btnW = 240;
-      const btnH = 56;
-      const btnX = panelX + 38;
-      const btnY = panelY + panelH - 72;
-      if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
+      const button = this.renderer.getDesktopStartButtonRect();
+      if (x >= button.x && x <= button.x + button.w && y >= button.y && y <= button.y + button.h) {
         this.startGame();
       }
       return;
@@ -349,8 +355,12 @@ export class Game {
     this.bossWarningTimer = 0;
     this.bossWarningName = '';
     this.bossWarningShown.clear();
+    this.objectiveShown.clear();
+    this.objectiveMessage = '目标：活到3:00，完成第一轮构筑';
+    this.objectiveTimer = 4;
     this.damageFlashTimer = 0;
     this.levelUpFlashTimer = 0;
+    this.lastDamageSource = undefined;
     this.gameOverStats = undefined;
     this.spawner.reset();
     this.mapSystem.generate();
@@ -394,6 +404,7 @@ export class Game {
       }
     }
     if (this.bossWarningTimer > 0) this.bossWarningTimer -= dt;
+    this.updateObjectiveBeats(dt);
     if (this.damageFlashTimer > 0) this.damageFlashTimer -= dt;
     if (this.levelUpFlashTimer > 0) this.levelUpFlashTimer -= dt;
 
@@ -548,6 +559,11 @@ export class Game {
       if (isCollidingWithPlayer(e, this.player) && e.contactCooldown <= 0) {
         const dmg = damagePlayer(this.player, e.damage);
         if (dmg > 0) {
+          this.lastDamageSource = {
+            enemyName: ENEMY_DATA[e.type].name,
+            damage: dmg,
+            time: this.elapsed,
+          };
           eventBus.emit(GameEvent.PLAYER_HIT, dmg, e);
           shakeCamera(this.camera, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY);
           this.damageFlashTimer = 0.35;
@@ -570,7 +586,6 @@ export class Game {
         spawnXPParticles(this.particles, gem.x, gem.y, 5, {
           speed: 80, life: 0.4, radius: 2.5, color: '#88ffaa', glow: true,
         });
-        this.player.gold += result.value;
         const leveled = addXP(this.player, result.value);
         eventBus.emit(GameEvent.XP_COLLECTED, result.value);
         if (leveled) {
@@ -604,6 +619,12 @@ export class Game {
     }
 
     this.xpGems.push(createXPGem(e.x, e.y, e.xpValue));
+
+    const goldReward = rollEnemyGoldReward(e, this.player.luck);
+    if (goldReward > 0) {
+      this.player.gold += goldReward;
+      this.damageNumbers.push(createDamageNumber(e.x, e.y - 12, goldReward, '#ffd166', 13));
+    }
 
     const heal = tryBloodZoneHeal(this.player);
     if (heal > 0) {
@@ -656,7 +677,48 @@ export class Game {
       weaponNames: this.player.weapons.map(w => WEAPON_DATA[w.type].name),
       soulFireEarned: this.meta.soulFire - previousSoulFire,
       totalSoulFire: this.meta.soulFire,
+      deathCause: this.getDeathCause(),
+      advice: this.getRunAdvice(),
     };
+  }
+
+  private updateObjectiveBeats(dt: number) {
+    if (this.objectiveTimer > 0) this.objectiveTimer -= dt;
+
+    for (const beat of OBJECTIVE_BEATS) {
+      if (this.elapsed < beat.time || this.objectiveShown.has(beat.time)) continue;
+
+      this.objectiveShown.add(beat.time);
+      this.objectiveMessage = beat.message;
+      this.objectiveTimer = 4;
+
+      if (beat.eliteAmbush) {
+        this.spawner.spawnEliteAmbush(
+          this.enemies,
+          this.player,
+          this.elapsed,
+          this.difficulty,
+          this.player.curse,
+          beat.eliteAmbush
+        );
+        shakeCamera(this.camera, 0.18, 5);
+      }
+    }
+  }
+
+  private getDeathCause(): string | undefined {
+    if (this.elapsed >= GAME_DURATION) return undefined;
+    if (!this.lastDamageSource) return '被夜潮包围';
+    const secondsAgo = Math.max(0, Math.floor(this.elapsed - this.lastDamageSource.time));
+    return `${this.lastDamageSource.enemyName}造成${this.lastDamageSource.damage}伤害 (${secondsAgo}s前)`;
+  }
+
+  private getRunAdvice(): string {
+    if (this.elapsed >= GAME_DURATION) return '胜利完成，下一局尝试更高诅咒或模块构筑。';
+    if (this.elapsed < 180) return '前3分钟优先买低成本武器升级，保留金币给战地口粮。';
+    if (this.player.gold < 10) return '金币见底时少刷新商店，优先买能立即提升清怪的牌。';
+    if (this.player.hp < this.player.maxHp * 0.35) return '低血量时购买战术补给，不要硬贪永久升级。';
+    return '死亡多半来自清怪速度不足，下一局优先补范围或连锁伤害。';
   }
 
   // ──────────────────────────── Upgrade ────────────────────────────
@@ -671,6 +733,7 @@ export class Game {
     if (!option) return;
     this.refreshWeaponRefs();
     eventBus.emit(GameEvent.UPGRADE_SELECT, option);
+    this.finishShop();
   }
 
   private rerollShop() {
@@ -758,7 +821,12 @@ export class Game {
 
     this.renderer.endWorld();
 
-    this.renderer.drawUI(this.player, this.elapsed, this.killCount);
+    this.renderer.drawUI(
+      this.player,
+      this.elapsed,
+      this.killCount,
+      this.objectiveTimer > 0 ? this.objectiveMessage : undefined
+    );
     this.renderer.drawMinimap(this.player, this.enemies);
     this.renderer.drawAudioButton(this.audio.isMuted());
     this.renderer.drawPauseButton();
@@ -789,6 +857,8 @@ export class Game {
         weaponNames: this.player.weapons.map(w => WEAPON_DATA[w.type].name),
         soulFireEarned: 0,
         totalSoulFire: this.meta.soulFire,
+        deathCause: this.getDeathCause(),
+        advice: this.getRunAdvice(),
       });
     }
   }

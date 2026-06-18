@@ -169,10 +169,11 @@ export interface UpgradeOption {
   title: string;
   description: string;
   icon: string;
-  type: 'weapon' | 'passive' | 'heal' | 'modifier';
+  type: 'weapon' | 'passive' | 'heal' | 'modifier' | 'supply';
   weaponType?: WeaponType;
   passiveType?: PassiveType;
   modifierType?: GenericModifierType;
+  supplyType?: SupplyType;
   cost: number;
   isMaxed: boolean;
   purchased?: boolean;
@@ -210,6 +211,13 @@ export type GenericModifierType = typeof GenericModifierType[keyof typeof Generi
 
 export type ModifierTrigger = 'onFire' | 'onHit' | 'onKill' | 'onTick';
 export type ModifierEffect = 'extraCast' | 'split' | 'chain' | 'pulse' | 'knockback';
+
+export const SupplyType = {
+  FIELD_RATION: 'field_ration',
+  AEGIS_CHARM: 'aegis_charm',
+  OVERCLOCK: 'overclock',
+} as const;
+export type SupplyType = typeof SupplyType[keyof typeof SupplyType];
 
 export interface GenericModifierData {
   id: GenericModifierType;

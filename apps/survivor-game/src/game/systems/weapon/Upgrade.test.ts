@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WEAPON_DATA } from '../../constants';
-import { WeaponType } from '../../types';
+import { SupplyType, WeaponType } from '../../types';
 import { createPlayer } from '../player/Player';
 import { createWeapon } from './Weapon';
-import { generateUpgradeOptions } from './Upgrade';
+import { applyUpgrade, generateUpgradeOptions } from './Upgrade';
 
 describe('generateUpgradeOptions', () => {
   afterEach(() => {
@@ -66,5 +66,38 @@ describe('generateUpgradeOptions', () => {
 
     expect(options).toHaveLength(1);
     expect(options[0].type).toBe('heal');
+  });
+
+  it('offers a field ration when the player is badly hurt', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    const player = createPlayer();
+    player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
+    player.level = 5;
+    player.hp = 40;
+
+    const options = generateUpgradeOptions(player, 4, false);
+
+    expect(options.some((option) =>
+      option.type === 'supply' &&
+      option.supplyType === SupplyType.FIELD_RATION
+    )).toBe(true);
+  });
+
+  it('applies supply effects immediately', () => {
+    const player = createPlayer();
+    player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
+    player.hp = 40;
+
+    applyUpgrade(player, {
+      title: '战地口粮',
+      description: '',
+      icon: '✚',
+      type: 'supply',
+      supplyType: SupplyType.FIELD_RATION,
+      cost: 9,
+      isMaxed: false,
+    });
+
+    expect(player.hp).toBe(85);
   });
 });
