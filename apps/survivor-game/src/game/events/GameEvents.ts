@@ -1,0 +1,19 @@
+export const GameEvent = {
+  STATE_CHANGE: 'state:change',
+  GAME_START: 'game:start',
+  GAME_OVER: 'game:over',
+  PLAYER_HIT: 'player:hit',
+  PLAYER_DEATH: 'player:death',
+  PLAYER_LEVEL_UP: 'player:levelup',
+  ENEMY_DEATH: 'enemy:death',
+  ENEMY_SPAWN: 'enemy:spawn',
+  BOSS_WARNING: 'boss:warning',
+  BOSS_SPAWN: 'boss:spawn',
+  BOSS_DEATH: 'boss:death',
+  WEAPON_FIRE: 'weapon:fire',
+  XP_COLLECTED: 'xp:collected',
+  UPGRADE_SELECT: 'upgrade:select',
+  PAUSE: 'pause',
+  RESUME: 'resume',
+} as const;
+export type GameEvent = typeof GameEvent[keyof typeof GameEvent];
