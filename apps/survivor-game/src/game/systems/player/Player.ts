@@ -4,7 +4,7 @@ import type { MapSystem } from '../map/MapSystem';
 import { getBloodPoolSlowFactor } from '../../utils/collision';
 import { getZone } from '../../utils/math';
 
-export function createPlayer(): Player {
+export function createPlayer(skinId: string = 'wanderer'): Player {
   return {
     x: 0,
     y: 0,
@@ -29,6 +29,7 @@ export function createPlayer(): Player {
     luck: 1,
     curse: 1,
     gold: 0,
+    skinId,
     currentZone: 'storm',
     weapons: [],
     passives: [],

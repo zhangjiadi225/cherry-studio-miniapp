@@ -25,7 +25,13 @@ import {
 } from './effects/Particle';
 import { createDamageNumber, updateDamageNumber } from './effects/DamageNumber';
 import { circlesOverlap, compactArray } from './utils/math';
-import { generateUpgradeOptions, applyUpgrade, getRerollCost, getShopOptionCount } from './systems/weapon/Upgrade';
+import { generateUpgradeOptions, applyUpgrade } from './systems/weapon/Upgrade';
+import {
+  type CodexTab, type DesktopTab, type MetaState,
+  loadMetaState, applyRunReward, getInitialGold, getMetaShopOptionCount,
+  canPaidReroll, getMetaRerollCost, areModifierCardsUnlocked,
+  buyMetaUpgrade, selectSkin, META_UPGRADES, CHARACTER_SKINS,
+} from './systems/meta/MetaProgression';
 import { MapSystem } from './systems/map/MapSystem';
 import { pools, clearAllPools } from './utils/PoolManager';
 import { eventBus, gameState, GameEvent } from './events';
@@ -37,6 +43,9 @@ export class Game {
   private spawner = new Spawner();
   private mapSystem = new MapSystem();
   private camera: Camera;
+  private meta: MetaState = loadMetaState();
+  private desktopTab: DesktopTab = 'start';
+  private codexTab: CodexTab = 'weapons';
   private player = createPlayer();
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
@@ -60,6 +69,14 @@ export class Game {
   private levelUpFlashTimer = 0;
   private enemyGrid = new Map<string, Enemy[]>();
   private readonly enemyGridCellSize = 240;
+  private gameOverStats?: {
+    time: number;
+    kills: number;
+    level: number;
+    weaponNames: string[];
+    soulFireEarned: number;
+    totalSoulFire: number;
+  };
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -108,23 +125,29 @@ export class Game {
         if (e.code === 'Escape' || e.code === 'KeyP') gameState.transition('pause');
         break;
       case 'gameover':
+        if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') gameState.reset();
+        break;
       case 'menu':
-        if (e.code === 'Enter' || e.code === 'Space') this.startGame();
+        this.handleDesktopKey(e);
         break;
     }
   }
 
   private onClick(e: MouseEvent) {
-    if (gameState.is('menu') || gameState.is('gameover')) {
-      this.startGame();
+    if (gameState.is('menu')) {
+      this.handleDesktopClick(e);
+    } else if (gameState.is('gameover')) {
+      gameState.reset();
     } else if (gameState.is('upgrading')) {
       this.handleClickUpgrade(e);
     }
   }
 
   private onTouchStart(e: TouchEvent) {
-    if (gameState.is('menu') || gameState.is('gameover')) {
-      this.startGame();
+    if (gameState.is('menu')) {
+      this.handleDesktopClick(e);
+    } else if (gameState.is('gameover')) {
+      gameState.reset();
     } else if (gameState.is('upgrading')) {
       this.handleClickUpgrade(e);
     } else if (gameState.is('paused')) {
@@ -140,13 +163,135 @@ export class Game {
     }
   }
 
+  private handleDesktopKey(e: KeyboardEvent) {
+    if (e.code === 'Digit1') this.desktopTab = 'start';
+    else if (e.code === 'Digit2') this.desktopTab = 'growth';
+    else if (e.code === 'Digit3') this.desktopTab = 'skins';
+    else if (e.code === 'Digit4') this.desktopTab = 'codex';
+    else if (this.desktopTab === 'codex' && e.code === 'KeyQ') this.shiftCodexTab(-1);
+    else if (this.desktopTab === 'codex' && e.code === 'KeyE') this.shiftCodexTab(1);
+    else if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.shiftDesktopTab(-1);
+    else if (e.code === 'ArrowRight' || e.code === 'KeyD') this.shiftDesktopTab(1);
+    else if (e.code === 'Enter' || e.code === 'Space') this.startGame();
+  }
+
+  private shiftDesktopTab(dir: number) {
+    const tabs: DesktopTab[] = ['start', 'growth', 'skins', 'codex'];
+    const index = tabs.indexOf(this.desktopTab);
+    this.desktopTab = tabs[(index + dir + tabs.length) % tabs.length];
+  }
+
+  private shiftCodexTab(dir: number) {
+    const tabs: CodexTab[] = ['weapons', 'passives', 'enemies', 'modules'];
+    const index = tabs.indexOf(this.codexTab);
+    this.codexTab = tabs[(index + dir + tabs.length) % tabs.length];
+  }
+
+  private handleDesktopClick(e: MouseEvent | TouchEvent) {
+    const rect = this.canvas.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const w = this.renderer.getWidth();
+    const h = this.renderer.getHeight();
+
+    const tabs: DesktopTab[] = ['start', 'growth', 'skins', 'codex'];
+    const tabW = 132;
+    const tabH = 42;
+    const tabGap = 12;
+    const tabsW = tabs.length * tabW + (tabs.length - 1) * tabGap;
+    const tabsX = w / 2 - tabsW / 2;
+    const tabsY = 82;
+    for (let i = 0; i < tabs.length; i++) {
+      const tx = tabsX + i * (tabW + tabGap);
+      if (x >= tx && x <= tx + tabW && y >= tabsY && y <= tabsY + tabH) {
+        this.desktopTab = tabs[i];
+        return;
+      }
+    }
+
+    if (this.desktopTab === 'start') {
+      const btnW = 240;
+      const btnH = 56;
+      const btnX = w / 2 - btnW / 2;
+      const btnY = h / 2 + 88;
+      if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
+        this.startGame();
+      }
+      return;
+    }
+
+    if (this.desktopTab === 'growth') {
+      const layout = this.getDesktopCardLayout(META_UPGRADES.length, 3, 210, 112, 14, 222);
+      for (let i = 0; i < META_UPGRADES.length; i++) {
+        const card = layout(i);
+        if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
+          this.meta = buyMetaUpgrade(this.meta, META_UPGRADES[i].id);
+          return;
+        }
+      }
+      return;
+    }
+
+    if (this.desktopTab === 'skins') {
+      const layout = this.getDesktopCardLayout(CHARACTER_SKINS.length, 3, 236, 318, 18, 218);
+      for (let i = 0; i < CHARACTER_SKINS.length; i++) {
+        const card = layout(i);
+        if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
+          this.meta = selectSkin(this.meta, CHARACTER_SKINS[i].id);
+          return;
+        }
+      }
+      return;
+    }
+
+    if (this.desktopTab === 'codex') {
+      const tabs: CodexTab[] = ['weapons', 'passives', 'enemies', 'modules'];
+      const tabW = 128;
+      const tabH = 38;
+      const gap = 12;
+      const totalW = tabs.length * tabW + (tabs.length - 1) * gap;
+      const startX = w / 2 - totalW / 2;
+      const tabY = 214;
+      for (let i = 0; i < tabs.length; i++) {
+        const tx = startX + i * (tabW + gap);
+        if (x >= tx && x <= tx + tabW && y >= tabY && y <= tabY + tabH) {
+          this.codexTab = tabs[i];
+          return;
+        }
+      }
+    }
+  }
+
+  private getDesktopCardLayout(
+    count: number,
+    columns: number,
+    cardW: number,
+    cardH: number,
+    gap: number,
+    startY: number
+  ) {
+    const w = this.renderer.getWidth();
+    const visibleColumns = Math.min(columns, count);
+    const totalW = visibleColumns * cardW + (visibleColumns - 1) * gap;
+    const startX = w / 2 - totalW / 2;
+    return (index: number) => ({
+      x: startX + (index % columns) * (cardW + gap),
+      y: startY + Math.floor(index / columns) * (cardH + gap),
+      w: cardW,
+      h: cardH,
+    });
+  }
+
   // ──────────────────────────── Game Lifecycle ────────────────────────────
 
   private startGame() {
     gameState.transition('start');
     resetEnemyIds();
     clearAllPools();
-    this.player = createPlayer();
+    this.player = createPlayer(this.meta.selectedSkin);
+    this.player.gold = getInitialGold(this.meta);
     this.player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
     this.enemies = [];
     this.projectiles = [];
@@ -165,6 +310,7 @@ export class Game {
     this.bossWarningShown.clear();
     this.damageFlashTimer = 0;
     this.levelUpFlashTimer = 0;
+    this.gameOverStats = undefined;
     this.spawner.reset();
     this.mapSystem.generate();
     this.camera.x = this.player.x;
@@ -253,6 +399,7 @@ export class Game {
 
     if (this.elapsed >= GAME_DURATION && gameState.is('playing')) {
       gameState.transition('timeout');
+      this.recordRunEnd();
       eventBus.emit(GameEvent.GAME_OVER, {
         time: this.elapsed,
         kills: this.killCount,
@@ -646,6 +793,7 @@ export class Game {
       this.levelUpFlashTimer = 0.8;
     } else {
       gameState.transition('die');
+      this.recordRunEnd();
       eventBus.emit(GameEvent.PLAYER_DEATH);
       eventBus.emit(GameEvent.GAME_OVER, {
         time: this.elapsed,
@@ -655,11 +803,32 @@ export class Game {
     }
   }
 
+  private recordRunEnd() {
+    const previousSoulFire = this.meta.soulFire;
+    this.meta = applyRunReward(this.meta, {
+      time: this.elapsed,
+      kills: this.killCount,
+      level: this.player.level,
+    });
+    this.gameOverStats = {
+      time: this.elapsed,
+      kills: this.killCount,
+      level: this.player.level,
+      weaponNames: this.player.weapons.map(w => WEAPON_DATA[w.type].name),
+      soulFireEarned: this.meta.soulFire - previousSoulFire,
+      totalSoulFire: this.meta.soulFire,
+    };
+  }
+
   // ──────────────────────────── Upgrade ────────────────────────────
 
   private showUpgradeScreen() {
     gameState.transition('upgrade');
-    this.upgradeOptions = generateUpgradeOptions(this.player, getShopOptionCount(this.player));
+    this.upgradeOptions = generateUpgradeOptions(
+      this.player,
+      getMetaShopOptionCount(this.meta, this.player.level),
+      areModifierCardsUnlocked(this.meta)
+    );
     this.selectedUpgrade = 0;
     this.shopFreeRerollAvailable = true;
     this.shopPaidRerollsThisRound = 0;
@@ -683,12 +852,17 @@ export class Game {
     if (this.shopFreeRerollAvailable) {
       this.shopFreeRerollAvailable = false;
     } else {
-      const cost = getRerollCost(this.shopPaidRerollsThisRound);
+      if (!canPaidReroll(this.meta)) return;
+      const cost = getMetaRerollCost(this.meta, this.shopPaidRerollsThisRound);
       if (this.player.gold < cost) return;
       this.player.gold -= cost;
       this.shopPaidRerollsThisRound++;
     }
-    this.upgradeOptions = generateUpgradeOptions(this.player, getShopOptionCount(this.player));
+    this.upgradeOptions = generateUpgradeOptions(
+      this.player,
+      getMetaShopOptionCount(this.meta, this.player.level),
+      areModifierCardsUnlocked(this.meta)
+    );
     this.selectedUpgrade = 0;
   }
 
@@ -750,7 +924,7 @@ export class Game {
     this.renderer.clear();
 
     if (gameState.is('menu')) {
-      this.renderer.drawMenu();
+      this.renderer.drawDesktop(this.meta, this.desktopTab, this.codexTab);
       return;
     }
 
@@ -813,14 +987,17 @@ export class Game {
         this.selectedUpgrade,
         this.player.gold,
         this.shopFreeRerollAvailable,
-        getRerollCost(this.shopPaidRerollsThisRound)
+        getMetaRerollCost(this.meta, this.shopPaidRerollsThisRound),
+        canPaidReroll(this.meta)
       );
     } else if (gameState.is('gameover')) {
-      this.renderer.drawGameOver({
+      this.renderer.drawGameOver(this.gameOverStats ?? {
         time: this.elapsed,
         kills: this.killCount,
         level: this.player.level,
         weaponNames: this.player.weapons.map(w => WEAPON_DATA[w.type].name),
+        soulFireEarned: 0,
+        totalSoulFire: this.meta.soulFire,
       });
     }
   }

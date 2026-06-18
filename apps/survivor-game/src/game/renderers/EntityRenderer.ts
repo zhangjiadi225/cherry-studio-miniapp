@@ -2,6 +2,7 @@ import type { RenderContext } from './WorldRenderer';
 import type { Player, Enemy, Projectile, XPGem } from '../types';
 import { WeaponType, EnemyType } from '../types';
 import { COLORS, ENEMY_DATA } from '../constants';
+import { getSkinById } from '../systems/meta/MetaProgression';
 
 // ──────────────────────────── Helpers ────────────────────────────
 
@@ -174,12 +175,16 @@ export function drawPlayer(rc: RenderContext, p: Player) {
 
   const bob = Math.sin(p.animTimer) * 2;
   const isMoving = Math.abs(p.animTimer) > 0.1;
+  const skin = getSkinById(p.skinId);
+  const bodyColor = skin?.body ?? COLORS.playerBody;
+  const outlineColor = skin?.outline ?? COLORS.playerOutline;
+  const glowColor = skin?.glow ?? 'rgba(74,158,255,';
 
   const glowSize = isMoving ? p.radius * 3 : p.radius * 2.5;
   const gradient = ctx.createRadialGradient(p.x, p.y + bob, 0, p.x, p.y + bob, glowSize);
-  gradient.addColorStop(0, 'rgba(74,158,255,0.2)');
-  gradient.addColorStop(0.5, 'rgba(74,158,255,0.1)');
-  gradient.addColorStop(1, 'rgba(74,158,255,0)');
+  gradient.addColorStop(0, `${glowColor}0.22)`);
+  gradient.addColorStop(0.5, `${glowColor}0.1)`);
+  gradient.addColorStop(1, `${glowColor}0)`);
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.arc(p.x, p.y + bob, glowSize, 0, Math.PI * 2);
@@ -190,7 +195,27 @@ export function drawPlayer(rc: RenderContext, p: Player) {
   ctx.ellipse(p.x, p.y + p.radius + 4, p.radius * 0.8, p.radius * 0.25, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = COLORS.playerBody;
+  const skinId = skin?.id ?? 'wanderer';
+  if (skinId === 'ember') {
+    drawEmberPlayer(ctx, p, bob, bodyColor, outlineColor);
+  } else if (skinId === 'oracle') {
+    drawOraclePlayer(ctx, p, bob, bodyColor, outlineColor);
+  } else {
+    drawWandererPlayer(ctx, p, bob, isMoving, bodyColor, outlineColor);
+  }
+
+  drawHPBar(rc, p.x, p.y - p.radius - 14, p.radius * 2.5, p.hp, p.maxHp, 5);
+}
+
+function drawWandererPlayer(
+  ctx: CanvasRenderingContext2D,
+  p: Player,
+  bob: number,
+  isMoving: boolean,
+  bodyColor: string,
+  outlineColor: string
+) {
+  ctx.fillStyle = bodyColor;
   ctx.beginPath();
   ctx.arc(p.x, p.y + bob, p.radius, 0, Math.PI * 2);
   ctx.fill();
@@ -206,7 +231,7 @@ export function drawPlayer(rc: RenderContext, p: Player) {
   ctx.arc(p.x, p.y + bob, p.radius, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = COLORS.playerOutline;
+  ctx.strokeStyle = outlineColor;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(p.x, p.y + bob, p.radius, 0, Math.PI * 2);
@@ -214,7 +239,7 @@ export function drawPlayer(rc: RenderContext, p: Player) {
 
   const eyeDir = p.facingLeft ? -1 : 1;
   const eyeY = p.y + bob - 3;
-
+  const pupilOffset = isMoving ? eyeDir * 1.5 : 0;
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
   ctx.ellipse(p.x + eyeDir * 4, eyeY, 4, 4.5, 0, 0, Math.PI * 2);
@@ -222,25 +247,96 @@ export function drawPlayer(rc: RenderContext, p: Player) {
   ctx.beginPath();
   ctx.ellipse(p.x + eyeDir * 10, eyeY, 4, 4.5, 0, 0, Math.PI * 2);
   ctx.fill();
-
   ctx.fillStyle = '#000000';
-  const pupilOffset = isMoving ? eyeDir * 1.5 : 0;
   ctx.beginPath();
   ctx.arc(p.x + eyeDir * 4 + pupilOffset, eyeY, 2.5, 0, Math.PI * 2);
   ctx.fill();
   ctx.beginPath();
   ctx.arc(p.x + eyeDir * 10 + pupilOffset, eyeY, 2.5, 0, Math.PI * 2);
   ctx.fill();
+}
 
-  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+function drawEmberPlayer(
+  ctx: CanvasRenderingContext2D,
+  p: Player,
+  bob: number,
+  bodyColor: string,
+  outlineColor: string
+) {
+  const x = p.x;
+  const y = p.y + bob;
+  const r = p.radius;
+  ctx.fillStyle = 'rgba(255,100,35,0.18)';
   ctx.beginPath();
-  ctx.arc(p.x + eyeDir * 3 + pupilOffset, eyeY - 1.5, 1, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(p.x + eyeDir * 9 + pupilOffset, eyeY - 1.5, 1, 0, Math.PI * 2);
+  ctx.moveTo(x, y - r * 2.0);
+  ctx.lineTo(x + r * 0.8, y - r * 0.6);
+  ctx.lineTo(x + r * 1.5, y + r * 0.6);
+  ctx.lineTo(x, y + r * 1.55);
+  ctx.lineTo(x - r * 1.5, y + r * 0.6);
+  ctx.lineTo(x - r * 0.8, y - r * 0.6);
+  ctx.closePath();
   ctx.fill();
 
-  drawHPBar(rc, p.x, p.y - p.radius - 14, p.radius * 2.5, p.hp, p.maxHp, 5);
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r * 1.45);
+  ctx.lineTo(x + r * 1.45, y);
+  ctx.lineTo(x, y + r * 1.5);
+  ctx.lineTo(x - r * 1.45, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = outlineColor;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#fff2b0';
+  ctx.beginPath();
+  ctx.arc(x, y - r * 0.05, r * 0.45, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(65,20,0,0.7)';
+  ctx.fillRect(x - r * 0.5, y + r * 0.62, r, 3);
+}
+
+function drawOraclePlayer(
+  ctx: CanvasRenderingContext2D,
+  p: Player,
+  bob: number,
+  bodyColor: string,
+  outlineColor: string
+) {
+  const x = p.x;
+  const y = p.y + bob;
+  const r = p.radius;
+  ctx.strokeStyle = 'rgba(215,204,255,0.75)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(x, y - r * 1.75, r * 1.5, r * 0.42, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(28,20,70,0.86)';
+  ctx.beginPath();
+  ctx.moveTo(x, y - r * 1.35);
+  ctx.quadraticCurveTo(x + r * 1.65, y - r * 0.25, x + r * 1.25, y + r * 1.45);
+  ctx.lineTo(x - r * 1.25, y + r * 1.45);
+  ctx.quadraticCurveTo(x - r * 1.65, y - r * 0.25, x, y - r * 1.35);
+  ctx.fill();
+  ctx.fillStyle = bodyColor;
+  ctx.beginPath();
+  ctx.moveTo(x, y - r * 1.12);
+  ctx.lineTo(x + r * 1.02, y + r * 0.82);
+  ctx.lineTo(x, y + r * 1.42);
+  ctx.lineTo(x - r * 1.02, y + r * 0.82);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = outlineColor;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(x, y - r * 0.05, r * 0.45, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#302060';
+  ctx.beginPath();
+  ctx.arc(x, y - r * 0.05, r * 0.23, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // ──────────────────────────── Enemy ────────────────────────────

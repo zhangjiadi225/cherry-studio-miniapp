@@ -38,6 +38,7 @@ export interface Player {
   luck: number;
   curse: number;
   gold: number;
+  skinId: string;
   currentZone: MapZone;
   weapons: Weapon[];
   passives: PassiveUpgrade[];

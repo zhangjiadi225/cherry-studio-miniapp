@@ -1,4 +1,5 @@
 import type { Player, Enemy, Projectile, XPGem, Particle, DamageNumber, Camera, UpgradeOption, MapObstacle } from './types';
+import type { CodexTab, DesktopTab, MetaState } from './systems/meta/MetaProgression';
 import { COLORS } from './constants';
 import { WorldRenderer, type RenderContext } from './renderers/WorldRenderer';
 import {
@@ -9,7 +10,7 @@ import { drawParticle, drawDamageNumber, drawDamageFlash, drawLevelUpFlash, draw
 import {
   drawUI, drawMinimap, drawBossBar, drawPauseButton as drawPauseBtn,
   getPauseButtonRect as getPauseRect,
-  drawMenu, drawPaused, drawUpgradeScreen, drawGameOver,
+  drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver,
 } from './renderers/UIRenderer';
 
 /**
@@ -100,10 +101,10 @@ export class Renderer {
   drawMinimap(player: Player, enemies: Enemy[]) { drawMinimap(this.rc, player, enemies); }
   drawBossBar(name: string, hp: number, maxHp: number) { drawBossBar(this.rc, name, hp, maxHp); }
   drawPauseButton() { drawPauseBtn(this.rc); }
-  drawMenu() { drawMenu(this.rc); }
+  drawDesktop(meta: MetaState, tab: DesktopTab, codexTab: CodexTab) { drawDesktop(this.rc, meta, tab, codexTab); }
   drawPaused() { drawPaused(this.rc); }
-  drawUpgradeScreen(options: UpgradeOption[], selectedIndex: number, gold: number, canFreeReroll: boolean, rerollCost: number) {
-    drawUpgradeScreen(this.rc, options, selectedIndex, gold, canFreeReroll, rerollCost);
+  drawUpgradeScreen(options: UpgradeOption[], selectedIndex: number, gold: number, canFreeReroll: boolean, rerollCost: number, canPaidReroll: boolean) {
+    drawUpgradeScreen(this.rc, options, selectedIndex, gold, canFreeReroll, rerollCost, canPaidReroll);
   }
-  drawGameOver(stats: { time: number; kills: number; level: number; weaponNames: string[] }) { drawGameOver(this.rc, stats); }
+  drawGameOver(stats: { time: number; kills: number; level: number; weaponNames: string[]; soulFireEarned: number; totalSoulFire: number }) { drawGameOver(this.rc, stats); }
 }

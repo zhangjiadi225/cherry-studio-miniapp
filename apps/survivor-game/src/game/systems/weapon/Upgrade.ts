@@ -8,7 +8,11 @@ import { createWeapon, upgradeWeapon } from './Weapon';
 import { applyPassive, getPassiveLevel } from '../player/Player';
 import { shuffleArray } from '../../utils/math';
 
-export function generateUpgradeOptions(player: Player, count: number = getShopOptionCount(player)): UpgradeOption[] {
+export function generateUpgradeOptions(
+  player: Player,
+  count: number = getShopOptionCount(player),
+  includeModifiers: boolean = true
+): UpgradeOption[] {
   const allOptions: UpgradeOption[] = [];
 
   for (const w of player.weapons) {
@@ -76,7 +80,7 @@ export function generateUpgradeOptions(player: Player, count: number = getShopOp
     result.push(remaining.shift()!);
   }
 
-  const modifierOption = rollModifierOption(player);
+  const modifierOption = includeModifiers ? rollModifierOption(player) : undefined;
   if (modifierOption) {
     if (result.length < count) {
       result.push(modifierOption);

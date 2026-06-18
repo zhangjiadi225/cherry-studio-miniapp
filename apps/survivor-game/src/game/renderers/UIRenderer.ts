@@ -1,6 +1,10 @@
 import type { RenderContext } from './WorldRenderer';
 import type { Player, Enemy, UpgradeOption } from '../types';
-import { COLORS, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA } from '../constants';
+import { COLORS, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA, GENERIC_MODIFIER_DATA } from '../constants';
+import {
+  type CodexTab, type DesktopTab, type MetaState,
+  META_UPGRADES, CHARACTER_SKINS, hasMetaUpgrade, canBuyMetaUpgrade,
+} from '../systems/meta/MetaProgression';
 
 // ──────────────────────────── HUD ────────────────────────────
 
@@ -367,81 +371,910 @@ export function getPauseButtonRect(w: number): { x: number; y: number; w: number
 
 // ──────────────────────────── Overlays ────────────────────────────
 
-export function drawMenu(rc: RenderContext) {
+const DESKTOP_FONT = '"Segoe UI", "PingFang SC", sans-serif';
+
+export function drawDesktop(rc: RenderContext, meta: MetaState, activeTab: DesktopTab, activeCodexTab: CodexTab) {
   const { ctx, w, h } = rc;
   const time = Date.now() * 0.001;
 
-  ctx.fillStyle = COLORS.bg;
+  drawDesktopBackdrop(rc, time);
+  drawDesktopHeader(rc, meta);
+
+  drawDesktopTabs(rc, activeTab);
+
+  if (activeTab === 'start') {
+    drawDesktopStart(rc, meta);
+  } else if (activeTab === 'growth') {
+    drawMetaGrowth(rc, meta);
+  } else if (activeTab === 'skins') {
+    drawSkinPanel(rc, meta);
+  } else {
+    drawCodexPanel(rc, activeCodexTab);
+  }
+
+  ctx.font = `12px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(220,230,255,0.42)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('1-4 切换页签 | Q/E 切换图鉴分页 | Enter 开始游戏', w / 2, h - 18);
+}
+
+function drawDesktopBackdrop(rc: RenderContext, time: number) {
+  const { ctx, w, h } = rc;
+  const bg = ctx.createLinearGradient(0, 0, w, h);
+  bg.addColorStop(0, '#080b14');
+  bg.addColorStop(0.52, '#111a2d');
+  bg.addColorStop(1, '#091016');
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, w, h);
 
-  for (let i = 0; i < 60; i++) {
-    const x = (Math.sin(i * 7.3 + time * 0.3) * 0.5 + 0.5) * w;
-    const y = (Math.cos(i * 5.7 + time * 0.2) * 0.5 + 0.5) * h;
-    const r = 1.5 + Math.sin(i + time) * 0.8;
-    const alpha = 0.1 + Math.sin(i * 3 + time) * 0.05;
-    ctx.fillStyle = `rgba(74,158,255,${alpha})`;
+  const glowA = ctx.createRadialGradient(w * 0.18, h * 0.18, 20, w * 0.18, h * 0.18, Math.max(w, h) * 0.55);
+  glowA.addColorStop(0, 'rgba(255,122,69,0.18)');
+  glowA.addColorStop(0.42, 'rgba(74,158,255,0.06)');
+  glowA.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glowA;
+  ctx.fillRect(0, 0, w, h);
+
+  const glowB = ctx.createRadialGradient(w * 0.78, h * 0.28, 0, w * 0.78, h * 0.28, Math.max(w, h) * 0.46);
+  glowB.addColorStop(0, 'rgba(157,123,255,0.2)');
+  glowB.addColorStop(0.5, 'rgba(70,210,190,0.05)');
+  glowB.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glowB;
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  ctx.strokeStyle = 'rgba(170,196,255,0.18)';
+  ctx.lineWidth = 1;
+  const grid = 42;
+  const offset = (time * 8) % grid;
+  for (let x = -grid + offset; x < w + grid; x += grid) {
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x - h * 0.38, h);
+    ctx.stroke();
+  }
+  for (let y = -grid + offset; y < h + grid; y += grid) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y - w * 0.1);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  for (let i = 0; i < 52; i++) {
+    const x = (Math.sin(i * 9.7 + time * 0.18) * 0.5 + 0.5) * w;
+    const y = (Math.cos(i * 6.1 + time * 0.12) * 0.5 + 0.5) * h;
+    const r = 0.8 + Math.sin(i + time) * 0.35;
+    ctx.fillStyle = i % 5 === 0 ? 'rgba(255,209,102,0.36)' : 'rgba(190,215,255,0.26)';
+    ctx.beginPath();
+    ctx.arc(x, y, Math.max(0.4, r), 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
 
-  const weapons = ['🪄', '🔥', '📖', '🧄', '💧', '⚡', '🪓'];
-  ctx.globalAlpha = 0.08;
-  ctx.font = '40px serif';
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,209,102,0.1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h + 68, w * 0.44, 96, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(120,170,255,0.08)';
+  ctx.beginPath();
+  ctx.ellipse(w / 2, h + 50, w * 0.32, 62, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawDesktopHeader(rc: RenderContext, meta: MetaState) {
+  const { ctx, w } = rc;
+  const x = 36;
+  const y = 22;
+  const panelW = Math.min(520, w - 72);
+  const titleGrad = ctx.createLinearGradient(x, y, x + panelW, y);
+  titleGrad.addColorStop(0, '#fff3b8');
+  titleGrad.addColorStop(0.5, '#ffd166');
+  titleGrad.addColorStop(1, '#8fe8ff');
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,209,102,0.32)';
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = titleGrad;
+  ctx.font = `800 34px ${DESKTOP_FONT}`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('暗夜幸存者', x + 58, y + 1);
+  ctx.restore();
+
+  ctx.fillStyle = 'rgba(10,14,24,0.72)';
+  ctx.beginPath();
+  ctx.roundRect(x, y + 2, 42, 42, 10);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,209,102,0.62)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.roundRect(x, y + 2, 42, 42, 10);
+  ctx.stroke();
+  ctx.fillStyle = '#ffd166';
+  ctx.font = '24px serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  for (let i = 0; i < weapons.length; i++) {
-    ctx.fillText(weapons[i], w * (0.15 + (i / (weapons.length - 1)) * 0.7), h * 0.3 + Math.sin(time * 0.5 + i * 1.5) * 20);
+  ctx.fillText('✦', x + 21, y + 24);
+
+  ctx.font = `12px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(210,224,255,0.62)';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('局外桌面 / 长期成长 / 收藏图鉴', x + 60, y + 41);
+
+  const pillY = 24;
+  drawInfoPill(ctx, w - 346, pillY, 94, '魂火', `${meta.soulFire}`, '#ffd166');
+  drawInfoPill(ctx, w - 244, pillY, 92, '局数', `${meta.runs}`, '#8fe8ff');
+  drawInfoPill(ctx, w - 144, pillY, 108, '最高击杀', `${meta.bestKills}`, '#ff9a76');
+}
+
+function drawDesktopTabs(rc: RenderContext, activeTab: DesktopTab) {
+  const { ctx, w } = rc;
+  const tabs: Array<{ id: DesktopTab; label: string }> = [
+    { id: 'start', label: '作战' },
+    { id: 'growth', label: '成长' },
+    { id: 'skins', label: '皮肤' },
+    { id: 'codex', label: '图鉴' },
+  ];
+  const tabW = 132;
+  const tabH = 42;
+  const tabGap = 12;
+  const totalW = tabs.length * tabW + (tabs.length - 1) * tabGap;
+  const startX = w / 2 - totalW / 2;
+  const y = 82;
+
+  for (let i = 0; i < tabs.length; i++) {
+    const tab = tabs[i];
+    const x = startX + i * (tabW + tabGap);
+    const active = tab.id === activeTab;
+    const tabGrad = ctx.createLinearGradient(x, y, x, y + tabH);
+    if (active) {
+      tabGrad.addColorStop(0, 'rgba(255,209,102,0.32)');
+      tabGrad.addColorStop(1, 'rgba(255,122,69,0.16)');
+    } else {
+      tabGrad.addColorStop(0, 'rgba(25,33,55,0.82)');
+      tabGrad.addColorStop(1, 'rgba(12,17,30,0.82)');
+    }
+    ctx.save();
+    if (active) {
+      ctx.shadowColor = 'rgba(255,209,102,0.25)';
+      ctx.shadowBlur = 12;
+    }
+    ctx.fillStyle = tabGrad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, tabW, tabH, 10);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = active ? 'rgba(255,226,142,0.92)' : 'rgba(119,143,196,0.34)';
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, tabW, tabH, 10);
+    ctx.stroke();
+    ctx.fillStyle = active ? 'rgba(255,209,102,0.8)' : 'rgba(120,150,210,0.36)';
+    ctx.fillRect(x + 14, y + tabH - 5, tabW - 28, 2);
+    ctx.font = `700 15px ${DESKTOP_FONT}`;
+    ctx.fillStyle = active ? '#ffd166' : COLORS.uiText;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${i + 1}  ${tab.label}`, x + tabW / 2, y + tabH / 2);
   }
-  ctx.globalAlpha = 1;
+}
 
-  ctx.shadowColor = '#ffd700';
-  ctx.shadowBlur = 20;
-  ctx.font = 'bold 64px "Segoe UI", sans-serif';
-  ctx.fillStyle = '#ffd700';
+function drawGlassPanel(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radius: number,
+  fill: string
+) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.34)';
+  ctx.shadowBlur = 22;
+  ctx.shadowOffsetY = 12;
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, radius);
+  ctx.fill();
+  ctx.restore();
+
+  const shine = ctx.createLinearGradient(x, y, x, y + h);
+  shine.addColorStop(0, 'rgba(255,255,255,0.1)');
+  shine.addColorStop(0.22, 'rgba(255,255,255,0.03)');
+  shine.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = shine;
+  ctx.beginPath();
+  ctx.roundRect(x + 1, y + 1, w - 2, h - 2, radius - 1);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(160,184,235,0.22)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, radius);
+  ctx.stroke();
+}
+
+function drawPanelAccent(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, accent: string) {
+  const grad = ctx.createLinearGradient(x, y, x + w, y);
+  grad.addColorStop(0, colorWithAlpha(accent, 0));
+  grad.addColorStop(0.24, colorWithAlpha(accent, 0.74));
+  grad.addColorStop(0.76, colorWithAlpha(accent, 0.36));
+  grad.addColorStop(1, colorWithAlpha(accent, 0));
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.roundRect(x + 18, y, w - 36, 3, 2);
+  ctx.fill();
+}
+
+function drawSectionTitle(ctx: CanvasRenderingContext2D, x: number, y: number, title: string, subtitle: string) {
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = `800 24px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(title, x, y);
+  ctx.font = `13px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(213,224,255,0.64)';
+  ctx.fillText(subtitle, x, y + 34);
+}
+
+function drawInfoPill(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  label: string,
+  value: string,
+  accent: string
+) {
+  ctx.fillStyle = 'rgba(10,15,27,0.72)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, 42, 12);
+  ctx.fill();
+  ctx.strokeStyle = colorWithAlpha(accent, 0.42);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, 42, 12);
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = `11px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(213,224,255,0.55)';
+  ctx.fillText(label, x + 12, y + 7);
+  ctx.font = `800 18px ${DESKTOP_FONT}`;
+  ctx.fillStyle = accent;
+  ctx.fillText(value, x + 12, y + 20);
+}
+
+function drawMetricTile(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  label: string,
+  value: string,
+  accent: string
+) {
+  ctx.fillStyle = 'rgba(8,12,24,0.54)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 12);
+  ctx.fill();
+  ctx.strokeStyle = colorWithAlpha(accent, 0.26);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 12);
+  ctx.stroke();
+  ctx.fillStyle = colorWithAlpha(accent, 0.14);
+  ctx.fillRect(x + 1, y + 1, 4, h - 2);
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = `11px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(213,224,255,0.58)';
+  ctx.fillText(label, x + 14, y + 9);
+  ctx.font = `800 22px ${DESKTOP_FONT}`;
+  ctx.fillStyle = accent;
+  ctx.fillText(value, x + 14, y + 25);
+}
+
+function drawSmallPill(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, text: string, accent: string) {
+  ctx.fillStyle = colorWithAlpha(accent, 0.13);
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, 24, 12);
+  ctx.fill();
+  ctx.strokeStyle = colorWithAlpha(accent, 0.45);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, 24, 12);
+  ctx.stroke();
+  ctx.font = `700 12px ${DESKTOP_FONT}`;
+  ctx.fillStyle = accent;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('⚔️ 暗夜幸存者 ⚔️', w / 2, h / 2 - 100);
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
+  ctx.fillText(text, x + w / 2, y + 12);
+}
 
-  ctx.font = '20px "Segoe UI", sans-serif';
-  ctx.fillStyle = COLORS.uiDim;
-  ctx.fillText('在无尽的黑夜中生存15分钟', w / 2, h / 2 - 45);
+function getBranchAccent(branch: 'shop' | 'build' | 'risk'): string {
+  if (branch === 'build') return '#d3a8ff';
+  if (branch === 'risk') return '#ff6b85';
+  return '#8fe8ff';
+}
 
-  const btnW = 220;
-  const btnH = 55;
+function getCodexAccent(tab: CodexTab): string {
+  if (tab === 'passives') return '#9dffba';
+  if (tab === 'enemies') return '#ff7a76';
+  if (tab === 'modules') return '#d3a8ff';
+  return '#ffb36b';
+}
+
+function colorWithAlpha(color: string, alpha: number): string {
+  if (!color.startsWith('#')) return color;
+  const raw = color.slice(1);
+  const hex = raw.length === 3
+    ? raw.split('').map((char) => char + char).join('')
+    : raw.padEnd(6, '0').slice(0, 6);
+  const value = Number.parseInt(hex, 16);
+  if (Number.isNaN(value)) return color;
+  const r = (value >> 16) & 255;
+  const g = (value >> 8) & 255;
+  const b = value & 255;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function drawDesktopStart(rc: RenderContext, meta: MetaState) {
+  const { ctx, w, h } = rc;
+  const panelW = Math.min(930, w - 72);
+  const panelH = 304;
+  const panelX = w / 2 - panelW / 2;
+  const panelY = 146;
+  drawGlassPanel(ctx, panelX, panelY, panelW, panelH, 18, 'rgba(13,18,32,0.74)');
+  drawPanelAccent(ctx, panelX, panelY, panelW, '#ffd166');
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = `800 24px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('下一局部署', panelX + 34, panelY + 30);
+  ctx.font = `13px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(213,224,255,0.66)';
+  ctx.fillText('把局外成长、商店机制和角色外观带入下一次战斗。', panelX + 34, panelY + 62);
+
+  const bestMinutes = Math.floor(meta.bestTime / 60);
+  const bestSeconds = Math.floor(meta.bestTime % 60).toString().padStart(2, '0');
+  const stats = [
+    ['魂火储备', `${meta.soulFire}`, '#ffd166'],
+    ['点亮节点', `${meta.unlockedUpgrades.length}/${META_UPGRADES.length}`, '#8fe8ff'],
+    ['完成局数', `${meta.runs}`, '#9dffba'],
+    ['最佳时间', `${bestMinutes}:${bestSeconds}`, '#ff9a76'],
+    ['最高击杀', `${meta.bestKills}`, '#ff6b85'],
+    ['最高等级', `${meta.bestLevel}`, '#d3a8ff'],
+  ];
+  for (let i = 0; i < stats.length; i++) {
+    const col = i % 3;
+    const row = Math.floor(i / 3);
+    const x = panelX + 34 + col * 158;
+    const y = panelY + 110 + row * 78;
+    drawMetricTile(ctx, x, y, 136, 54, stats[i][0], stats[i][1], stats[i][2]);
+  }
+
+  const skin = CHARACTER_SKINS.find((item) => item.id === meta.selectedSkin) ?? CHARACTER_SKINS[0];
+  const showcaseX = panelX + panelW - 330;
+  const showcaseY = panelY + 34;
+  drawGlassPanel(ctx, showcaseX, showcaseY, 292, 216, 16, 'rgba(8,12,24,0.58)');
+  const skinGlow = ctx.createRadialGradient(showcaseX + 146, showcaseY + 88, 8, showcaseX + 146, showcaseY + 88, 128);
+  skinGlow.addColorStop(0, `${skin.glow}0.34)`);
+  skinGlow.addColorStop(1, `${skin.glow}0)`);
+  ctx.fillStyle = skinGlow;
+  ctx.fillRect(showcaseX + 10, showcaseY + 8, 272, 148);
+  drawSkinPreview(ctx, skin.id, showcaseX + 146, showcaseY + 94, 1.78, skin.body, skin.outline);
+  ctx.font = `700 18px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.fillText(skin.name, showcaseX + 146, showcaseY + 162);
+  ctx.font = `12px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(213,224,255,0.68)';
+  ctx.fillText(skin.archetype, showcaseX + 146, showcaseY + 184);
+
+  const btnW = 240;
+  const btnH = 56;
   const btnX = w / 2 - btnW / 2;
-  const btnY = h / 2 + 10;
+  const btnY = h / 2 + 88;
 
-  ctx.shadowColor = '#6666ff';
-  ctx.shadowBlur = 15;
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,209,102,0.28)';
+  ctx.shadowBlur = 20;
   const btnGrad = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
-  btnGrad.addColorStop(0, 'rgba(80,80,200,0.9)');
-  btnGrad.addColorStop(1, 'rgba(50,50,150,0.9)');
+  btnGrad.addColorStop(0, '#ffd166');
+  btnGrad.addColorStop(0.5, '#e99345');
+  btnGrad.addColorStop(1, '#ba5f36');
   ctx.fillStyle = btnGrad;
   ctx.beginPath();
-  ctx.roundRect(btnX, btnY, btnW, btnH, 10);
+  ctx.roundRect(btnX, btnY, btnW, btnH, 14);
   ctx.fill();
-  ctx.strokeStyle = '#8888ff';
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.roundRect(btnX, btnY, btnW, btnH, 10);
+  ctx.roundRect(btnX, btnY, btnW, btnH, 14);
   ctx.stroke();
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
 
-  ctx.font = 'bold 24px "Segoe UI", sans-serif';
+  ctx.font = `800 22px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#151018';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('开始新一局', w / 2, btnY + btnH / 2);
+
+  ctx.font = `13px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(213,224,255,0.55)';
+  ctx.fillText('WASD / 方向键移动 | 武器自动攻击 | 商店能力来自全局成长', w / 2, btnY + 84);
+}
+
+function drawMetaGrowth(rc: RenderContext, meta: MetaState) {
+  const { ctx, w } = rc;
+  const panelW = Math.min(840, w - 72);
+  const panelX = w / 2 - panelW / 2;
+  const panelY = 142;
+  drawGlassPanel(ctx, panelX, panelY, panelW, 470, 18, 'rgba(13,18,32,0.68)');
+  drawPanelAccent(ctx, panelX, panelY, panelW, '#8fe8ff');
+  drawSectionTitle(ctx, panelX + 30, panelY + 26, '全局成长', '解锁会影响商店、开局资源和构筑机制。');
+  drawInfoPill(ctx, panelX + panelW - 164, panelY + 26, 132, '可用魂火', `${meta.soulFire}`, '#ffd166');
+
+  const cardW = 210;
+  const cardH = 112;
+  const gap = 14;
+  const columns = 3;
+  const totalW = columns * cardW + (columns - 1) * gap;
+  const startX = w / 2 - totalW / 2;
+  const startY = 222;
+
+  for (let i = 0; i < META_UPGRADES.length; i++) {
+    const node = META_UPGRADES[i];
+    const x = startX + (i % columns) * (cardW + gap);
+    const y = startY + Math.floor(i / columns) * (cardH + gap);
+    const owned = hasMetaUpgrade(meta, node.id);
+    const available = canBuyMetaUpgrade(meta, node);
+    const locked = !owned && !available;
+    const accent = getBranchAccent(node.branch);
+    const cardGrad = ctx.createLinearGradient(x, y, x, y + cardH);
+    cardGrad.addColorStop(0, owned ? 'rgba(35,92,64,0.92)' : available ? 'rgba(42,47,78,0.94)' : 'rgba(30,38,60,0.84)');
+    cardGrad.addColorStop(1, owned ? 'rgba(15,45,34,0.92)' : available ? 'rgba(20,25,44,0.94)' : 'rgba(16,21,34,0.84)');
+    ctx.save();
+    if (available) {
+      ctx.shadowColor = colorWithAlpha(accent, 0.22);
+      ctx.shadowBlur = 12;
+    }
+    ctx.fillStyle = cardGrad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, cardW, cardH, 12);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = owned ? '#55dd88' : available ? accent : 'rgba(130,150,190,0.38)';
+    ctx.lineWidth = owned || available ? 1.7 : 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, cardW, cardH, 12);
+    ctx.stroke();
+
+    ctx.fillStyle = colorWithAlpha(accent, locked ? 0.11 : 0.18);
+    ctx.fillRect(x + 1, y + 1, 5, cardH - 2);
+    ctx.fillStyle = colorWithAlpha(accent, locked ? 0.08 : 0.16);
+    ctx.beginPath();
+    ctx.arc(x + 34, y + 34, 23, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.font = '24px serif';
+    ctx.fillStyle = locked ? '#9ba9c8' : COLORS.uiText;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(node.icon, x + 14, y + 30);
+    ctx.font = `700 14px ${DESKTOP_FONT}`;
+    ctx.fillStyle = locked ? '#c5cde0' : '#ffffff';
+    ctx.fillText(node.name, x + 48, y + 24);
+    ctx.font = `12px ${DESKTOP_FONT}`;
+    ctx.fillStyle = owned ? '#88ffaa' : available ? '#ffd166' : '#adb7d0';
+    ctx.textAlign = 'right';
+    ctx.fillText(owned ? '已点亮' : `魂火 ${node.cost}`, x + cardW - 14, y + 24);
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = `12px ${DESKTOP_FONT}`;
+    ctx.fillStyle = locked ? '#b4bfd8' : '#d9e4ff';
+    drawWrappedText(ctx, node.effect, x + 14, y + 55, cardW - 28, 16, 2);
+    ctx.fillStyle = locked ? '#8794b0' : '#9fb0d8';
+    drawWrappedText(ctx, node.desc, x + 14, y + 84, cardW - 28, 14, 2);
+  }
+}
+
+function drawSkinPanel(rc: RenderContext, meta: MetaState) {
+  const { ctx, w } = rc;
+  const panelW = Math.min(910, w - 72);
+  const panelX = w / 2 - panelW / 2;
+  const panelY = 142;
+  drawGlassPanel(ctx, panelX, panelY, panelW, 430, 18, 'rgba(13,18,32,0.68)');
+  drawPanelAccent(ctx, panelX, panelY, panelW, '#ff9a76');
+  drawSectionTitle(ctx, panelX + 30, panelY + 26, '角色皮肤', '皮肤改变局内轮廓、预览姿态和辨识形态，不提供数值。');
+
+  const cardW = 236;
+  const cardH = 318;
+  const gap = 18;
+  const totalW = CHARACTER_SKINS.length * cardW + (CHARACTER_SKINS.length - 1) * gap;
+  const startX = w / 2 - totalW / 2;
+  const y = 218;
+  for (let i = 0; i < CHARACTER_SKINS.length; i++) {
+    const skin = CHARACTER_SKINS[i];
+    const x = startX + i * (cardW + gap);
+    const selected = meta.selectedSkin === skin.id;
+    const cardGrad = ctx.createLinearGradient(x, y, x, y + cardH);
+    cardGrad.addColorStop(0, selected ? `${skin.glow}0.28)` : 'rgba(31,38,62,0.9)');
+    cardGrad.addColorStop(0.44, 'rgba(15,20,35,0.92)');
+    cardGrad.addColorStop(1, 'rgba(8,11,20,0.94)');
+    ctx.save();
+    if (selected) {
+      ctx.shadowColor = `${skin.glow}0.44)`;
+      ctx.shadowBlur = 22;
+    }
+    ctx.fillStyle = cardGrad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, cardW, cardH, 16);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = selected ? skin.outline : 'rgba(128,154,210,0.34)';
+    ctx.lineWidth = selected ? 2 : 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, cardW, cardH, 16);
+    ctx.stroke();
+
+    ctx.fillStyle = `${skin.glow}0.16)`;
+    ctx.beginPath();
+    ctx.arc(x + cardW / 2, y + 96, 72, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `${skin.glow}0.38)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(x + cardW / 2, y + 158, 68, 15, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    drawSkinPreview(ctx, skin.id, x + cardW / 2, y + 106, 1.78, skin.body, skin.outline);
+
+    ctx.font = `800 19px ${DESKTOP_FONT}`;
+    ctx.fillStyle = selected ? '#ffd166' : COLORS.uiText;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(skin.name, x + cardW / 2, y + 190);
+    drawSmallPill(ctx, x + 48, y + 210, cardW - 96, skin.archetype, selected ? skin.outline : '#8fa7d8');
+    ctx.font = `12px ${DESKTOP_FONT}`;
+    ctx.fillStyle = 'rgba(213,224,255,0.68)';
+    ctx.textAlign = 'left';
+    drawWrappedText(ctx, skin.desc, x + 24, y + 258, cardW - 48, 17, 2);
+    if (selected) {
+      ctx.font = `700 12px ${DESKTOP_FONT}`;
+      ctx.fillStyle = '#10131c';
+      ctx.beginPath();
+      ctx.roundRect(x + cardW / 2 - 42, y + cardH - 34, 84, 24, 12);
+      ctx.fillStyle = '#ffd166';
+      ctx.fill();
+      ctx.fillStyle = '#10131c';
+      ctx.textAlign = 'center';
+      ctx.fillText('已装备', x + cardW / 2, y + cardH - 22);
+    }
+  }
+}
+
+function drawCodexPanel(rc: RenderContext, activeTab: CodexTab) {
+  const { ctx, w } = rc;
+  const panelW = Math.min(980, w - 72);
+  const panelX = w / 2 - panelW / 2;
+  const panelY = 142;
+  drawGlassPanel(ctx, panelX, panelY, panelW, 470, 18, 'rgba(13,18,32,0.68)');
+  drawPanelAccent(ctx, panelX, panelY, panelW, '#d3a8ff');
+  drawSectionTitle(ctx, panelX + 30, panelY + 24, '总体图鉴', '武器、被动、怪物和机制模块分册整理。');
+  drawCodexTabs(rc, activeTab);
+  drawCodexCards(rc, activeTab);
+}
+
+function drawCodexTabs(rc: RenderContext, activeTab: CodexTab) {
+  const { ctx, w } = rc;
+  const tabs: Array<{ id: CodexTab; label: string }> = [
+    { id: 'weapons', label: '武器' },
+    { id: 'passives', label: '被动' },
+    { id: 'enemies', label: '怪物' },
+    { id: 'modules', label: '模块' },
+  ];
+  const tabW = 128;
+  const tabH = 38;
+  const gap = 12;
+  const totalW = tabs.length * tabW + (tabs.length - 1) * gap;
+  const startX = w / 2 - totalW / 2;
+  const y = 214;
+
+  for (let i = 0; i < tabs.length; i++) {
+    const tab = tabs[i];
+    const x = startX + i * (tabW + gap);
+    const active = tab.id === activeTab;
+    const accent = getCodexAccent(tab.id);
+    ctx.fillStyle = active ? colorWithAlpha(accent, 0.2) : 'rgba(24,30,52,0.74)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, tabW, tabH, 10);
+    ctx.fill();
+    ctx.strokeStyle = active ? accent : 'rgba(100,120,170,0.38)';
+    ctx.lineWidth = active ? 1.8 : 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, tabW, tabH, 10);
+    ctx.stroke();
+    ctx.font = `700 14px ${DESKTOP_FONT}`;
+    ctx.fillStyle = active ? '#ffffff' : COLORS.uiText;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(tab.label, x + tabW / 2, y + tabH / 2);
+  }
+}
+
+type CodexCard = {
+  icon: string;
+  title: string;
+  tag: string;
+  desc: string;
+  accent: string;
+};
+
+function drawCodexCards(rc: RenderContext, tab: CodexTab) {
+  const { ctx, w } = rc;
+  const cards = getCodexCards(tab);
+  const columns = w >= 980 ? 4 : 3;
+  const cardW = w >= 980 ? 202 : 214;
+  const cardH = 126;
+  const gap = 14;
+  const totalW = columns * cardW + (columns - 1) * gap;
+  const startX = w / 2 - totalW / 2;
+  const startY = 272;
+
+  for (let i = 0; i < cards.length; i++) {
+    const card = cards[i];
+    const x = startX + (i % columns) * (cardW + gap);
+    const y = startY + Math.floor(i / columns) * (cardH + gap);
+    const cardGrad = ctx.createLinearGradient(x, y, x, y + cardH);
+    cardGrad.addColorStop(0, colorWithAlpha(card.accent, 0.1));
+    cardGrad.addColorStop(0.28, 'rgba(26,33,54,0.94)');
+    cardGrad.addColorStop(1, 'rgba(11,15,27,0.94)');
+    ctx.fillStyle = cardGrad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, cardW, cardH, 13);
+    ctx.fill();
+    ctx.strokeStyle = colorWithAlpha(card.accent, 0.72);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, cardW, cardH, 13);
+    ctx.stroke();
+    ctx.fillStyle = colorWithAlpha(card.accent, 0.11);
+    ctx.fillRect(x + 1, y + 1, cardW - 2, 4);
+    ctx.fillStyle = colorWithAlpha(card.accent, 0.16);
+    ctx.beginPath();
+    ctx.arc(x + 36, y + 39, 24, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.font = '27px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = COLORS.uiText;
+    ctx.fillText(card.icon, x + 36, y + 40);
+    ctx.font = `700 14px ${DESKTOP_FONT}`;
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.fillText(card.title, x + 68, y + 29);
+    ctx.font = `11px ${DESKTOP_FONT}`;
+    ctx.fillStyle = card.accent;
+    ctx.fillText(card.tag, x + 68, y + 50);
+    ctx.font = `12px ${DESKTOP_FONT}`;
+    ctx.fillStyle = '#bac7e6';
+    drawWrappedText(ctx, card.desc, x + 18, y + 82, cardW - 36, 16, 2);
+  }
+}
+
+function getCodexCards(tab: CodexTab): CodexCard[] {
+  if (tab === 'weapons') {
+    return Object.values(WEAPON_DATA).map((data) => ({
+      icon: data.icon,
+      title: data.name,
+      tag: `${data.family} | Lv.${data.maxLevel}`,
+      desc: data.desc,
+      accent: '#ff9999',
+    }));
+  }
+  if (tab === 'passives') {
+    return Object.values(PASSIVE_DATA).map((data) => ({
+      icon: data.icon,
+      title: data.name,
+      tag: `上限 Lv.${data.maxLevel}`,
+      desc: data.desc,
+      accent: '#88ff88',
+    }));
+  }
+  if (tab === 'enemies') {
+    return Object.values(ENEMY_DATA).map((data) => ({
+      icon: '◇',
+      title: data.name,
+      tag: `XP ${data.xpValue} | ${data.spawnAfter}s`,
+      desc: `HP ${data.baseHp} / 伤害 ${data.baseDamage} / 速度 ${data.baseSpeed}`,
+      accent: data.color,
+    }));
+  }
+  return Object.values(GENERIC_MODIFIER_DATA).map((data) => ({
+    icon: data.icon,
+    title: data.name,
+    tag: `${data.trigger} → ${data.effect}`,
+    desc: data.desc,
+    accent: '#d3a8ff',
+  }));
+}
+
+function drawSkinPreview(
+  ctx: CanvasRenderingContext2D,
+  skinId: string,
+  x: number,
+  y: number,
+  scale: number,
+  body: string,
+  outline: string
+) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+  if (skinId === 'ember') {
+    drawEmberAvatar(ctx, 0, 0, body, outline, 1);
+  } else if (skinId === 'oracle') {
+    drawOracleAvatar(ctx, 0, 0, body, outline, 1);
+  } else {
+    drawWandererAvatar(ctx, 0, 0, body, outline, 1);
+  }
+  ctx.restore();
+}
+
+function drawWandererAvatar(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  body: string,
+  outline: string,
+  scale: number
+) {
+  const r = 24 * scale;
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 2.5 * scale;
+  ctx.stroke();
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('🎮 开始游戏', w / 2, btnY + btnH / 2);
+  ctx.beginPath();
+  ctx.ellipse(x - 7 * scale, y - 4 * scale, 5 * scale, 6 * scale, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(x + 8 * scale, y - 4 * scale, 5 * scale, 6 * scale, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#111111';
+  ctx.beginPath();
+  ctx.arc(x - 6 * scale, y - 4 * scale, 2.5 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(x + 9 * scale, y - 4 * scale, 2.5 * scale, 0, Math.PI * 2);
+  ctx.fill();
+}
 
-  ctx.font = '14px "Segoe UI", sans-serif';
-  ctx.fillStyle = COLORS.uiDim;
-  ctx.fillText('WASD / 方向键 移动  |  武器自动攻击  |  触屏滑动控制', w / 2, h / 2 + 110);
+function drawEmberAvatar(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  body: string,
+  outline: string,
+  scale: number
+) {
+  ctx.fillStyle = 'rgba(255,120,40,0.18)';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 44 * scale);
+  ctx.lineTo(x + 18 * scale, y - 16 * scale);
+  ctx.lineTo(x + 8 * scale, y - 18 * scale);
+  ctx.lineTo(x + 28 * scale, y + 14 * scale);
+  ctx.lineTo(x, y + 34 * scale);
+  ctx.lineTo(x - 28 * scale, y + 14 * scale);
+  ctx.lineTo(x - 8 * scale, y - 18 * scale);
+  ctx.lineTo(x - 18 * scale, y - 16 * scale);
+  ctx.closePath();
+  ctx.fill();
 
-  ctx.font = '12px "Segoe UI", sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.3)';
-  ctx.fillText('v2.0', w / 2, h - 20);
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(x, y - 30 * scale);
+  ctx.lineTo(x + 30 * scale, y);
+  ctx.lineTo(x, y + 32 * scale);
+  ctx.lineTo(x - 30 * scale, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 2.5 * scale;
+  ctx.stroke();
+
+  ctx.fillStyle = '#fff2b0';
+  ctx.beginPath();
+  ctx.arc(x, y - 2 * scale, 8 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(70,20,0,0.55)';
+  ctx.fillRect(x - 10 * scale, y + 13 * scale, 20 * scale, 4 * scale);
+}
+
+function drawOracleAvatar(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  body: string,
+  outline: string,
+  scale: number
+) {
+  ctx.strokeStyle = 'rgba(215,204,255,0.75)';
+  ctx.lineWidth = 2 * scale;
+  ctx.beginPath();
+  ctx.ellipse(x, y - 32 * scale, 28 * scale, 9 * scale, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(30,20,70,0.8)';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 30 * scale);
+  ctx.quadraticCurveTo(x + 34 * scale, y - 8 * scale, x + 24 * scale, y + 34 * scale);
+  ctx.lineTo(x - 24 * scale, y + 34 * scale);
+  ctx.quadraticCurveTo(x - 34 * scale, y - 8 * scale, x, y - 30 * scale);
+  ctx.fill();
+
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(x, y - 23 * scale);
+  ctx.lineTo(x + 21 * scale, y + 18 * scale);
+  ctx.lineTo(x, y + 31 * scale);
+  ctx.lineTo(x - 21 * scale, y + 18 * scale);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = outline;
+  ctx.lineWidth = 2.3 * scale;
+  ctx.stroke();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(x, y - 2 * scale, 8 * scale, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#302060';
+  ctx.beginPath();
+  ctx.arc(x, y - 2 * scale, 4 * scale, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawWrappedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines: number
+) {
+  let line = '';
+  let lines = 0;
+  for (const char of text) {
+    const next = line + char;
+    if (ctx.measureText(next).width > maxWidth) {
+      ctx.fillText(line, x, y + lines * lineHeight);
+      line = char;
+      lines++;
+      if (lines >= maxLines) return;
+    } else {
+      line = next;
+    }
+  }
+  if (line && lines < maxLines) ctx.fillText(line, x, y + lines * lineHeight);
 }
 
 export function drawPaused(rc: RenderContext) {
@@ -474,7 +1307,8 @@ export function drawUpgradeScreen(
   selectedIndex: number,
   gold: number,
   canFreeReroll: boolean,
-  rerollCost: number
+  rerollCost: number,
+  canPaidReroll: boolean
 ) {
   const { ctx, w, h } = rc;
 
@@ -626,8 +1460,8 @@ export function drawUpgradeScreen(
   const btnY = h / 2 + 155;
   const btnW = 150;
   const btnH = 38;
-  const canReroll = canFreeReroll || gold >= rerollCost;
-  const rerollLabel = canFreeReroll ? '免费刷新' : `刷新 🪙 ${rerollCost}`;
+  const canReroll = canFreeReroll || (canPaidReroll && gold >= rerollCost);
+  const rerollLabel = canFreeReroll ? '免费刷新' : canPaidReroll ? `刷新 🪙 ${rerollCost}` : '刷新未解锁';
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -662,7 +1496,14 @@ export function drawUpgradeScreen(
   ctx.fillText('← → 选择 | Enter 购买 | R 刷新 | Space/Esc 继续', w / 2, btnY + 60);
 }
 
-export function drawGameOver(rc: RenderContext, stats: { time: number; kills: number; level: number; weaponNames: string[] }) {
+export function drawGameOver(rc: RenderContext, stats: {
+  time: number;
+  kills: number;
+  level: number;
+  weaponNames: string[];
+  soulFireEarned: number;
+  totalSoulFire: number;
+}) {
   const { ctx, w, h } = rc;
   const isVictory = stats.time >= 900;
   const time = Date.now() * 0.001;
@@ -690,7 +1531,7 @@ export function drawGameOver(rc: RenderContext, stats: { time: number; kills: nu
   }
 
   const containerW = 300;
-  const containerH = 180;
+  const containerH = 220;
   const containerX = w / 2 - containerW / 2;
   const containerY = h / 2 - 40;
 
@@ -723,15 +1564,21 @@ export function drawGameOver(rc: RenderContext, stats: { time: number; kills: nu
   ctx.textAlign = 'right';
   ctx.fillText(`${stats.level}`, containerX + containerW - 20, statsY + 80);
   ctx.textAlign = 'left';
-  ctx.fillText('⚔️ 武器:', containerX + 20, statsY + 120);
+  ctx.fillText('🔥 魂火:', containerX + 20, statsY + 120);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffd166';
+  ctx.fillText(`+${stats.soulFireEarned} / ${stats.totalSoulFire}`, containerX + containerW - 20, statsY + 120);
+  ctx.fillStyle = COLORS.uiText;
+  ctx.textAlign = 'left';
+  ctx.fillText('⚔️ 武器:', containerX + 20, statsY + 160);
   ctx.textAlign = 'right';
   ctx.font = '16px "Segoe UI", sans-serif';
-  ctx.fillText(stats.weaponNames.join(', ') || '无', containerX + containerW - 20, statsY + 120);
+  ctx.fillText(stats.weaponNames.join(', ') || '无', containerX + containerW - 20, statsY + 160);
 
   const btnW = 200;
   const btnH = 45;
   const btnX = w / 2 - btnW / 2;
-  const btnY = h / 2 + 170;
+  const btnY = Math.min(h - 70, containerY + containerH + 24);
 
   ctx.fillStyle = 'rgba(60,60,160,0.8)';
   ctx.beginPath();
@@ -746,5 +1593,5 @@ export function drawGameOver(rc: RenderContext, stats: { time: number; kills: nu
   ctx.font = 'bold 18px "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('🔄 重新开始', w / 2, btnY + btnH / 2);
+  ctx.fillText('返回桌面', w / 2, btnY + btnH / 2);
 }
