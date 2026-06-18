@@ -127,20 +127,20 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   ctx.textAlign = 'center';
   ctx.fillText(`❤️ ${Math.ceil(player.hp)}/${player.maxHp}`, barX + 120, barY + barH + 18);
 
-  // Gold display
+  // Spendable soul shard display
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
   ctx.beginPath();
-  ctx.roundRect(barX + 190, barY + barH + 6, 86, 24, 6);
+  ctx.roundRect(barX + 190, barY + barH + 6, 104, 24, 6);
   ctx.fill();
-  ctx.strokeStyle = '#ffd166';
+  ctx.strokeStyle = '#8fe8ff';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(barX + 190, barY + barH + 6, 86, 24, 6);
+  ctx.roundRect(barX + 190, barY + barH + 6, 104, 24, 6);
   ctx.stroke();
   ctx.font = '13px "Segoe UI", sans-serif';
-  ctx.fillStyle = '#ffd166';
+  ctx.fillStyle = '#8fe8ff';
   ctx.textAlign = 'center';
-  ctx.fillText(`🪙 ${player.gold}`, barX + 233, barY + barH + 18);
+  ctx.fillText(`魂晶 ${player.shards}`, barX + 242, barY + barH + 18);
 
   // Phase indicator
   const phase = elapsed < 60 ? '初期' : elapsed < 180 ? '前期' : elapsed < 300 ? '中期' : elapsed < 600 ? '后期' : '终局';
@@ -1141,7 +1141,7 @@ function drawRunLedger(ctx: CanvasRenderingContext2D, rect: Rect, meta: MetaStat
 function drawLoadoutStrip(ctx: CanvasRenderingContext2D, x: number, y: number) {
   const items = [
     ['🪄', '魔法弹幕', '#ffb36b'],
-    ['🪙', '商店构筑', '#ffd166'],
+    ['◈', '魂晶构筑', '#8fe8ff'],
     ['✦', '模块机制', '#d3a8ff'],
   ];
   for (let i = 0; i < items.length; i++) {
@@ -1735,7 +1735,7 @@ function getCodexCards(tab: CodexTab): CodexCard[] {
     return Object.values(ENEMY_DATA).map((data) => ({
       icon: '◇',
       title: data.name,
-      tag: `XP ${data.xpValue} | ${data.spawnAfter}s`,
+      tag: `魂晶 ${data.xpValue} | ${data.spawnAfter}s`,
       desc: `HP ${data.baseHp} / 伤害 ${data.baseDamage} / 速度 ${data.baseSpeed}`,
       accent: data.color,
     }));
@@ -1953,7 +1953,7 @@ export function drawUpgradeScreen(
   rc: RenderContext,
   options: UpgradeOption[],
   selectedIndex: number,
-  gold: number,
+  shards: number,
   canFreeReroll: boolean,
   rerollCost: number,
   canPaidReroll: boolean
@@ -1977,8 +1977,8 @@ export function drawUpgradeScreen(
   ctx.shadowBlur = 0;
 
   ctx.font = 'bold 18px "Segoe UI", sans-serif';
-  ctx.fillStyle = '#ffd166';
-  ctx.fillText(`🪙 ${gold}`, w / 2, h / 2 - 142);
+  ctx.fillStyle = '#8fe8ff';
+  ctx.fillText(`魂晶 ${shards}`, w / 2, h / 2 - 142);
 
   const cardGap = 12;
   const optionCount = Math.max(options.length, 1);
@@ -1993,7 +1993,7 @@ export function drawUpgradeScreen(
     const x = startX + i * (cardW + cardGap);
     const y = cardY;
     const selected = i === selectedIndex;
-    const affordable = gold >= opt.cost;
+    const affordable = shards >= opt.cost;
     const sold = !!opt.purchased;
     const unavailable = sold || !affordable;
     const isModifier = opt.type === 'modifier';
@@ -2103,7 +2103,7 @@ export function drawUpgradeScreen(
     ctx.stroke();
     ctx.font = 'bold 13px "Segoe UI", sans-serif';
     ctx.fillStyle = sold ? '#88ff88' : affordable ? '#ffd166' : '#ff8888';
-    ctx.fillText(sold ? (isModifier ? '已安装' : '已购买') : `🪙 ${opt.cost}`, cardW / 2, priceY + 13);
+    ctx.fillText(sold ? (isModifier ? '已安装' : '已购买') : `魂晶 ${opt.cost}`, cardW / 2, priceY + 13);
 
     ctx.restore();
   }
@@ -2111,8 +2111,8 @@ export function drawUpgradeScreen(
   const btnY = h / 2 + 155;
   const btnW = 150;
   const btnH = 38;
-  const canReroll = canFreeReroll || (canPaidReroll && gold >= rerollCost);
-  const rerollLabel = canFreeReroll ? '免费刷新' : canPaidReroll ? `刷新 🪙 ${rerollCost}` : '刷新未解锁';
+  const canReroll = canFreeReroll || (canPaidReroll && shards >= rerollCost);
+  const rerollLabel = canFreeReroll ? '免费刷新' : canPaidReroll ? `刷新 魂晶 ${rerollCost}` : '刷新未解锁';
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';

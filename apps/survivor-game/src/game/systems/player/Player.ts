@@ -33,7 +33,7 @@ export function createPlayer(skinId: string = 'wanderer'): Player {
     regenTimer: 0,
     luck: 1,
     curse: 1,
-    gold: 0,
+    shards: 0,
     skinId,
     currentZone: 'storm',
     weapons: [],
@@ -101,6 +101,11 @@ export function addXP(p: Player, amount: number): boolean {
     return true;
   }
   return false;
+}
+
+export function collectShards(p: Player, amount: number): boolean {
+  p.shards += amount;
+  return addXP(p, amount);
 }
 
 export function applyPassive(p: Player, type: PassiveType) {

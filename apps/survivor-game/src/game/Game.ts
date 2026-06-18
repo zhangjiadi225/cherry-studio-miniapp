@@ -9,7 +9,7 @@ import {
 } from './constants';
 import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
-import { createPlayer, updatePlayer, damagePlayer, addXP, hasPassive, tryBloodZoneHeal } from './systems/player/Player';
+import { createPlayer, updatePlayer, damagePlayer, collectShards, hasPassive, tryBloodZoneHeal } from './systems/player/Player';
 import { updateEnemy, isCollidingWithPlayer, resetEnemyIds } from './systems/enemy/Enemy';
 import { Spawner } from './systems/enemy/Spawner';
 import {
@@ -21,7 +21,6 @@ import { ProjectileCombat } from './systems/combat/ProjectileCombat';
 import { ShopSystem } from './systems/upgrade/ShopSystem';
 import { createCamera, updateCamera, shakeCamera } from './systems/camera/Camera';
 import { createXPGem, updateXPGem } from './systems/player/XPGem';
-import { rollEnemyGoldReward } from './data/economy';
 import {
   updateParticle, spawnHitParticles, spawnDeathParticles, spawnXPParticles,
   spawnExplosionParticles, spawnHealParticles, spawnLevelUpParticles
@@ -29,7 +28,7 @@ import {
 import { createDamageNumber, updateDamageNumber } from './effects/DamageNumber';
 import {
   type CodexTab, type DesktopTab, type MetaState,
-  loadMetaState, applyRunReward, getInitialGold,
+  loadMetaState, applyRunReward, getInitialShards,
   buyMetaUpgrade, selectSkin, META_UPGRADES, CHARACTER_SKINS,
 } from './systems/meta/MetaProgression';
 import { MapSystem } from './systems/map/MapSystem';
@@ -43,10 +42,10 @@ type ObjectiveBeat = {
 };
 
 const OBJECTIVE_BEATS: ObjectiveBeat[] = [
-  { time: 12, message: '目标：收集经验，攒金币准备升级' },
+  { time: 12, message: '目标：收集魂晶，升级并购买构筑牌' },
   { time: 90, message: '目标：准备补给，夜潮精英将在3:00出现' },
-  { time: 180, message: '夜潮精英出现，击败它获取金币奖励', eliteAmbush: 2 },
-  { time: 260, message: 'Boss即将到来，保留金币购买补给' },
+  { time: 180, message: '夜潮精英出现，击败它获取大量魂晶', eliteAmbush: 2 },
+  { time: 260, message: 'Boss即将到来，保留魂晶购买补给' },
 ];
 
 export class Game {
@@ -337,7 +336,7 @@ export class Game {
     resetEnemyIds();
     clearAllPools();
     this.player = createPlayer(this.meta.selectedSkin);
-    this.player.gold = getInitialGold(this.meta);
+    this.player.shards = getInitialShards(this.meta);
     this.player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
     this.refreshWeaponRefs();
     this.activeBoss = undefined;
@@ -586,7 +585,7 @@ export class Game {
         spawnXPParticles(this.particles, gem.x, gem.y, 5, {
           speed: 80, life: 0.4, radius: 2.5, color: '#88ffaa', glow: true,
         });
-        const leveled = addXP(this.player, result.value);
+        const leveled = collectShards(this.player, result.value);
         eventBus.emit(GameEvent.XP_COLLECTED, result.value);
         if (leveled) {
           eventBus.emit(GameEvent.PLAYER_LEVEL_UP, this.player.level);
@@ -619,12 +618,6 @@ export class Game {
     }
 
     this.xpGems.push(createXPGem(e.x, e.y, e.xpValue));
-
-    const goldReward = rollEnemyGoldReward(e, this.player.luck);
-    if (goldReward > 0) {
-      this.player.gold += goldReward;
-      this.damageNumbers.push(createDamageNumber(e.x, e.y - 12, goldReward, '#ffd166', 13));
-    }
 
     const heal = tryBloodZoneHeal(this.player);
     if (heal > 0) {
@@ -715,8 +708,8 @@ export class Game {
 
   private getRunAdvice(): string {
     if (this.elapsed >= GAME_DURATION) return '胜利完成，下一局尝试更高诅咒或模块构筑。';
-    if (this.elapsed < 180) return '前3分钟优先买低成本武器升级，保留金币给战地口粮。';
-    if (this.player.gold < 10) return '金币见底时少刷新商店，优先买能立即提升清怪的牌。';
+    if (this.elapsed < 180) return '前3分钟优先买低成本武器升级，保留魂晶给战地口粮。';
+    if (this.player.shards < 10) return '魂晶见底时少刷新商店，优先买能立即提升清怪的牌。';
     if (this.player.hp < this.player.maxHp * 0.35) return '低血量时购买战术补给，不要硬贪永久升级。';
     return '死亡多半来自清怪速度不足，下一局优先补范围或连锁伤害。';
   }
@@ -844,7 +837,7 @@ export class Game {
       this.renderer.drawUpgradeScreen(
         this.shop.options,
         this.shop.selectedIndex,
-        this.player.gold,
+        this.player.shards,
         this.shop.canFreeReroll(),
         this.shop.getRerollCost(this.meta),
         this.shop.canPaidReroll(this.meta)

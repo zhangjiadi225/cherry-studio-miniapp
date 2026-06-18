@@ -61,8 +61,8 @@ export const META_UPGRADES: MetaUpgradeNode[] = [
     icon: '⟳',
     branch: 'shop',
     cost: 18,
-    desc: '免费刷新后，允许继续花金币刷新商店。',
-    effect: '解锁付费刷新',
+    desc: '免费刷新后，允许继续花魂晶刷新商店。',
+    effect: '解锁魂晶刷新',
   },
   {
     id: 'shop_slot_1',
@@ -90,8 +90,8 @@ export const META_UPGRADES: MetaUpgradeNode[] = [
     icon: '◇',
     branch: 'shop',
     cost: 34,
-    desc: '降低付费刷新起价和递增幅度。',
-    effect: '刷新费用 10/20/30 改为 5/10/15',
+    desc: '降低魂晶刷新起价和递增幅度。',
+    effect: '刷新魂晶 10/20/30 改为 5/10/15',
     requires: ['paid_reroll'],
   },
   {
@@ -106,12 +106,12 @@ export const META_UPGRADES: MetaUpgradeNode[] = [
   },
   {
     id: 'opening_gold',
-    name: '开局筹码',
+    name: '开局魂晶',
     icon: '◈',
     branch: 'shop',
     cost: 26,
-    desc: '每局开始时获得少量金币，提前打开商店选择。',
-    effect: '开局 +10 金币',
+    desc: '每局开始时获得少量魂晶，第一轮商店更稳定。',
+    effect: '开局 +10 魂晶',
   },
 ];
 
@@ -219,7 +219,7 @@ export function selectSkin(meta: MetaState, id: SkinId): MetaState {
   return next;
 }
 
-export function getInitialGold(meta: MetaState): number {
+export function getInitialShards(meta: MetaState): number {
   return hasMetaUpgrade(meta, 'opening_gold') ? 10 : 0;
 }
 
@@ -243,12 +243,24 @@ export function areModifierCardsUnlocked(meta: MetaState): boolean {
   return hasMetaUpgrade(meta, 'module_cards');
 }
 
+const SOUL_FIRE_BASE_REWARD = 4;
+const SOUL_FIRE_PERFORMANCE_POOL = 56;
+const SOUL_FIRE_VICTORY_BONUS = 10;
+const SOUL_FIRE_TARGET_TIME = 15 * 60;
+const SOUL_FIRE_TARGET_KILLS = 1200;
+const SOUL_FIRE_TARGET_LEVEL = 28;
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
 export function calculateSoulFireReward(stats: { time: number; kills: number; level: number }): number {
-  const survival = Math.floor(stats.time / 20);
-  const killReward = Math.floor(stats.kills / 12);
-  const levelReward = Math.max(0, stats.level - 1) * 2;
-  const victoryBonus = stats.time >= 15 * 60 ? 40 : 0;
-  return Math.max(3, survival + killReward + levelReward + victoryBonus);
+  const timePct = clamp01(stats.time / SOUL_FIRE_TARGET_TIME);
+  const killPct = clamp01(stats.kills / SOUL_FIRE_TARGET_KILLS);
+  const levelPct = clamp01((stats.level - 1) / (SOUL_FIRE_TARGET_LEVEL - 1));
+  const completionPct = timePct * 0.55 + killPct * 0.3 + levelPct * 0.15;
+  const victoryBonus = stats.time >= SOUL_FIRE_TARGET_TIME ? SOUL_FIRE_VICTORY_BONUS : 0;
+  return SOUL_FIRE_BASE_REWARD + Math.floor(SOUL_FIRE_PERFORMANCE_POOL * completionPct) + victoryBonus;
 }
 
 export function applyRunReward(
@@ -265,7 +277,7 @@ export function applyRunReward(
     bestLevel: Math.max(meta.bestLevel, stats.level),
     lastRun: {
       ...stats,
-      victory: stats.time >= 15 * 60,
+      victory: stats.time >= SOUL_FIRE_TARGET_TIME,
       soulFireEarned,
     },
   };

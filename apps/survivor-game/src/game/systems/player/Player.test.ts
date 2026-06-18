@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { XP_BASE, XP_GROWTH } from '../../constants';
-import { addXP, createPlayer, damagePlayer } from './Player';
+import { addXP, collectShards, createPlayer, damagePlayer } from './Player';
 
 describe('addXP', () => {
   it('levels up at the current threshold and carries remaining XP', () => {
@@ -14,6 +14,16 @@ describe('addXP', () => {
     expect(player.level).toBe(2);
     expect(player.xp).toBe(1);
     expect(player.xpToNext).toBe(Math.floor(XP_BASE * Math.pow(XP_GROWTH, 1)));
+  });
+});
+
+describe('collectShards', () => {
+  it('uses one pickup resource for both shop balance and level progress', () => {
+    const player = createPlayer();
+
+    expect(collectShards(player, XP_BASE)).toBe(true);
+    expect(player.shards).toBe(XP_BASE);
+    expect(player.level).toBe(2);
   });
 });
 

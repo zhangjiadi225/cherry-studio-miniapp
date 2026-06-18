@@ -45,7 +45,7 @@ export interface Player extends PlayerMovement, PlayerCombatStats {
   level: number;
   xp: number;
   xpToNext: number;
-  gold: number;
+  shards: number;
   skinId: string;
   currentZone: MapZone;
   weapons: Weapon[];

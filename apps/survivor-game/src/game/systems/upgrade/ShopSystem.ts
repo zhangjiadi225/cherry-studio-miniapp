@@ -41,9 +41,9 @@ export class ShopSystem {
   buySelected(player: Player): UpgradeOption | undefined {
     if (this.selectedIndex >= this.options.length) return undefined;
     const option = this.options[this.selectedIndex];
-    if (option.purchased || player.gold < option.cost) return undefined;
+    if (option.purchased || player.shards < option.cost) return undefined;
 
-    player.gold -= option.cost;
+    player.shards -= option.cost;
     applyUpgrade(player, option);
     option.purchased = true;
 
@@ -58,8 +58,8 @@ export class ShopSystem {
     } else {
       if (!canPaidReroll(meta)) return false;
       const cost = this.getRerollCost(meta);
-      if (player.gold < cost) return false;
-      player.gold -= cost;
+      if (player.shards < cost) return false;
+      player.shards -= cost;
       this.paidRerollsThisRound++;
     }
 

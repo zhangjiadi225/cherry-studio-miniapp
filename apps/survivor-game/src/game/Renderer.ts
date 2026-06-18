@@ -118,8 +118,8 @@ export class Renderer {
   drawPauseButton() { drawPauseBtn(this.rc); }
   drawDesktop(meta: MetaState, tab: DesktopTab, codexTab: CodexTab) { drawDesktop(this.rc, meta, tab, codexTab); }
   drawPaused() { drawPaused(this.rc); }
-  drawUpgradeScreen(options: UpgradeOption[], selectedIndex: number, gold: number, canFreeReroll: boolean, rerollCost: number, canPaidReroll: boolean) {
-    drawUpgradeScreen(this.rc, options, selectedIndex, gold, canFreeReroll, rerollCost, canPaidReroll);
+  drawUpgradeScreen(options: UpgradeOption[], selectedIndex: number, shards: number, canFreeReroll: boolean, rerollCost: number, canPaidReroll: boolean) {
+    drawUpgradeScreen(this.rc, options, selectedIndex, shards, canFreeReroll, rerollCost, canPaidReroll);
   }
   drawGameOver(stats: {
     time: number;
