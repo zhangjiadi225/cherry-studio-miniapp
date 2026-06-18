@@ -1,22 +1,24 @@
 import {
   GameState, Enemy, Projectile, XPGem, Particle, DamageNumber,
-  Camera, UpgradeOption, WeaponType, PassiveType, GenericModifierType
+  Camera, WeaponType, PassiveType, Weapon
 } from './types';
 import {
   GAME_DURATION, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
   HEALTH_DROP_CHANCE, HEALTH_DROP_AMOUNT, CONTACT_COOLDOWN,
   MAGIC_CIRCLE_HEAL_RATE, MAGIC_CIRCLE_RADIUS,
-  GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK,
 } from './constants';
 import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
 import { createPlayer, updatePlayer, damagePlayer, addXP, hasPassive, tryBloodZoneHeal } from './systems/player/Player';
-import { updateEnemy, damageEnemy, isCollidingWithPlayer, resetEnemyIds } from './systems/enemy/Enemy';
+import { updateEnemy, isCollidingWithPlayer, resetEnemyIds } from './systems/enemy/Enemy';
 import { Spawner } from './systems/enemy/Spawner';
 import {
-  updateWeapon, updateProjectile, updateBiblePositions, getGarlicRadius,
+  updateWeapon, updateBiblePositions, getGarlicRadius,
   createWeapon, updateGarlicAura,
 } from './systems/weapon/Weapon';
+import { AudioSystem } from './systems/audio/Audio';
+import { ProjectileCombat } from './systems/combat/ProjectileCombat';
+import { ShopSystem } from './systems/upgrade/ShopSystem';
 import { createCamera, updateCamera, shakeCamera } from './systems/camera/Camera';
 import { createXPGem, updateXPGem } from './systems/player/XPGem';
 import {
@@ -24,12 +26,9 @@ import {
   spawnExplosionParticles, spawnHealParticles, spawnLevelUpParticles
 } from './effects/Particle';
 import { createDamageNumber, updateDamageNumber } from './effects/DamageNumber';
-import { circlesOverlap, compactArray } from './utils/math';
-import { generateUpgradeOptions, applyUpgrade } from './systems/weapon/Upgrade';
 import {
   type CodexTab, type DesktopTab, type MetaState,
-  loadMetaState, applyRunReward, getInitialGold, getMetaShopOptionCount,
-  canPaidReroll, getMetaRerollCost, areModifierCardsUnlocked,
+  loadMetaState, applyRunReward, getInitialGold,
   buyMetaUpgrade, selectSkin, META_UPGRADES, CHARACTER_SKINS,
 } from './systems/meta/MetaProgression';
 import { MapSystem } from './systems/map/MapSystem';
@@ -41,6 +40,9 @@ export class Game {
   private input: Input;
   private renderer: Renderer;
   private spawner = new Spawner();
+  private audio = new AudioSystem();
+  private projectileCombat = new ProjectileCombat();
+  private shop = new ShopSystem();
   private mapSystem = new MapSystem();
   private camera: Camera;
   private meta: MetaState = loadMetaState();
@@ -55,20 +57,18 @@ export class Game {
   private elapsed = 0;
   private difficulty = 0;
   private killCount = 0;
-  private upgradeOptions: UpgradeOption[] = [];
-  private selectedUpgrade = 0;
-  private shopFreeRerollAvailable = true;
-  private shopPaidRerollsThisRound = 0;
   private garlicTickTimer = { value: 0 };
   private lastTime = 0;
+  private animationFrameId = 0;
+  private destroyed = false;
   private levelUpQueue = 0;
   private bossWarningTimer = 0;
   private bossWarningName = '';
   private bossWarningShown = new Set<number>();
   private damageFlashTimer = 0;
   private levelUpFlashTimer = 0;
-  private enemyGrid = new Map<string, Enemy[]>();
-  private readonly enemyGridCellSize = 240;
+  private garlicWeapon?: Weapon;
+  private activeBoss?: Enemy;
   private gameOverStats?: {
     time: number;
     kills: number;
@@ -77,6 +77,15 @@ export class Game {
     soulFireEarned: number;
     totalSoulFire: number;
   };
+  private readonly handleKeyDown = (e: KeyboardEvent) => this.onKeyDown(e);
+  private readonly handleCanvasClick = (e: MouseEvent) => this.onClick(e);
+  private readonly handleCanvasTouchStart = (e: TouchEvent) => this.onTouchStart(e);
+  private readonly handleVisibilityChange = () => {
+    if (document.hidden && gameState.is('playing')) {
+      gameState.transition('pause');
+    }
+  };
+  private readonly handleAnimationFrame = (time: number) => this.loop(time);
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -84,18 +93,26 @@ export class Game {
     this.renderer = new Renderer(canvas);
     this.camera = createCamera();
 
-    window.addEventListener('keydown', (e) => this.onKeyDown(e));
-    canvas.addEventListener('click', (e) => this.onClick(e));
-    canvas.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: true });
-
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden && gameState.is('playing')) {
-        gameState.transition('pause');
-      }
-    });
+    window.addEventListener('keydown', this.handleKeyDown);
+    canvas.addEventListener('click', this.handleCanvasClick);
+    canvas.addEventListener('touchstart', this.handleCanvasTouchStart, { passive: true });
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
 
     this.lastTime = performance.now();
-    requestAnimationFrame((t) => this.loop(t));
+    this.animationFrameId = requestAnimationFrame(this.handleAnimationFrame);
+  }
+
+  destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    window.removeEventListener('keydown', this.handleKeyDown);
+    this.canvas.removeEventListener('click', this.handleCanvasClick);
+    this.canvas.removeEventListener('touchstart', this.handleCanvasTouchStart);
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    cancelAnimationFrame(this.animationFrameId);
+    this.input.destroy();
+    this.audio.destroy();
+    this.renderer.destroy();
   }
 
   // ──────────────────────────── Input Routing ────────────────────────────
@@ -104,9 +121,9 @@ export class Game {
     switch (gameState.state) {
       case 'upgrading':
         if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
-          this.selectedUpgrade = Math.max(0, this.selectedUpgrade - 1);
+          this.shop.selectPrevious();
         } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
-          this.selectedUpgrade = Math.min(this.upgradeOptions.length - 1, this.selectedUpgrade + 1);
+          this.shop.selectNext();
         } else if (e.code === 'Enter') {
           e.preventDefault();
           this.buySelectedUpgrade();
@@ -140,6 +157,8 @@ export class Game {
       gameState.reset();
     } else if (gameState.is('upgrading')) {
       this.handleClickUpgrade(e);
+    } else if (gameState.is('playing')) {
+      this.handlePlayingHudPointer(e.clientX, e.clientY);
     }
   }
 
@@ -156,11 +175,28 @@ export class Game {
       const rect = this.canvas.getBoundingClientRect();
       const tx = e.touches[0].clientX - rect.left;
       const ty = e.touches[0].clientY - rect.top;
-      const btn = this.renderer.getPauseButtonRect();
-      if (tx >= btn.x && tx <= btn.x + btn.w && ty >= btn.y && ty <= btn.y + btn.h) {
-        gameState.transition('pause');
-      }
+      this.handlePlayingHudCanvasPoint(tx, ty);
     }
+  }
+
+  private handlePlayingHudPointer(clientX: number, clientY: number): boolean {
+    const rect = this.canvas.getBoundingClientRect();
+    return this.handlePlayingHudCanvasPoint(clientX - rect.left, clientY - rect.top);
+  }
+
+  private handlePlayingHudCanvasPoint(x: number, y: number): boolean {
+    const audioBtn = this.renderer.getAudioButtonRect();
+    if (x >= audioBtn.x && x <= audioBtn.x + audioBtn.w && y >= audioBtn.y && y <= audioBtn.y + audioBtn.h) {
+      this.audio.toggleMuted();
+      return true;
+    }
+
+    const pauseBtn = this.renderer.getPauseButtonRect();
+    if (x >= pauseBtn.x && x <= pauseBtn.x + pauseBtn.w && y >= pauseBtn.y && y <= pauseBtn.y + pauseBtn.h) {
+      gameState.transition('pause');
+      return true;
+    }
+    return false;
   }
 
   private handleDesktopKey(e: KeyboardEvent) {
@@ -297,6 +333,8 @@ export class Game {
     this.player = createPlayer(this.meta.selectedSkin);
     this.player.gold = getInitialGold(this.meta);
     this.player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
+    this.refreshWeaponRefs();
+    this.activeBoss = undefined;
     this.enemies = [];
     this.projectiles = [];
     this.xpGems = [];
@@ -306,8 +344,7 @@ export class Game {
     this.difficulty = 0;
     this.killCount = 0;
     this.levelUpQueue = 0;
-    this.shopFreeRerollAvailable = true;
-    this.shopPaidRerollsThisRound = 0;
+    this.shop.reset();
     this.garlicTickTimer.value = 0;
     this.bossWarningTimer = 0;
     this.bossWarningName = '';
@@ -331,11 +368,15 @@ export class Game {
   // ──────────────────────────── Game Loop ────────────────────────────
 
   private loop(time: number) {
-    const dt = Math.min(0.05, (time - this.lastTime) / 1000);
+    if (this.destroyed) return;
+    const rawDt = (time - this.lastTime) / 1000;
     this.lastTime = time;
-    this.update(dt);
-    this.render();
-    requestAnimationFrame((t) => this.loop(t));
+    if (rawDt <= 1.0) {
+      const dt = Math.min(0.05, rawDt);
+      this.update(dt);
+      this.render();
+    }
+    this.animationFrameId = requestAnimationFrame(this.handleAnimationFrame);
   }
 
   private update(dt: number) {
@@ -368,9 +409,8 @@ export class Game {
       updateWeapon(w, this.player, this.enemies, this.projectiles, dt);
     }
 
-    const garlicWeapon = this.player.weapons.find(w => w.type === WeaponType.GARLIC);
-    if (garlicWeapon) {
-      const { hits } = updateGarlicAura(garlicWeapon, this.player, this.enemies, dt, this.garlicTickTimer);
+    if (this.garlicWeapon) {
+      const { hits } = updateGarlicAura(this.garlicWeapon, this.player, this.enemies, dt, this.garlicTickTimer);
       for (const hit of hits) {
         this.damageNumbers.push(createDamageNumber(hit.x, hit.y, hit.dmg, '#cccc66', 14));
         spawnHitParticles(this.particles, hit.x, hit.y, '#cccc66', 3, {
@@ -380,12 +420,19 @@ export class Game {
     }
 
     updateBiblePositions(this.projectiles, this.player);
-    this.updateProjectiles(dt);
+    this.projectileCombat.update({
+      projectiles: this.projectiles,
+      enemies: this.enemies,
+      mapSystem: this.mapSystem,
+      particles: this.particles,
+      damageNumbers: this.damageNumbers,
+    }, dt);
 
     for (const e of this.enemies) {
       if (e.hp <= 0) this.onEnemyDeath(e);
     }
-    compactArray(this.enemies, (e) => e.hp <= 0);
+    this.releaseDeadEnemies();
+    this.refreshActiveBoss();
 
     this.updateXPGems(dt);
 
@@ -414,6 +461,30 @@ export class Game {
 
   // ──────────────────────────── Update Sub-systems ────────────────────────────
 
+  private refreshWeaponRefs() {
+    this.garlicWeapon = this.player.weapons.find(w => w.type === WeaponType.GARLIC);
+  }
+
+  private refreshActiveBoss() {
+    if (this.activeBoss && this.activeBoss.hp > 0) return;
+    this.activeBoss = this.enemies.find(e => e.isBoss && e.hp > 0);
+  }
+
+  private releaseDeadEnemies() {
+    let write = 0;
+    for (let read = 0; read < this.enemies.length; read++) {
+      const enemy = this.enemies[read];
+      if (enemy.hp > 0) {
+        if (write !== read) this.enemies[write] = enemy;
+        write++;
+      } else {
+        if (this.activeBoss === enemy) this.activeBoss = undefined;
+        pools.enemies.release(enemy);
+      }
+    }
+    this.enemies.length = write;
+  }
+
   private releaseDeadParticles() {
     let write = 0;
     for (let read = 0; read < this.particles.length; read++) {
@@ -440,20 +511,6 @@ export class Game {
       }
     }
     this.damageNumbers.length = write;
-  }
-
-  private releaseDeadProjectiles() {
-    let write = 0;
-    for (let read = 0; read < this.projectiles.length; read++) {
-      const p = this.projectiles[read];
-      if (p.life > 0) {
-        if (write !== read) this.projectiles[write] = p;
-        write++;
-      } else {
-        pools.projectiles.release(p);
-      }
-    }
-    this.projectiles.length = write;
   }
 
   private releaseDeadXPGems() {
@@ -501,228 +558,6 @@ export class Game {
         }
         e.contactCooldown = CONTACT_COOLDOWN;
       }
-    }
-  }
-
-  private updateProjectiles(dt: number) {
-    this.rebuildEnemyGrid();
-    const projectileCount = this.projectiles.length;
-    for (let i = 0; i < projectileCount; i++) {
-      const p = this.projectiles[i];
-      if (p.life <= 0) continue;
-      if (!updateProjectile(p, dt)) { p.life = 0; continue; }
-      if (p.orbitAngle === undefined && this.mapSystem.handleProjectileCollision(p.x, p.y, p.radius)) {
-        p.life = 0; continue;
-      }
-      for (const e of this.enemies) {
-        if (e.hp <= 0) continue;
-        if (p.hitEnemies.has(e.id)) continue;
-        if (circlesOverlap(p.x, p.y, p.radius, e.x, e.y, e.radius)) {
-          const isDead = this.applyProjectileHit(p, e);
-          p.pierceCount++;
-          if (p.pierceCount > p.pierce) {
-            if (p.type === WeaponType.FIRE_WAND && isDead) {
-              spawnExplosionParticles(this.particles, e.x, e.y, '#ff6600', 15, {
-                speed: 200, life: 0.7, radius: 5, type: 'spark', glow: true,
-                innerColor: '#ffcc00', ringCount: 6,
-              });
-            }
-            p.life = 0;
-            break;
-          }
-        }
-      }
-    }
-    this.releaseDeadProjectiles();
-  }
-
-  private rebuildEnemyGrid() {
-    this.enemyGrid.clear();
-    for (const enemy of this.enemies) {
-      if (enemy.hp <= 0) continue;
-      const key = this.getEnemyGridKey(enemy.x, enemy.y);
-      let bucket = this.enemyGrid.get(key);
-      if (!bucket) {
-        bucket = [];
-        this.enemyGrid.set(key, bucket);
-      }
-      bucket.push(enemy);
-    }
-  }
-
-  private getEnemyGridKey(x: number, y: number): string {
-    const gx = Math.floor(x / this.enemyGridCellSize);
-    const gy = Math.floor(y / this.enemyGridCellSize);
-    return `${gx}:${gy}`;
-  }
-
-  private forNearbyEnemies(x: number, y: number, radius: number, visit: (enemy: Enemy) => void) {
-    const minX = Math.floor((x - radius) / this.enemyGridCellSize);
-    const maxX = Math.floor((x + radius) / this.enemyGridCellSize);
-    const minY = Math.floor((y - radius) / this.enemyGridCellSize);
-    const maxY = Math.floor((y + radius) / this.enemyGridCellSize);
-
-    for (let gx = minX; gx <= maxX; gx++) {
-      for (let gy = minY; gy <= maxY; gy++) {
-        const bucket = this.enemyGrid.get(`${gx}:${gy}`);
-        if (!bucket) continue;
-        for (const enemy of bucket) {
-          if (enemy.hp <= 0) continue;
-          const dx = enemy.x - x;
-          const dy = enemy.y - y;
-          const hitRadius = radius + enemy.radius;
-          if (dx * dx + dy * dy <= hitRadius * hitRadius) visit(enemy);
-        }
-      }
-    }
-  }
-
-  private applyProjectileHit(p: Projectile, e: Enemy): boolean {
-    p.hitEnemies.add(e.id);
-    const dir = { x: e.x - p.x, y: e.y - p.y };
-    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
-    const knockback = p.knockback + (this.projectileHasEffect(p, 'knockback') ? 120 : 0);
-    const isDead = damageEnemy(e, p.damage, (dir.x / len) * knockback, (dir.y / len) * knockback);
-    const hitColor = ENEMY_DATA[e.type].color;
-
-    spawnHitParticles(this.particles, e.x, e.y, hitColor, 6, {
-      speed: 150, life: 0.5, radius: 3, type: 'spark', glow: true,
-    });
-    if (p.type === WeaponType.FIRE_WAND) {
-      spawnHitParticles(this.particles, e.x, e.y, '#ff8800', 4, {
-        speed: 100, life: 0.4, radius: 4, type: 'circle', glow: true,
-      });
-    }
-    if (p.type === WeaponType.LIGHTNING) {
-      spawnHitParticles(this.particles, e.x, e.y, '#ffff88', 3, {
-        speed: 120, life: 0.3, radius: 2, type: 'star', glow: true,
-      });
-    }
-
-    const dmgColor = this.getProjectileDamageColor(p);
-    const dmgSize = p.damage >= 30 ? 18 : p.damage >= 20 ? 16 : 14;
-    this.damageNumbers.push(createDamageNumber(e.x, e.y, p.damage, dmgColor, dmgSize));
-    this.triggerProjectileModifiers(p, e);
-    return isDead;
-  }
-
-  private triggerProjectileModifiers(p: Projectile, e: Enemy) {
-    for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
-      if (modifier.trigger !== 'onHit') continue;
-      if (!this.projectileHasModifier(p, modifier.id)) continue;
-
-      switch (modifier.effect) {
-        case 'pulse':
-          if (!p.pulseDone) {
-            p.pulseDone = true;
-            this.spawnImpactPulse(p);
-          }
-          break;
-        case 'chain':
-          if (!p.chainDone) {
-            p.chainDone = true;
-            this.spawnChainHit(p, e);
-          }
-          break;
-        case 'split':
-          if (!p.splitDone && this.canSplitProjectile(p)) {
-            p.splitDone = true;
-            this.spawnSplitProjectiles(p);
-          }
-          break;
-      }
-    }
-  }
-
-  private projectileHasModifier(p: Projectile, modifier: GenericModifierType): boolean {
-    return (p.modifierMask & GENERIC_MODIFIER_MASK[modifier]) !== 0;
-  }
-
-  private projectileHasEffect(p: Projectile, effect: 'knockback'): boolean {
-    return Object.values(GENERIC_MODIFIER_DATA).some((modifier) =>
-      modifier.effect === effect &&
-      this.projectileHasModifier(p, modifier.id)
-    );
-  }
-
-  private getProjectileDamageColor(p: Projectile): string {
-    return p.type === WeaponType.FIRE_WAND ? '#ff8844' :
-           p.type === WeaponType.LIGHTNING ? '#ffff88' :
-           p.type === WeaponType.HOLY_WATER ? '#88ccff' : '#ffffff';
-  }
-
-  private spawnImpactPulse(p: Projectile) {
-    const radius = Math.max(36, p.radius * 1.8);
-    const damage = p.damage * 0.35;
-    spawnExplosionParticles(this.particles, p.x, p.y, '#b277ff', 10, {
-      speed: 120, life: 0.45, radius: 3, type: 'spark', glow: true,
-      innerColor: '#f0ddff', ringCount: 5,
-    });
-
-    this.forNearbyEnemies(p.x, p.y, radius, (target) => {
-      const dir = { x: target.x - p.x, y: target.y - p.y };
-      const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
-      damageEnemy(target, damage, (dir.x / len) * p.knockback * 0.4, (dir.y / len) * p.knockback * 0.4);
-      this.damageNumbers.push(createDamageNumber(target.x, target.y, damage, '#c49cff', 12));
-    });
-  }
-
-  private spawnChainHit(p: Projectile, source: Enemy) {
-    let best: Enemy | undefined;
-    let bestDist = Infinity;
-    this.forNearbyEnemies(source.x, source.y, 240, (target) => {
-      if (target.hp <= 0 || target.id === source.id || p.hitEnemies.has(target.id)) return;
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const d = Math.sqrt(dx * dx + dy * dy);
-      if (d < 240 && d < bestDist) {
-        best = target;
-        bestDist = d;
-      }
-    });
-    if (!best) return;
-
-    p.hitEnemies.add(best.id);
-    const dir = { x: best.x - source.x, y: best.y - source.y };
-    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
-    const damage = p.damage * 0.55;
-    damageEnemy(best, damage, (dir.x / len) * p.knockback * 0.7, (dir.y / len) * p.knockback * 0.7);
-    spawnHitParticles(this.particles, best.x, best.y, '#bde7ff', 6, {
-      speed: 130, life: 0.35, radius: 2.5, type: 'star', glow: true,
-    });
-    this.damageNumbers.push(createDamageNumber(best.x, best.y, damage, '#bde7ff', 13));
-  }
-
-  private canSplitProjectile(p: Projectile): boolean {
-    return p.type === WeaponType.MAGIC_WAND || p.type === WeaponType.FIRE_WAND || p.type === WeaponType.AXE;
-  }
-
-  private spawnSplitProjectiles(p: Projectile) {
-    const speed = Math.max(220, Math.sqrt(p.vx * p.vx + p.vy * p.vy) || 320);
-    const baseAngle = Math.atan2(p.vy, p.vx || 1);
-    for (const offset of [-0.45, 0.45]) {
-      const child = pools.projectiles.acquire();
-      const angle = baseAngle + offset;
-      child.x = p.x;
-      child.y = p.y;
-      child.vx = Math.cos(angle) * speed;
-      child.vy = Math.sin(angle) * speed;
-      child.damage = p.damage * 0.4;
-      child.radius = Math.max(4, p.radius * 0.65);
-      child.life = Math.min(1.1, Math.max(0.55, p.maxLife * 0.55));
-      child.maxLife = child.life;
-      child.pierce = 0;
-      child.pierceCount = 0;
-      child.type = p.type;
-      child.hitEnemies.clear();
-      child.knockback = p.knockback * 0.6;
-      child.animTimer = 0;
-      child.modifierMask = p.modifierMask;
-      child.splitDone = true;
-      child.chainDone = false;
-      child.pulseDone = false;
-      if (p.type === WeaponType.AXE) child.gravY = p.gravY;
-      this.projectiles.push(child);
     }
   }
 
@@ -828,46 +663,18 @@ export class Game {
 
   private showUpgradeScreen() {
     gameState.transition('upgrade');
-    this.upgradeOptions = generateUpgradeOptions(
-      this.player,
-      getMetaShopOptionCount(this.meta, this.player.level),
-      areModifierCardsUnlocked(this.meta)
-    );
-    this.selectedUpgrade = 0;
-    this.shopFreeRerollAvailable = true;
-    this.shopPaidRerollsThisRound = 0;
+    this.shop.open(this.player, this.meta);
   }
 
   private buySelectedUpgrade() {
-    if (this.selectedUpgrade >= this.upgradeOptions.length) return;
-    const option = this.upgradeOptions[this.selectedUpgrade];
-    if (option.purchased || this.player.gold < option.cost) return;
-
-    this.player.gold -= option.cost;
-    applyUpgrade(this.player, option);
-    option.purchased = true;
+    const option = this.shop.buySelected(this.player);
+    if (!option) return;
+    this.refreshWeaponRefs();
     eventBus.emit(GameEvent.UPGRADE_SELECT, option);
-
-    const nextAvailable = this.upgradeOptions.findIndex((o) => !o.purchased);
-    if (nextAvailable >= 0) this.selectedUpgrade = nextAvailable;
   }
 
   private rerollShop() {
-    if (this.shopFreeRerollAvailable) {
-      this.shopFreeRerollAvailable = false;
-    } else {
-      if (!canPaidReroll(this.meta)) return;
-      const cost = getMetaRerollCost(this.meta, this.shopPaidRerollsThisRound);
-      if (this.player.gold < cost) return;
-      this.player.gold -= cost;
-      this.shopPaidRerollsThisRound++;
-    }
-    this.upgradeOptions = generateUpgradeOptions(
-      this.player,
-      getMetaShopOptionCount(this.meta, this.player.level),
-      areModifierCardsUnlocked(this.meta)
-    );
-    this.selectedUpgrade = 0;
+    this.shop.reroll(this.player, this.meta);
   }
 
   private finishShop() {
@@ -891,33 +698,12 @@ export class Game {
     const y = clientY - rect.top;
     const w = this.renderer.getWidth();
     const h = this.renderer.getHeight();
-    if (this.upgradeOptions.length === 0) return;
-
-    const cardGap = 12;
-    const cardW = Math.min(180, (w - 90) / this.upgradeOptions.length - cardGap);
-    const cardH = 230;
-    const totalW = this.upgradeOptions.length * (cardW + cardGap) - cardGap;
-    const startX = (w - totalW) / 2;
-    const cardY = h / 2 - cardH / 2 - 5;
-    for (let i = 0; i < this.upgradeOptions.length; i++) {
-      const cx = startX + i * (cardW + cardGap);
-      if (x >= cx && x <= cx + cardW && y >= cardY && y <= cardY + cardH) {
-        this.selectedUpgrade = i;
-        this.buySelectedUpgrade();
-        return;
-      }
-    }
-
-    const btnY = h / 2 + 155;
-    const btnW = 150;
-    const btnH = 38;
-    const rerollX = w / 2 - 165;
-    const continueX = w / 2 + 15;
-    if (x >= rerollX && x <= rerollX + btnW && y >= btnY && y <= btnY + btnH) {
+    const action = this.shop.handleClick(x, y, w, h);
+    if (action === 'buy') {
+      this.buySelectedUpgrade();
+    } else if (action === 'reroll') {
       this.rerollShop();
-      return;
-    }
-    if (x >= continueX && x <= continueX + btnW && y >= btnY && y <= btnY + btnH) {
+    } else if (action === 'continue') {
       this.finishShop();
     }
   }
@@ -960,9 +746,8 @@ export class Game {
       }
     }
 
-    const garlicWeapon = this.player.weapons.find(w => w.type === WeaponType.GARLIC);
-    if (garlicWeapon) {
-      this.renderer.drawGarlicAura(this.player, getGarlicRadius(garlicWeapon, this.player));
+    if (this.garlicWeapon) {
+      this.renderer.drawGarlicAura(this.player, getGarlicRadius(this.garlicWeapon, this.player));
     }
 
     this.renderer.drawPickupRange(this.player);
@@ -975,10 +760,12 @@ export class Game {
 
     this.renderer.drawUI(this.player, this.elapsed, this.killCount);
     this.renderer.drawMinimap(this.player, this.enemies);
+    this.renderer.drawAudioButton(this.audio.isMuted());
     this.renderer.drawPauseButton();
 
-    const boss = this.enemies.find(e => e.isBoss && e.hp > 0);
-    if (boss) this.renderer.drawBossBar(ENEMY_DATA[boss.type].name, boss.hp, boss.maxHp);
+    if (this.activeBoss?.hp && this.activeBoss.hp > 0) {
+      this.renderer.drawBossBar(ENEMY_DATA[this.activeBoss.type].name, this.activeBoss.hp, this.activeBoss.maxHp);
+    }
     if (this.bossWarningTimer > 0) this.renderer.drawBossWarning(this.bossWarningName, this.bossWarningTimer);
     if (this.damageFlashTimer > 0) this.renderer.drawDamageFlash(this.damageFlashTimer);
     if (this.levelUpFlashTimer > 0) this.renderer.drawLevelUpFlash(this.levelUpFlashTimer);
@@ -987,12 +774,12 @@ export class Game {
       this.renderer.drawPaused();
     } else if (gameState.is('upgrading')) {
       this.renderer.drawUpgradeScreen(
-        this.upgradeOptions,
-        this.selectedUpgrade,
+        this.shop.options,
+        this.shop.selectedIndex,
         this.player.gold,
-        this.shopFreeRerollAvailable,
-        getMetaRerollCost(this.meta, this.shopPaidRerollsThisRound),
-        canPaidReroll(this.meta)
+        this.shop.canFreeReroll(),
+        this.shop.getRerollCost(this.meta),
+        this.shop.canPaidReroll(this.meta)
       );
     } else if (gameState.is('gameover')) {
       this.renderer.drawGameOver(this.gameOverStats ?? {

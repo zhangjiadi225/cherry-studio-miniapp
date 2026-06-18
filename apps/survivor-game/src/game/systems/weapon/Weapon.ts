@@ -1,7 +1,8 @@
 import { Weapon, WeaponType, Player, Enemy, Projectile, GenericModifierType } from '../../types';
 import { WEAPON_DATA, FIND_ENEMY_RANGE, LIGHTNING_RANGE, HOLY_WATER_RANGE, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from '../../constants';
-import { dist, normalize, randFloat } from '../../utils/math';
+import { normalize, randFloat } from '../../utils/math';
 import { pools } from '../../utils/PoolManager';
+import { eventBus, GameEvent } from '../../events';
 
 export function createWeapon(type: WeaponType): Weapon {
   const d = WEAPON_DATA[type];
@@ -86,7 +87,10 @@ export function updateWeapon(
       fired = true;
       break;
   }
-  if (fired) w.timer = 0;
+  if (fired) {
+    w.timer = 0;
+    eventBus.emit(GameEvent.WEAPON_FIRE, w.type);
+  }
 }
 
 function findNearestEnemies(
@@ -95,13 +99,31 @@ function findNearestEnemies(
   count: number,
   maxDist: number = FIND_ENEMY_RANGE
 ): Enemy[] {
-  return enemies
-    .filter(e => e.hp > 0)
-    .map(e => ({ enemy: e, d: dist(player, e) }))
-    .filter(e => e.d < maxDist)
-    .sort((a, b) => a.d - b.d)
-    .slice(0, count)
-    .map(e => e.enemy);
+  if (count <= 0) return [];
+  const bestEnemies: Enemy[] = [];
+  const bestDistSq: number[] = [];
+  const maxDistSq = maxDist * maxDist;
+
+  for (const enemy of enemies) {
+    if (enemy.hp <= 0) continue;
+    const dx = enemy.x - player.x;
+    const dy = enemy.y - player.y;
+    const dSq = dx * dx + dy * dy;
+    if (dSq >= maxDistSq) continue;
+
+    let insertAt = bestDistSq.length;
+    while (insertAt > 0 && dSq < bestDistSq[insertAt - 1]) insertAt--;
+    if (insertAt >= count) continue;
+
+    bestEnemies.splice(insertAt, 0, enemy);
+    bestDistSq.splice(insertAt, 0, dSq);
+    if (bestEnemies.length > count) {
+      bestEnemies.length = count;
+      bestDistSq.length = count;
+    }
+  }
+
+  return bestEnemies;
 }
 
 function acquireProjectile(): Projectile {
@@ -131,6 +153,72 @@ function attachWeaponModifiers(p: Projectile, w: Weapon) {
   p.pulseDone = false;
 }
 
+type ProjectileConfig = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  damage: number;
+  radius: number;
+  life: number;
+  pierce: number;
+  type: WeaponType;
+  knockback: number;
+  animTimer?: number;
+  gravY?: number;
+};
+
+function spawnWeaponProjectile(w: Weapon, projectiles: Projectile[], config: ProjectileConfig): Projectile {
+  const p = acquireProjectile();
+  p.x = config.x;
+  p.y = config.y;
+  p.vx = config.vx;
+  p.vy = config.vy;
+  p.damage = config.damage;
+  p.radius = config.radius;
+  p.life = config.life;
+  p.maxLife = config.life;
+  p.pierce = config.pierce;
+  p.pierceCount = 0;
+  p.type = config.type;
+  p.knockback = config.knockback;
+  p.animTimer = config.animTimer ?? 0;
+  p.gravY = config.gravY;
+  attachWeaponModifiers(p, w);
+  projectiles.push(p);
+  return p;
+}
+
+function fireTargetedProjectile(
+  w: Weapon,
+  player: Player,
+  target: Enemy | undefined,
+  fallbackAngle: number,
+  projectiles: Projectile[],
+  config: Omit<ProjectileConfig, 'x' | 'y' | 'vx' | 'vy' | 'life' | 'pierce' | 'knockback'>
+) {
+  let vx: number;
+  let vy: number;
+  if (target) {
+    const dir = normalize({ x: target.x - player.x, y: target.y - player.y });
+    vx = dir.x * w.speed;
+    vy = dir.y * w.speed;
+  } else {
+    vx = Math.cos(fallbackAngle) * w.speed;
+    vy = Math.sin(fallbackAngle) * w.speed;
+  }
+  spawnWeaponProjectile(w, projectiles, {
+    ...config,
+    x: player.x,
+    y: player.y,
+    vx,
+    vy,
+    life: w.duration,
+    pierce: w.pierce,
+    knockback: w.knockback,
+  });
+}
+
 function fireMagicWand(
   w: Weapon, player: Player, enemies: Enemy[],
   projectiles: Projectile[], damage: number, area: number
@@ -138,28 +226,12 @@ function fireMagicWand(
   const targets = findNearestEnemies(player, enemies, w.count);
   for (let i = 0; i < w.count; i++) {
     const target = targets[i % targets.length];
-    let vx: number, vy: number;
-    if (target) {
-      const dir = normalize({ x: target.x - player.x, y: target.y - player.y });
-      vx = dir.x * w.speed;
-      vy = dir.y * w.speed;
-    } else {
-      const angle = (i / w.count) * Math.PI * 2 + player.animTimer * 0.1;
-      vx = Math.cos(angle) * w.speed;
-      vy = Math.sin(angle) * w.speed;
-    }
-    const p = acquireProjectile();
-    p.x = player.x; p.y = player.y;
-    p.vx = vx; p.vy = vy;
-    p.damage = damage;
-    p.radius = 8 * area;
-    p.life = w.duration; p.maxLife = w.duration;
-    p.pierce = w.pierce; p.pierceCount = 0;
-    p.type = WeaponType.MAGIC_WAND;
-    p.knockback = w.knockback;
-    p.animTimer = 0;
-    attachWeaponModifiers(p, w);
-    projectiles.push(p);
+    const angle = (i / w.count) * Math.PI * 2 + player.animTimer * 0.1;
+    fireTargetedProjectile(w, player, target, angle, projectiles, {
+      damage,
+      radius: 8 * area,
+      type: WeaponType.MAGIC_WAND,
+    });
   }
 }
 
@@ -170,28 +242,11 @@ function fireFireWand(
   const targets = findNearestEnemies(player, enemies, w.count);
   for (let i = 0; i < w.count; i++) {
     const target = targets[i % targets.length];
-    let vx: number, vy: number;
-    if (target) {
-      const dir = normalize({ x: target.x - player.x, y: target.y - player.y });
-      vx = dir.x * w.speed;
-      vy = dir.y * w.speed;
-    } else {
-      const angle = Math.random() * Math.PI * 2;
-      vx = Math.cos(angle) * w.speed;
-      vy = Math.sin(angle) * w.speed;
-    }
-    const p = acquireProjectile();
-    p.x = player.x; p.y = player.y;
-    p.vx = vx; p.vy = vy;
-    p.damage = damage;
-    p.radius = 12 * area;
-    p.life = w.duration; p.maxLife = w.duration;
-    p.pierce = w.pierce; p.pierceCount = 0;
-    p.type = WeaponType.FIRE_WAND;
-    p.knockback = w.knockback;
-    p.animTimer = 0;
-    attachWeaponModifiers(p, w);
-    projectiles.push(p);
+    fireTargetedProjectile(w, player, target, Math.random() * Math.PI * 2, projectiles, {
+      damage,
+      radius: 12 * area,
+      type: WeaponType.FIRE_WAND,
+    });
   }
 }
 
@@ -202,20 +257,20 @@ function fireAxe(
   for (let i = 0; i < w.count; i++) {
     const angle = randFloat(-Math.PI * 0.8, -Math.PI * 0.2) + (i * 0.3);
     const speed = w.speed * randFloat(0.8, 1.2);
-    const p = acquireProjectile();
-    p.x = player.x + randFloat(-20, 20); p.y = player.y;
-    p.vx = Math.cos(angle) * speed * 0.5;
-    p.vy = Math.sin(angle) * speed;
-    p.damage = damage;
-    p.radius = 14 * area;
-    p.life = w.duration; p.maxLife = w.duration;
-    p.pierce = w.pierce; p.pierceCount = 0;
-    p.type = WeaponType.AXE;
-    p.knockback = w.knockback;
-    p.animTimer = Math.random() * Math.PI * 2;
-    p.gravY = 400;
-    attachWeaponModifiers(p, w);
-    projectiles.push(p);
+    spawnWeaponProjectile(w, projectiles, {
+      x: player.x + randFloat(-20, 20),
+      y: player.y,
+      vx: Math.cos(angle) * speed * 0.5,
+      vy: Math.sin(angle) * speed,
+      damage,
+      radius: 14 * area,
+      life: w.duration,
+      pierce: w.pierce,
+      type: WeaponType.AXE,
+      knockback: w.knockback,
+      animTimer: Math.random() * Math.PI * 2,
+      gravY: 400,
+    });
   }
 }
 
@@ -306,18 +361,18 @@ function fireHolyWater(
     const target = targets[i % targets.length];
     const tx = target ? target.x : player.x + randFloat(-200, 200);
     const ty = target ? target.y : player.y + randFloat(-200, 200);
-    const p = acquireProjectile();
-    p.x = tx; p.y = ty;
-    p.vx = 0; p.vy = 0;
-    p.damage = damage;
-    p.radius = 40 * area;
-    p.life = w.duration; p.maxLife = w.duration;
-    p.pierce = w.pierce; p.pierceCount = 0;
-    p.type = WeaponType.HOLY_WATER;
-    p.knockback = w.knockback;
-    p.animTimer = 0;
-    attachWeaponModifiers(p, w);
-    projectiles.push(p);
+    spawnWeaponProjectile(w, projectiles, {
+      x: tx,
+      y: ty,
+      vx: 0,
+      vy: 0,
+      damage,
+      radius: 40 * area,
+      life: w.duration,
+      pierce: w.pierce,
+      type: WeaponType.HOLY_WATER,
+      knockback: w.knockback,
+    });
   }
 }
 
@@ -391,7 +446,10 @@ export function updateGarlicAura(
   const hasRepulsion = hasModifier(garlicWeapon, GenericModifierType.REPULSION_FIELD);
   for (const e of enemies) {
     if (e.hp <= 0) continue;
-    if (dist(e, player) < radius + e.radius) {
+    const dx = e.x - player.x;
+    const dy = e.y - player.y;
+    const hitRadius = radius + e.radius;
+    if (dx * dx + dy * dy < hitRadius * hitRadius) {
       e.hp -= dmg;
       e.hitFlash = 1;
       if (hasRepulsion) {

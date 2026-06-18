@@ -1,4 +1,4 @@
-import { Particle, DamageNumber, Projectile, XPGem } from '../types';
+import { Particle, DamageNumber, Projectile, XPGem, Enemy, EnemyType } from '../types';
 import { ObjectPool } from './ObjectPool';
 
 function resetParticle(p: Particle) {
@@ -72,6 +72,26 @@ function resetXPGem(g: XPGem) {
   g.type = 'small';
 }
 
+function resetEnemy(e: Enemy) {
+  e.id = 0;
+  e.x = 0;
+  e.y = 0;
+  e.radius = 0;
+  e.hp = 0;
+  e.maxHp = 0;
+  e.speed = 0;
+  e.damage = 0;
+  e.type = EnemyType.ZOMBIE;
+  e.isElite = false;
+  e.isBoss = false;
+  e.knockbackX = 0;
+  e.knockbackY = 0;
+  e.hitFlash = 0;
+  e.animTimer = 0;
+  e.xpValue = 0;
+  e.contactCooldown = 0;
+}
+
 export const pools = {
   particles: new ObjectPool<Particle>(
     () => ({
@@ -122,6 +142,27 @@ export const pools = {
     resetXPGem,
     64, 512
   ),
+
+  enemies: new ObjectPool<Enemy>(
+    () => ({
+      id: 0,
+      x: 0, y: 0,
+      radius: 0,
+      hp: 0, maxHp: 0,
+      speed: 0, damage: 0,
+      type: EnemyType.ZOMBIE,
+      isElite: false,
+      isBoss: false,
+      knockbackX: 0,
+      knockbackY: 0,
+      hitFlash: 0,
+      animTimer: 0,
+      xpValue: 0,
+      contactCooldown: 0,
+    }),
+    resetEnemy,
+    256, 1024
+  ),
 };
 
 export function clearAllPools() {
@@ -129,4 +170,5 @@ export function clearAllPools() {
   pools.damageNumbers.clear();
   pools.projectiles.clear();
   pools.xpGems.clear();
+  pools.enemies.clear();
 }

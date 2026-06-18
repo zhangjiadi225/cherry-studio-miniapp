@@ -1,12 +1,13 @@
 import { Enemy, EnemyType, Player } from '../../types';
 import {
-  ENEMY_DATA, SPAWN_DISTANCE, SPAWN_INTERVAL_BASE, SPAWN_INTERVAL_MIN,
-  BOSS_TIMES, MAX_ENEMIES, DIFFICULTY_STEP,
-  ELITE_BASE_CHANCE, ELITE_DIFF_CHANCE,
+  ENEMY_DATA, SPAWN_DISTANCE,
+  BOSS_TIMES, MAX_ENEMIES,
   BOSS_HP_MULT, BOSS_DMG_MULT, BOSS_XP_MULT, BOSS_MINION_COUNT,
+  SPAWN_WAVE_GROWTH_INTERVAL,
 } from '../../constants';
 import { createEnemy, getAvailableEnemyTypes } from './Enemy';
 import { randFloat, randInt, weightedRandom } from '../../utils/math';
+import { getDifficultyParams, type DifficultyParams } from '../../data/difficulty';
 
 export class Spawner {
   private spawnTimer = 0;
@@ -33,60 +34,63 @@ export class Spawner {
     dt: number,
     curseMult: number = 1
   ) {
+    const difficultyParams = getDifficultyParams(elapsed);
     for (const bossTime of BOSS_TIMES) {
       if (elapsed >= bossTime && !this.bossSpawned.has(bossTime)) {
         this.bossSpawned.add(bossTime);
-        this.spawnBoss(enemies, player, difficulty, bossTime, curseMult);
+        this.spawnBoss(enemies, player, difficulty, bossTime, curseMult, difficultyParams);
       }
     }
 
-    const interval = Math.max(
-      SPAWN_INTERVAL_MIN,
-      SPAWN_INTERVAL_BASE - difficulty * 0.02
-    );
+    const interval = difficultyParams.spawnInterval;
     this.spawnTimer += dt;
     if (this.spawnTimer >= interval) {
       this.spawnTimer -= interval;
       this.waveCount++;
-      this.spawnWave(enemies, player, elapsed, difficulty, curseMult);
+      this.spawnWave(enemies, player, elapsed, difficulty, curseMult, difficultyParams);
     }
 
-    while (enemies.length > MAX_ENEMIES) {
-      let farthest = 0;
-      let farthestIdx = 0;
-      for (let i = 0; i < enemies.length; i++) {
-        const d = Math.abs(enemies[i].x - player.x) + Math.abs(enemies[i].y - player.y);
-        if (d > farthest) {
-          farthest = d;
-          farthestIdx = i;
-        }
-      }
-      enemies.splice(farthestIdx, 1);
-    }
+    this.markOverflowEnemies(enemies, player);
   }
 
-  private spawnWave(enemies: Enemy[], player: Player, elapsed: number, difficulty: number, curseMult: number = 1) {
+  private spawnWave(
+    enemies: Enemy[],
+    player: Player,
+    elapsed: number,
+    difficulty: number,
+    curseMult: number,
+    difficultyParams: DifficultyParams
+  ) {
     const available = getAvailableEnemyTypes(elapsed, difficulty);
     if (available.length === 0) return;
 
-    const baseCount = 2 + Math.floor(difficulty * 0.5);
-    const count = Math.min(15, baseCount + Math.floor(this.waveCount / 20));
+    const count = Math.min(
+      difficultyParams.waveMaxCount,
+      difficultyParams.waveBaseCount + Math.floor(this.waveCount / SPAWN_WAVE_GROWTH_INTERVAL)
+    );
 
     for (let i = 0; i < count; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
 
       const type = this.pickEnemyType(available, elapsed, difficulty);
       const pos = this.getSpawnPosition(player);
-      const isElite = Math.random() < ELITE_BASE_CHANCE + difficulty * ELITE_DIFF_CHANCE;
-      enemies.push(createEnemy(type, pos.x, pos.y, difficulty, curseMult, isElite));
+      const isElite = Math.random() < difficultyParams.eliteChance;
+      enemies.push(createEnemy(type, pos.x, pos.y, difficulty, curseMult, isElite, false, difficultyParams));
     }
   }
 
-  private spawnBoss(enemies: Enemy[], player: Player, difficulty: number, bossTime: number, curseMult: number = 1) {
+  private spawnBoss(
+    enemies: Enemy[],
+    player: Player,
+    difficulty: number,
+    bossTime: number,
+    curseMult: number,
+    difficultyParams: DifficultyParams
+  ) {
     const bossType = bossTime >= 600 ? EnemyType.WRAITH : EnemyType.DEMON;
     const pos = this.getSpawnPosition(player);
 
-    const boss = createEnemy(bossType, pos.x, pos.y, difficulty, curseMult, true, true);
+    const boss = createEnemy(bossType, pos.x, pos.y, difficulty, curseMult, true, true, difficultyParams);
     boss.radius *= 2;
     boss.maxHp *= BOSS_HP_MULT;
     boss.hp = boss.maxHp;
@@ -105,8 +109,35 @@ export class Spawner {
         difficulty,
         1,
         false,
-        false
+        false,
+        difficultyParams
       ));
+    }
+  }
+
+  private markOverflowEnemies(enemies: Enemy[], player: Player) {
+    const overflow = enemies.length - MAX_ENEMIES;
+    if (overflow <= 0) return;
+
+    const farthest: { enemy: Enemy; distSq: number }[] = [];
+    for (const enemy of enemies) {
+      if (enemy.hp <= 0 || enemy.isBoss) continue;
+
+      const dx = enemy.x - player.x;
+      const dy = enemy.y - player.y;
+      const distSq = dx * dx + dy * dy;
+      let insertAt = farthest.length;
+      while (insertAt > 0 && distSq > farthest[insertAt - 1].distSq) {
+        insertAt--;
+      }
+      if (insertAt >= overflow) continue;
+
+      farthest.splice(insertAt, 0, { enemy, distSq });
+      if (farthest.length > overflow) farthest.pop();
+    }
+
+    for (const entry of farthest) {
+      entry.enemy.hp = 0;
     }
   }
 

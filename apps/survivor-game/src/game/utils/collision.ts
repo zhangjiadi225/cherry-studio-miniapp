@@ -1,4 +1,5 @@
 import type { MapObstacle } from '../types';
+import { BLOOD_POOL_SLOW } from '../constants';
 
 /** 圆形与 AABB 矩形碰撞检测 */
 export function circleRectOverlap(
@@ -55,7 +56,7 @@ export function getBloodPoolSlowFactor(
     const dx = cx - obs.x;
     const dy = cy - obs.y;
     if (dx * dx + dy * dy < (cr + obs.radius) * (cr + obs.radius)) {
-      if (0.5 < slowest) slowest = 0.5;
+      if (BLOOD_POOL_SLOW < slowest) slowest = BLOOD_POOL_SLOW;
     }
   }
   return slowest;

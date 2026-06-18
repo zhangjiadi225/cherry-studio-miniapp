@@ -14,19 +14,21 @@ export interface Camera {
   shakeIntensity: number;
 }
 
-export interface Player {
+export interface PlayerMovement {
   x: number;
   y: number;
+  speed: number;
+  baseSpeed: number;
+  animTimer: number;
+  facingLeft: boolean;
+}
+
+export interface PlayerCombatStats {
   radius: number;
   hp: number;
   maxHp: number;
-  speed: number;
-  baseSpeed: number;
   invTime: number;
   invDuration: number;
-  level: number;
-  xp: number;
-  xpToNext: number;
   pickupRange: number;
   basePickupRange: number;
   might: number;
@@ -37,13 +39,17 @@ export interface Player {
   regenTimer: number;
   luck: number;
   curse: number;
+}
+
+export interface Player extends PlayerMovement, PlayerCombatStats {
+  level: number;
+  xp: number;
+  xpToNext: number;
   gold: number;
   skinId: string;
   currentZone: MapZone;
   weapons: Weapon[];
   passives: PassiveUpgrade[];
-  animTimer: number;
-  facingLeft: boolean;
 }
 
 export interface Weapon {

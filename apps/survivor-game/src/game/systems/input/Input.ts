@@ -6,48 +6,63 @@ export class Input {
   isTouching = false;
   touchTap = false;
   private canvas: HTMLCanvasElement;
+  private readonly handleKeyDown = (e: KeyboardEvent) => {
+    this.keys.add(e.code);
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+      e.preventDefault();
+    }
+  };
+  private readonly handleKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
+  private readonly handleBlur = () => {
+    this.keys.clear();
+    this.resetTouch();
+  };
+  private readonly handleTouchStart = (e: TouchEvent) => {
+    e.preventDefault();
+    const t = e.touches[0];
+    const rect = this.canvas.getBoundingClientRect();
+    this.touchStart = { x: t.clientX - rect.left, y: t.clientY - rect.top };
+    this.touchCurrent = { ...this.touchStart };
+    this.isTouching = true;
+    this.touchTap = true;
+  };
+  private readonly handleTouchMove = (e: TouchEvent) => {
+    e.preventDefault();
+    if (!this.touchStart) return;
+    const t = e.touches[0];
+    const rect = this.canvas.getBoundingClientRect();
+    this.touchCurrent = { x: t.clientX - rect.left, y: t.clientY - rect.top };
+    this.touchTap = false;
+  };
+  private readonly handleTouchEnd = (e: TouchEvent) => {
+    e.preventDefault();
+    this.resetTouch();
+  };
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    window.addEventListener('keydown', (e) => {
-      this.keys.add(e.code);
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
-        e.preventDefault();
-      }
-    });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => {
-      this.keys.clear();
-      this.touchStart = null;
-      this.touchCurrent = null;
-      this.isTouching = false;
-    });
+    window.addEventListener('keydown', this.handleKeyDown);
+    window.addEventListener('keyup', this.handleKeyUp);
+    window.addEventListener('blur', this.handleBlur);
 
-    canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      const t = e.touches[0];
-      const rect = canvas.getBoundingClientRect();
-      this.touchStart = { x: t.clientX - rect.left, y: t.clientY - rect.top };
-      this.touchCurrent = { ...this.touchStart };
-      this.isTouching = true;
-      this.touchTap = true;
-    }, { passive: false });
+    canvas.addEventListener('touchstart', this.handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', this.handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', this.handleTouchEnd, { passive: false });
+  }
 
-    canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      if (!this.touchStart) return;
-      const t = e.touches[0];
-      const rect = canvas.getBoundingClientRect();
-      this.touchCurrent = { x: t.clientX - rect.left, y: t.clientY - rect.top };
-      this.touchTap = false;
-    }, { passive: false });
+  destroy() {
+    window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener('keyup', this.handleKeyUp);
+    window.removeEventListener('blur', this.handleBlur);
+    this.canvas.removeEventListener('touchstart', this.handleTouchStart);
+    this.canvas.removeEventListener('touchmove', this.handleTouchMove);
+    this.canvas.removeEventListener('touchend', this.handleTouchEnd);
+  }
 
-    canvas.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      this.touchStart = null;
-      this.touchCurrent = null;
-      this.isTouching = false;
-    }, { passive: false });
+  private resetTouch() {
+    this.touchStart = null;
+    this.touchCurrent = null;
+    this.isTouching = false;
   }
 
   getMoveDir(): { x: number; y: number } {

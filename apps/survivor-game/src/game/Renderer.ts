@@ -8,8 +8,9 @@ import {
 } from './renderers/EntityRenderer';
 import { drawParticle, drawDamageNumber, drawDamageFlash, drawLevelUpFlash, drawBossWarning } from './renderers/EffectsRenderer';
 import {
-  drawUI, drawMinimap, drawBossBar, drawPauseButton as drawPauseBtn,
-  getPauseButtonRect as getPauseRect,
+  drawUI, drawMinimap, drawBossBar,
+  drawAudioButton as drawAudioBtn, drawPauseButton as drawPauseBtn,
+  getAudioButtonRect as getAudioRect, getPauseButtonRect as getPauseRect,
   drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver,
 } from './renderers/UIRenderer';
 
@@ -24,13 +25,18 @@ export class Renderer {
   private h = 0;
   private worldRenderer = new WorldRenderer();
   private rc: RenderContext;
+  private readonly handleResize = () => this.resize();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d', { alpha: false })!;
     this.rc = { ctx: this.ctx, w: 0, h: 0 };
     this.resize();
-    window.addEventListener('resize', () => this.resize());
+    window.addEventListener('resize', this.handleResize);
+  }
+
+  destroy() {
+    window.removeEventListener('resize', this.handleResize);
   }
 
   resize() {
@@ -75,6 +81,7 @@ export class Renderer {
   }
 
   getPauseButtonRect() { return getPauseRect(this.w); }
+  getAudioButtonRect() { return getAudioRect(this.w); }
 
   // ─── World ───
   drawGround(cam: Camera) { this.worldRenderer.drawGround(this.rc, cam); }
@@ -100,6 +107,7 @@ export class Renderer {
   drawUI(player: Player, elapsed: number, killCount: number) { drawUI(this.rc, player, elapsed, killCount); }
   drawMinimap(player: Player, enemies: Enemy[]) { drawMinimap(this.rc, player, enemies); }
   drawBossBar(name: string, hp: number, maxHp: number) { drawBossBar(this.rc, name, hp, maxHp); }
+  drawAudioButton(muted: boolean) { drawAudioBtn(this.rc, muted); }
   drawPauseButton() { drawPauseBtn(this.rc); }
   drawDesktop(meta: MetaState, tab: DesktopTab, codexTab: CodexTab) { drawDesktop(this.rc, meta, tab, codexTab); }
   drawPaused() { drawPaused(this.rc); }

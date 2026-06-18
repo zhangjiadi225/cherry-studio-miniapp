@@ -1,7 +1,19 @@
 import { Enemy, EnemyType, Player } from '../../types';
-import { ENEMY_DATA, DIFFICULTY_STEP, CONTACT_COOLDOWN, ELITE_RADIUS_MULT, ELITE_SPEED_MULT, ELITE_STAT_MULT, ELITE_XP_MULT } from '../../constants';
+import {
+  CONTACT_COOLDOWN,
+  ELITE_RADIUS_MULT,
+  ELITE_SPEED_MULT,
+  ELITE_STAT_MULT,
+  ELITE_XP_MULT,
+  ENEMY_DATA,
+  ENEMY_FALLBACK_HP_DIFFICULTY_STEP,
+  ENEMY_FALLBACK_SPEED_DIFFICULTY_STEP,
+  ENEMY_KNOCKBACK_DECAY,
+} from '../../constants';
+import type { DifficultyParams } from '../../data/difficulty';
 import { circlesOverlap } from '../../utils/math';
 import { getBloodPoolSlowFactor } from '../../utils/collision';
+import { pools } from '../../utils/PoolManager';
 import type { MapSystem } from '../map/MapSystem';
 
 let nextEnemyId = 1;
@@ -17,32 +29,34 @@ export function createEnemy(
   difficulty: number,
   curseMult: number = 1,
   isElite: boolean = false,
-  isBoss: boolean = false
+  isBoss: boolean = false,
+  difficultyParams?: DifficultyParams
 ): Enemy {
   const data = ENEMY_DATA[type];
-  const hpMult = (1 + difficulty * DIFFICULTY_STEP) * curseMult;
-  const spdMult = 1 + difficulty * DIFFICULTY_STEP * 0.3;
+  const hpMult = (difficultyParams?.enemyHpMultiplier ?? (1 + difficulty * ENEMY_FALLBACK_HP_DIFFICULTY_STEP)) * curseMult;
+  const spdMult = difficultyParams?.enemySpeedMultiplier ?? (1 + difficulty * ENEMY_FALLBACK_SPEED_DIFFICULTY_STEP);
   const dmgMult = curseMult;
   const eliteMult = isElite ? ELITE_STAT_MULT : 1;
+  const enemy = pools.enemies.acquire();
 
-  return {
-    id: nextEnemyId++,
-    x, y,
-    radius: data.radius * (isElite ? ELITE_RADIUS_MULT : 1),
-    hp: data.baseHp * hpMult * eliteMult,
-    maxHp: data.baseHp * hpMult * eliteMult,
-    speed: data.baseSpeed * spdMult * (isElite ? ELITE_SPEED_MULT : 1),
-    damage: data.baseDamage * dmgMult * eliteMult,
-    type,
-    isElite,
-    isBoss,
-    knockbackX: 0,
-    knockbackY: 0,
-    hitFlash: 0,
-    animTimer: Math.random() * Math.PI * 2,
-    xpValue: data.xpValue * (isElite ? ELITE_XP_MULT : 1),
-    contactCooldown: CONTACT_COOLDOWN,
-  };
+  enemy.id = nextEnemyId++;
+  enemy.x = x;
+  enemy.y = y;
+  enemy.radius = data.radius * (isElite ? ELITE_RADIUS_MULT : 1);
+  enemy.hp = data.baseHp * hpMult * eliteMult;
+  enemy.maxHp = enemy.hp;
+  enemy.speed = data.baseSpeed * spdMult * (isElite ? ELITE_SPEED_MULT : 1);
+  enemy.damage = data.baseDamage * dmgMult * eliteMult;
+  enemy.type = type;
+  enemy.isElite = isElite;
+  enemy.isBoss = isBoss;
+  enemy.knockbackX = 0;
+  enemy.knockbackY = 0;
+  enemy.hitFlash = 0;
+  enemy.animTimer = Math.random() * Math.PI * 2;
+  enemy.xpValue = data.xpValue * (isElite ? ELITE_XP_MULT : 1);
+  enemy.contactCooldown = CONTACT_COOLDOWN;
+  return enemy;
 }
 
 export function updateEnemy(
@@ -77,8 +91,8 @@ export function updateEnemy(
 
   e.x += e.knockbackX * dt;
   e.y += e.knockbackY * dt;
-  e.knockbackX *= Math.pow(0.01, dt);
-  e.knockbackY *= Math.pow(0.01, dt);
+  e.knockbackX *= Math.pow(ENEMY_KNOCKBACK_DECAY, dt);
+  e.knockbackY *= Math.pow(ENEMY_KNOCKBACK_DECAY, dt);
 
   return e.hp > 0;
 }

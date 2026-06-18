@@ -6,6 +6,51 @@ import {
   META_UPGRADES, CHARACTER_SKINS, hasMetaUpgrade, canBuyMetaUpgrade,
 } from '../systems/meta/MetaProgression';
 
+const gradientCache = new Map<string, CanvasGradient>();
+const GRADIENT_CACHE_LIMIT = 160;
+
+function cachedLinearGradient(
+  ctx: CanvasRenderingContext2D,
+  key: string,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  stops: Array<[number, string]>
+): CanvasGradient {
+  const cacheKey = `l:${key}:${x0}:${y0}:${x1}:${y1}`;
+  let gradient = gradientCache.get(cacheKey);
+  if (!gradient) {
+    gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+    for (const [offset, color] of stops) gradient.addColorStop(offset, color);
+    if (gradientCache.size > GRADIENT_CACHE_LIMIT) gradientCache.clear();
+    gradientCache.set(cacheKey, gradient);
+  }
+  return gradient;
+}
+
+function cachedRadialGradient(
+  ctx: CanvasRenderingContext2D,
+  key: string,
+  x0: number,
+  y0: number,
+  r0: number,
+  x1: number,
+  y1: number,
+  r1: number,
+  stops: Array<[number, string]>
+): CanvasGradient {
+  const cacheKey = `r:${key}:${x0}:${y0}:${r0}:${x1}:${y1}:${r1}`;
+  let gradient = gradientCache.get(cacheKey);
+  if (!gradient) {
+    gradient = ctx.createRadialGradient(x0, y0, r0, x1, y1, r1);
+    for (const [offset, color] of stops) gradient.addColorStop(offset, color);
+    if (gradientCache.size > GRADIENT_CACHE_LIMIT) gradientCache.clear();
+    gradientCache.set(cacheKey, gradient);
+  }
+  return gradient;
+}
+
 // ──────────────────────────── HUD ────────────────────────────
 
 export function drawUI(rc: RenderContext, player: Player, elapsed: number, killCount: number) {
@@ -35,11 +80,11 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
     ctx.roundRect(barX, barY, barW * xpRatio, barH, 6);
     ctx.fill();
 
-    const shineGrad = ctx.createLinearGradient(barX, barY, barX, barY + barH);
-    shineGrad.addColorStop(0, 'rgba(255,255,255,0.3)');
-    shineGrad.addColorStop(0.5, 'rgba(255,255,255,0.1)');
-    shineGrad.addColorStop(1, 'rgba(0,0,0,0.1)');
-    ctx.fillStyle = shineGrad;
+    ctx.fillStyle = cachedLinearGradient(ctx, `xp-shine-${barW}-${barH}`, barX, barY, barX, barY + barH, [
+      [0, 'rgba(255,255,255,0.3)'],
+      [0.5, 'rgba(255,255,255,0.1)'],
+      [1, 'rgba(0,0,0,0.1)'],
+    ]);
     ctx.beginPath();
     ctx.roundRect(barX, barY, barW * xpRatio, barH, 6);
     ctx.fill();
@@ -250,10 +295,10 @@ export function drawMinimap(rc: RenderContext, player: Player, enemies: Enemy[])
   const playerDotX = mapX + mapSize / 2;
   const playerDotY = mapY + mapSize / 2;
 
-  const playerGlow = ctx.createRadialGradient(playerDotX, playerDotY, 0, playerDotX, playerDotY, 8);
-  playerGlow.addColorStop(0, 'rgba(74,158,255,0.6)');
-  playerGlow.addColorStop(1, 'rgba(74,158,255,0)');
-  ctx.fillStyle = playerGlow;
+  ctx.fillStyle = cachedRadialGradient(ctx, `minimap-player-${playerDotX}-${playerDotY}`, playerDotX, playerDotY, 0, playerDotX, playerDotY, 8, [
+    [0, 'rgba(74,158,255,0.6)'],
+    [1, 'rgba(74,158,255,0)'],
+  ]);
   ctx.beginPath();
   ctx.arc(playerDotX, playerDotY, 8, 0, Math.PI * 2);
   ctx.fill();
@@ -311,20 +356,20 @@ export function drawBossBar(rc: RenderContext, name: string, hp: number, maxHp: 
 
   const ratio = Math.max(0, hp / maxHp);
   if (ratio > 0) {
-    const grad = ctx.createLinearGradient(barX, barY, barX, barY + barH);
-    grad.addColorStop(0, '#ff4444');
-    grad.addColorStop(0.5, '#cc2222');
-    grad.addColorStop(1, '#881111');
-    ctx.fillStyle = grad;
+    ctx.fillStyle = cachedLinearGradient(ctx, `boss-hp-${barW}-${barH}`, barX, barY, barX, barY + barH, [
+      [0, '#ff4444'],
+      [0.5, '#cc2222'],
+      [1, '#881111'],
+    ]);
     ctx.beginPath();
     ctx.roundRect(barX, barY, barW * ratio, barH, 6);
     ctx.fill();
 
-    const shine = ctx.createLinearGradient(barX, barY, barX, barY + barH);
-    shine.addColorStop(0, 'rgba(255,255,255,0.25)');
-    shine.addColorStop(0.5, 'rgba(255,255,255,0.05)');
-    shine.addColorStop(1, 'rgba(0,0,0,0.1)');
-    ctx.fillStyle = shine;
+    ctx.fillStyle = cachedLinearGradient(ctx, `boss-shine-${barW}-${barH}`, barX, barY, barX, barY + barH, [
+      [0, 'rgba(255,255,255,0.25)'],
+      [0.5, 'rgba(255,255,255,0.05)'],
+      [1, 'rgba(0,0,0,0.1)'],
+    ]);
     ctx.beginPath();
     ctx.roundRect(barX, barY, barW * ratio, barH, 6);
     ctx.fill();
@@ -346,27 +391,45 @@ export function drawBossBar(rc: RenderContext, name: string, hp: number, maxHp: 
 
 export function drawPauseButton(rc: RenderContext) {
   const { ctx, w } = rc;
-  const size = 36;
-  const x = w - size - 12;
-  const y = 8;
+  const { x, y, w: size, h: buttonH } = getPauseButtonRect(w);
+  drawHudIconButton(ctx, x, y, size, buttonH);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillRect(x + 10, y + 8, 5, 20);
+  ctx.fillRect(x + 21, y + 8, 5, 20);
+}
+
+export function drawAudioButton(rc: RenderContext, muted: boolean) {
+  const { ctx, w } = rc;
+  const rect = getAudioButtonRect(w);
+  drawHudIconButton(ctx, rect.x, rect.y, rect.w, rect.h);
+  ctx.font = '18px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = muted ? 'rgba(255,160,160,0.85)' : 'rgba(255,255,255,0.78)';
+  ctx.fillText(muted ? '🔇' : '🔊', rect.x + rect.w / 2, rect.y + rect.h / 2 + 1);
+}
+
+function drawHudIconButton(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
   ctx.fillStyle = 'rgba(0,0,0,0.5)';
   ctx.beginPath();
-  ctx.roundRect(x, y, size, size, 8);
+  ctx.roundRect(x, y, w, h, 8);
   ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.3)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.roundRect(x, y, size, size, 8);
+  ctx.roundRect(x, y, w, h, 8);
   ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillRect(x + 10, y + 8, 5, 20);
-  ctx.fillRect(x + 21, y + 8, 5, 20);
 }
 
 /** 暂停按钮的命中区域（供 Input 判断） */
 export function getPauseButtonRect(w: number): { x: number; y: number; w: number; h: number } {
   const size = 36;
   return { x: w - size - 12, y: 8, w: size, h: size };
+}
+
+export function getAudioButtonRect(w: number): { x: number; y: number; w: number; h: number } {
+  const size = 36;
+  return { x: w - size * 2 - 20, y: 8, w: size, h: size };
 }
 
 // ──────────────────────────── Overlays ────────────────────────────
@@ -401,25 +464,25 @@ export function drawDesktop(rc: RenderContext, meta: MetaState, activeTab: Deskt
 
 function drawDesktopBackdrop(rc: RenderContext, time: number) {
   const { ctx, w, h } = rc;
-  const bg = ctx.createLinearGradient(0, 0, w, h);
-  bg.addColorStop(0, '#080b14');
-  bg.addColorStop(0.52, '#111a2d');
-  bg.addColorStop(1, '#091016');
-  ctx.fillStyle = bg;
+  ctx.fillStyle = cachedLinearGradient(ctx, `desktop-bg-${w}-${h}`, 0, 0, w, h, [
+    [0, '#080b14'],
+    [0.52, '#111a2d'],
+    [1, '#091016'],
+  ]);
   ctx.fillRect(0, 0, w, h);
 
-  const glowA = ctx.createRadialGradient(w * 0.18, h * 0.18, 20, w * 0.18, h * 0.18, Math.max(w, h) * 0.55);
-  glowA.addColorStop(0, 'rgba(255,122,69,0.18)');
-  glowA.addColorStop(0.42, 'rgba(74,158,255,0.06)');
-  glowA.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = glowA;
+  ctx.fillStyle = cachedRadialGradient(ctx, `desktop-glow-a-${w}-${h}`, w * 0.18, h * 0.18, 20, w * 0.18, h * 0.18, Math.max(w, h) * 0.55, [
+    [0, 'rgba(255,122,69,0.18)'],
+    [0.42, 'rgba(74,158,255,0.06)'],
+    [1, 'rgba(0,0,0,0)'],
+  ]);
   ctx.fillRect(0, 0, w, h);
 
-  const glowB = ctx.createRadialGradient(w * 0.78, h * 0.28, 0, w * 0.78, h * 0.28, Math.max(w, h) * 0.46);
-  glowB.addColorStop(0, 'rgba(157,123,255,0.2)');
-  glowB.addColorStop(0.5, 'rgba(70,210,190,0.05)');
-  glowB.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = glowB;
+  ctx.fillStyle = cachedRadialGradient(ctx, `desktop-glow-b-${w}-${h}`, w * 0.78, h * 0.28, 0, w * 0.78, h * 0.28, Math.max(w, h) * 0.46, [
+    [0, 'rgba(157,123,255,0.2)'],
+    [0.5, 'rgba(70,210,190,0.05)'],
+    [1, 'rgba(0,0,0,0)'],
+  ]);
   ctx.fillRect(0, 0, w, h);
 
   ctx.save();
@@ -473,10 +536,11 @@ function drawDesktopHeader(rc: RenderContext, meta: MetaState) {
   const x = 36;
   const y = 22;
   const panelW = Math.min(520, w - 72);
-  const titleGrad = ctx.createLinearGradient(x, y, x + panelW, y);
-  titleGrad.addColorStop(0, '#fff3b8');
-  titleGrad.addColorStop(0.5, '#ffd166');
-  titleGrad.addColorStop(1, '#8fe8ff');
+  const titleGrad = cachedLinearGradient(ctx, `desktop-title-${x}-${y}-${panelW}`, x, y, x + panelW, y, [
+    [0, '#fff3b8'],
+    [0.5, '#ffd166'],
+    [1, '#8fe8ff'],
+  ]);
 
   ctx.save();
   ctx.shadowColor = 'rgba(255,209,102,0.32)';
@@ -534,14 +598,13 @@ function drawDesktopTabs(rc: RenderContext, activeTab: DesktopTab) {
     const tab = tabs[i];
     const x = startX + i * (tabW + tabGap);
     const active = tab.id === activeTab;
-    const tabGrad = ctx.createLinearGradient(x, y, x, y + tabH);
-    if (active) {
-      tabGrad.addColorStop(0, 'rgba(255,209,102,0.32)');
-      tabGrad.addColorStop(1, 'rgba(255,122,69,0.16)');
-    } else {
-      tabGrad.addColorStop(0, 'rgba(25,33,55,0.82)');
-      tabGrad.addColorStop(1, 'rgba(12,17,30,0.82)');
-    }
+    const tabGrad = cachedLinearGradient(ctx, `desktop-tab-${active}-${x}-${y}-${tabH}`, x, y, x, y + tabH, active ? [
+      [0, 'rgba(255,209,102,0.32)'],
+      [1, 'rgba(255,122,69,0.16)'],
+    ] : [
+      [0, 'rgba(25,33,55,0.82)'],
+      [1, 'rgba(12,17,30,0.82)'],
+    ]);
     ctx.save();
     if (active) {
       ctx.shadowColor = 'rgba(255,209,102,0.25)';
@@ -586,11 +649,11 @@ function drawGlassPanel(
   ctx.fill();
   ctx.restore();
 
-  const shine = ctx.createLinearGradient(x, y, x, y + h);
-  shine.addColorStop(0, 'rgba(255,255,255,0.1)');
-  shine.addColorStop(0.22, 'rgba(255,255,255,0.03)');
-  shine.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = shine;
+  ctx.fillStyle = cachedLinearGradient(ctx, `glass-shine-${x}-${y}-${w}-${h}`, x, y, x, y + h, [
+    [0, 'rgba(255,255,255,0.1)'],
+    [0.22, 'rgba(255,255,255,0.03)'],
+    [1, 'rgba(255,255,255,0)'],
+  ]);
   ctx.beginPath();
   ctx.roundRect(x + 1, y + 1, w - 2, h - 2, radius - 1);
   ctx.fill();
@@ -603,12 +666,12 @@ function drawGlassPanel(
 }
 
 function drawPanelAccent(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, accent: string) {
-  const grad = ctx.createLinearGradient(x, y, x + w, y);
-  grad.addColorStop(0, colorWithAlpha(accent, 0));
-  grad.addColorStop(0.24, colorWithAlpha(accent, 0.74));
-  grad.addColorStop(0.76, colorWithAlpha(accent, 0.36));
-  grad.addColorStop(1, colorWithAlpha(accent, 0));
-  ctx.fillStyle = grad;
+  ctx.fillStyle = cachedLinearGradient(ctx, `panel-accent-${accent}-${x}-${y}-${w}`, x, y, x + w, y, [
+    [0, colorWithAlpha(accent, 0)],
+    [0.24, colorWithAlpha(accent, 0.74)],
+    [0.76, colorWithAlpha(accent, 0.36)],
+    [1, colorWithAlpha(accent, 0)],
+  ]);
   ctx.beginPath();
   ctx.roundRect(x + 18, y, w - 36, 3, 2);
   ctx.fill();
@@ -778,10 +841,10 @@ function drawDesktopStart(rc: RenderContext, meta: MetaState, time: number) {
   const skin = CHARACTER_SKINS.find((item) => item.id === meta.selectedSkin) ?? CHARACTER_SKINS[0];
   drawDeploymentStage(ctx, rightX, panelY + 34, rightW, panelH - 68, skin, time);
 
-  const skinGlow = ctx.createRadialGradient(stageX, stageY - 8, 8, stageX, stageY - 8, 150);
-  skinGlow.addColorStop(0, `${skin.glow}0.42)`);
-  skinGlow.addColorStop(1, `${skin.glow}0)`);
-  ctx.fillStyle = skinGlow;
+  ctx.fillStyle = cachedRadialGradient(ctx, `skin-glow-${skin.id}-${stageX}-${stageY}`, stageX, stageY - 8, 8, stageX, stageY - 8, 150, [
+    [0, `${skin.glow}0.42)`],
+    [1, `${skin.glow}0)`],
+  ]);
   ctx.fillRect(rightX, panelY + 34, rightW, panelH - 68);
   drawSkinPreview(ctx, skin.id, stageX, stageY - 10 + Math.sin(time * 2.1) * 3, 2.35, skin.body, skin.outline);
   ctx.font = `800 20px ${DESKTOP_FONT}`;
@@ -801,11 +864,11 @@ function drawDesktopStart(rc: RenderContext, meta: MetaState, time: number) {
   ctx.save();
   ctx.shadowColor = 'rgba(255,209,102,0.28)';
   ctx.shadowBlur = 20;
-  const btnGrad = ctx.createLinearGradient(btnX, btnY, btnX, btnY + btnH);
-  btnGrad.addColorStop(0, '#ffd166');
-  btnGrad.addColorStop(0.5, '#e99345');
-  btnGrad.addColorStop(1, '#ba5f36');
-  ctx.fillStyle = btnGrad;
+  ctx.fillStyle = cachedLinearGradient(ctx, `start-btn-${btnX}-${btnY}-${btnH}`, btnX, btnY, btnX, btnY + btnH, [
+    [0, '#ffd166'],
+    [0.5, '#e99345'],
+    [1, '#ba5f36'],
+  ]);
   ctx.beginPath();
   ctx.roundRect(btnX, btnY, btnW, btnH, 14);
   ctx.fill();
@@ -870,11 +933,11 @@ function drawDeploymentStage(
 
   const cx = x + w / 2;
   const cy = y + h / 2 + 18;
-  const scanner = ctx.createRadialGradient(cx, cy, 10, cx, cy, Math.min(w, h) * 0.62);
-  scanner.addColorStop(0, `${skin.glow}0.1)`);
-  scanner.addColorStop(0.52, 'rgba(80,126,190,0.08)');
-  scanner.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = scanner;
+  ctx.fillStyle = cachedRadialGradient(ctx, `deployment-scanner-${skin.id}-${x}-${y}-${w}-${h}`, cx, cy, 10, cx, cy, Math.min(w, h) * 0.62, [
+    [0, `${skin.glow}0.1)`],
+    [0.52, 'rgba(80,126,190,0.08)'],
+    [1, 'rgba(0,0,0,0)'],
+  ]);
   ctx.fillRect(x + 2, y + 2, w - 4, h - 4);
 
   ctx.save();
@@ -951,9 +1014,10 @@ function drawMetaGrowth(rc: RenderContext, meta: MetaState) {
     const available = canBuyMetaUpgrade(meta, node);
     const locked = !owned && !available;
     const accent = getBranchAccent(node.branch);
-    const cardGrad = ctx.createLinearGradient(x, y, x, y + cardH);
-    cardGrad.addColorStop(0, owned ? 'rgba(35,92,64,0.92)' : available ? 'rgba(42,47,78,0.94)' : 'rgba(30,38,60,0.84)');
-    cardGrad.addColorStop(1, owned ? 'rgba(15,45,34,0.92)' : available ? 'rgba(20,25,44,0.94)' : 'rgba(16,21,34,0.84)');
+    const cardGrad = cachedLinearGradient(ctx, `growth-card-${owned}-${available}-${x}-${y}-${cardH}`, x, y, x, y + cardH, [
+      [0, owned ? 'rgba(35,92,64,0.92)' : available ? 'rgba(42,47,78,0.94)' : 'rgba(30,38,60,0.84)'],
+      [1, owned ? 'rgba(15,45,34,0.92)' : available ? 'rgba(20,25,44,0.94)' : 'rgba(16,21,34,0.84)'],
+    ]);
     ctx.save();
     if (available) {
       ctx.shadowColor = colorWithAlpha(accent, 0.22);
@@ -1019,10 +1083,11 @@ function drawSkinPanel(rc: RenderContext, meta: MetaState) {
     const skin = CHARACTER_SKINS[i];
     const x = startX + i * (cardW + gap);
     const selected = meta.selectedSkin === skin.id;
-    const cardGrad = ctx.createLinearGradient(x, y, x, y + cardH);
-    cardGrad.addColorStop(0, selected ? `${skin.glow}0.28)` : 'rgba(31,38,62,0.9)');
-    cardGrad.addColorStop(0.44, 'rgba(15,20,35,0.92)');
-    cardGrad.addColorStop(1, 'rgba(8,11,20,0.94)');
+    const cardGrad = cachedLinearGradient(ctx, `skin-card-${skin.id}-${selected}-${x}-${y}-${cardH}`, x, y, x, y + cardH, [
+      [0, selected ? `${skin.glow}0.28)` : 'rgba(31,38,62,0.9)'],
+      [0.44, 'rgba(15,20,35,0.92)'],
+      [1, 'rgba(8,11,20,0.94)'],
+    ]);
     ctx.save();
     if (selected) {
       ctx.shadowColor = `${skin.glow}0.44)`;
@@ -1146,11 +1211,11 @@ function drawCodexCards(rc: RenderContext, tab: CodexTab) {
     const card = cards[i];
     const x = startX + (i % columns) * (cardW + gap);
     const y = startY + Math.floor(i / columns) * (cardH + gap);
-    const cardGrad = ctx.createLinearGradient(x, y, x, y + cardH);
-    cardGrad.addColorStop(0, colorWithAlpha(card.accent, 0.1));
-    cardGrad.addColorStop(0.28, 'rgba(26,33,54,0.94)');
-    cardGrad.addColorStop(1, 'rgba(11,15,27,0.94)');
-    ctx.fillStyle = cardGrad;
+    ctx.fillStyle = cachedLinearGradient(ctx, `codex-card-${card.accent}-${x}-${y}-${cardH}`, x, y, x, y + cardH, [
+      [0, colorWithAlpha(card.accent, 0.1)],
+      [0.28, 'rgba(26,33,54,0.94)'],
+      [1, 'rgba(11,15,27,0.94)'],
+    ]);
     ctx.beginPath();
     ctx.roundRect(x, y, cardW, cardH, 13);
     ctx.fill();
@@ -1387,10 +1452,10 @@ function drawWrappedText(
 export function drawPaused(rc: RenderContext) {
   const { ctx, w, h } = rc;
 
-  const overlayGrad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w * 0.5);
-  overlayGrad.addColorStop(0, 'rgba(0,0,20,0.7)');
-  overlayGrad.addColorStop(1, 'rgba(0,0,0,0.85)');
-  ctx.fillStyle = overlayGrad;
+  ctx.fillStyle = cachedRadialGradient(ctx, `paused-overlay-${w}-${h}`, w / 2, h / 2, 0, w / 2, h / 2, w * 0.5, [
+    [0, 'rgba(0,0,20,0.7)'],
+    [1, 'rgba(0,0,0,0.85)'],
+  ]);
   ctx.fillRect(0, 0, w, h);
 
   ctx.fillStyle = 'rgba(100,100,150,0.8)';
@@ -1419,10 +1484,10 @@ export function drawUpgradeScreen(
 ) {
   const { ctx, w, h } = rc;
 
-  const overlayGrad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w * 0.7);
-  overlayGrad.addColorStop(0, 'rgba(0,0,30,0.85)');
-  overlayGrad.addColorStop(1, 'rgba(0,0,0,0.95)');
-  ctx.fillStyle = overlayGrad;
+  ctx.fillStyle = cachedRadialGradient(ctx, `upgrade-overlay-${w}-${h}`, w / 2, h / 2, 0, w / 2, h / 2, w * 0.7, [
+    [0, 'rgba(0,0,30,0.85)'],
+    [1, 'rgba(0,0,0,0.95)'],
+  ]);
   ctx.fillRect(0, 0, w, h);
 
   ctx.shadowColor = '#ffd700';
@@ -1465,20 +1530,21 @@ export function drawUpgradeScreen(
       ctx.shadowBlur = 16;
     }
 
-    const cardGrad = ctx.createLinearGradient(0, 0, 0, cardH);
-    if (sold) {
-      cardGrad.addColorStop(0, 'rgba(45,85,60,0.92)');
-      cardGrad.addColorStop(1, 'rgba(25,50,35,0.92)');
-    } else if (isModifier) {
-      cardGrad.addColorStop(0, selected ? 'rgba(95,55,145,0.96)' : 'rgba(70,45,115,0.92)');
-      cardGrad.addColorStop(1, selected ? 'rgba(50,35,92,0.96)' : 'rgba(36,28,68,0.92)');
-    } else if (selected) {
-      cardGrad.addColorStop(0, 'rgba(85,75,135,0.95)');
-      cardGrad.addColorStop(1, 'rgba(45,42,82,0.95)');
-    } else {
-      cardGrad.addColorStop(0, 'rgba(50,50,80,0.9)');
-      cardGrad.addColorStop(1, 'rgba(30,30,50,0.9)');
-    }
+    const cardStops: Array<[number, string]> =
+      sold ? [
+        [0, 'rgba(45,85,60,0.92)'],
+        [1, 'rgba(25,50,35,0.92)'],
+      ] : isModifier ? [
+        [0, selected ? 'rgba(95,55,145,0.96)' : 'rgba(70,45,115,0.92)'],
+        [1, selected ? 'rgba(50,35,92,0.96)' : 'rgba(36,28,68,0.92)'],
+      ] : selected ? [
+        [0, 'rgba(85,75,135,0.95)'],
+        [1, 'rgba(45,42,82,0.95)'],
+      ] : [
+        [0, 'rgba(50,50,80,0.9)'],
+        [1, 'rgba(30,30,50,0.9)'],
+      ];
+    const cardGrad = cachedLinearGradient(ctx, `upgrade-card-${sold}-${isModifier}-${selected}-${cardH}`, 0, 0, 0, cardH, cardStops);
     ctx.fillStyle = cardGrad;
     ctx.beginPath();
     ctx.roundRect(0, 0, cardW, cardH, 12);
@@ -1615,10 +1681,10 @@ export function drawGameOver(rc: RenderContext, stats: {
   const isVictory = stats.time >= 900;
   const time = Date.now() * 0.001;
 
-  const bgGrad = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w * 0.7);
-  bgGrad.addColorStop(0, 'rgba(0,0,20,0.9)');
-  bgGrad.addColorStop(1, 'rgba(0,0,0,0.98)');
-  ctx.fillStyle = bgGrad;
+  ctx.fillStyle = cachedRadialGradient(ctx, `gameover-bg-${w}-${h}`, w / 2, h / 2, 0, w / 2, h / 2, w * 0.7, [
+    [0, 'rgba(0,0,20,0.9)'],
+    [1, 'rgba(0,0,0,0.98)'],
+  ]);
   ctx.fillRect(0, 0, w, h);
 
   ctx.shadowColor = isVictory ? '#ffd700' : '#ff4444';

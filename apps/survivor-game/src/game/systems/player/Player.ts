@@ -1,5 +1,10 @@
 import { Player, Weapon, PassiveType, MapZone } from '../../types';
-import { PLAYER_RADIUS, PLAYER_BASE_HP, PLAYER_BASE_SPEED, PLAYER_BASE_PICKUP_RANGE, PLAYER_INV_DURATION, PLAYER_REGEN_INTERVAL, XP_BASE, XP_GROWTH } from '../../constants';
+import {
+  PASSIVE_DATA,
+  PLAYER_RADIUS, PLAYER_BASE_HP, PLAYER_BASE_SPEED, PLAYER_BASE_PICKUP_RANGE,
+  PLAYER_INV_DURATION, PLAYER_REGEN_INTERVAL, PLAYER_ANIM_SPEED,
+  XP_BASE, XP_GROWTH, ARENA_HALF,
+} from '../../constants';
 import type { MapSystem } from '../map/MapSystem';
 import { getBloodPoolSlowFactor } from '../../utils/collision';
 import { getZone } from '../../utils/math';
@@ -55,9 +60,8 @@ export function updatePlayer(p: Player, dx: number, dy: number, dt: number, mapS
     p.y += push.y;
   }
 
-  const hs = 3000;
-  p.x = Math.max(-hs, Math.min(hs, p.x));
-  p.y = Math.max(-hs, Math.min(hs, p.y));
+  p.x = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, p.x));
+  p.y = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, p.y));
 
   if (p.invTime > 0) p.invTime -= dt;
 
@@ -76,7 +80,7 @@ export function updatePlayer(p: Player, dx: number, dy: number, dt: number, mapS
   }
 
   if (dx !== 0 || dy !== 0) {
-    p.animTimer += dt * 8;
+    p.animTimer += dt * PLAYER_ANIM_SPEED;
   }
 }
 
@@ -122,18 +126,17 @@ export function recalcStats(p: Player) {
   let pickupMult = 1;
 
   for (const pa of p.passives) {
-    switch (pa.type) {
-      case PassiveType.MIGHT: p.might += 0.1 * pa.level; break;
-      case PassiveType.SPEED: speedMult += 0.1 * pa.level; break;
-      case PassiveType.MAX_HP: hpBonus += 20 * pa.level; break;
-      case PassiveType.ARMOR: p.armor += pa.level; break;
-      case PassiveType.COOLDOWN: p.cooldownReduction += 0.05 * pa.level; break;
-      case PassiveType.AREA: p.area += 0.1 * pa.level; break;
-      case PassiveType.PICKUP_RANGE: pickupMult += 0.2 * pa.level; break;
-      case PassiveType.REGEN: p.regen += 0.5 * pa.level; break;
-      case PassiveType.LUCK: p.luck += 0.1 * pa.level; break;
-      case PassiveType.CURSE: p.curse = 1 + 0.1 * pa.level; break;
-    }
+    const perLevel = PASSIVE_DATA[pa.type].perLevel;
+    p.might += (perLevel.might ?? 0) * pa.level;
+    speedMult += (perLevel.speed ?? 0) * pa.level;
+    hpBonus += (perLevel.maxHp ?? 0) * pa.level;
+    p.armor += (perLevel.armor ?? 0) * pa.level;
+    p.cooldownReduction += (perLevel.cooldown ?? 0) * pa.level;
+    p.area += (perLevel.area ?? 0) * pa.level;
+    pickupMult += (perLevel.pickup ?? 0) * pa.level;
+    p.regen += (perLevel.regen ?? 0) * pa.level;
+    p.luck += (perLevel.luck ?? 0) * pa.level;
+    p.curse += (perLevel.curse ?? 0) * pa.level;
   }
 
   switch (p.currentZone) {
