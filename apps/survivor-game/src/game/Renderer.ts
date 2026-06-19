@@ -1,5 +1,5 @@
 import type { Player, Enemy, Projectile, XPGem, Particle, DamageNumber, Camera, UpgradeOption, MapObstacle } from './types';
-import type { CodexTab, DesktopTab, MetaState } from './systems/meta/MetaProgression';
+import type { CodexTab, DesktopTab, MetaState, MetaUpgradeNode } from './systems/meta/MetaProgression';
 import { COLORS } from './constants';
 import { WorldRenderer, type RenderContext } from './renderers/WorldRenderer';
 import {
@@ -10,13 +10,15 @@ import { drawParticle, drawDamageNumber, drawDamageFlash, drawLevelUpFlash, draw
 import {
   drawUI, drawMinimap, drawBossBar,
   drawAudioButton as drawAudioBtn, drawPauseButton as drawPauseBtn,
-  getAudioButtonRect as getAudioRect,
-  getDesktopStartButtonRect as getStartButtonRect,
-  getMetaStarNodeRects as getStarNodeRects,
-  getDesktopTabRects as getTabRects,
-  getPauseButtonRect as getPauseRect,
-  drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver,
-} from './renderers/UIRenderer';
+	  getAudioButtonRect as getAudioRect,
+	  getDesktopStartButtonRect as getStartButtonRect,
+	  getMetaStarNodeRects as getStarNodeRects,
+	  getSkinCardRects as getSkinRects,
+	  getCodexTabRects as getCodexRects,
+	  getDesktopTabRects as getTabRects,
+	  getPauseButtonRect as getPauseRect,
+	  drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver,
+	} from './renderers/UIRenderer';
 
 /**
  * Renderer：总入口，持有 Canvas 上下文和子渲染器
@@ -89,6 +91,8 @@ export class Renderer {
   getDesktopStartButtonRect() { return getStartButtonRect(this.w, this.h); }
   getDesktopTabRects() { return getTabRects(this.w, this.h); }
   getMetaStarNodeRects() { return getStarNodeRects(this.w, this.h); }
+  getSkinCardRects() { return getSkinRects(this.w, this.h); }
+  getCodexTabRects() { return getCodexRects(this.w, this.h); }
 
   // ─── World ───
   drawGround(cam: Camera) { this.worldRenderer.drawGround(this.rc, cam); }
@@ -118,7 +122,9 @@ export class Renderer {
   drawBossBar(name: string, hp: number, maxHp: number) { drawBossBar(this.rc, name, hp, maxHp); }
   drawAudioButton(muted: boolean) { drawAudioBtn(this.rc, muted); }
   drawPauseButton() { drawPauseBtn(this.rc); }
-  drawDesktop(meta: MetaState, tab: DesktopTab, codexTab: CodexTab) { drawDesktop(this.rc, meta, tab, codexTab); }
+  drawDesktop(meta: MetaState, tab: DesktopTab, codexTab: CodexTab, hoveredStarId?: MetaUpgradeNode['id']) {
+    drawDesktop(this.rc, meta, tab, codexTab, hoveredStarId);
+  }
   drawPaused() { drawPaused(this.rc); }
   drawUpgradeScreen(options: UpgradeOption[], selectedIndex: number, shards: number, canFreeReroll: boolean, rerollCost: number, canPaidReroll: boolean) {
     drawUpgradeScreen(this.rc, options, selectedIndex, shards, canFreeReroll, rerollCost, canPaidReroll);

@@ -66,7 +66,7 @@ export const PASSIVE_DATA: Record<PassiveType, {
   [PassiveType.LUCK]: {
     name: '幸运',
     icon: '🍀',
-    desc: '提高补给和恢复触发',
+    desc: '提高补给牌出现率',
     maxLevel: 5,
     perLevel: { luck: 0.1 },
   },

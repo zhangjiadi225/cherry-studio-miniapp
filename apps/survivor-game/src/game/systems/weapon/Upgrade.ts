@@ -2,7 +2,10 @@ import { Player, UpgradeOption, WeaponType, PassiveType, Weapon, GenericModifier
 import {
   SHOP_OPTION_COUNT, SHOP_MAX_OPTION_COUNT, SHOP_LEVELS_PER_EXTRA_OPTION,
   SHOP_REROLL_BASE_COST, SHOP_REROLL_COST_STEP,
-  WEAPON_DATA, PASSIVE_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK
+  SHOP_WEAPON_XP_SURCHARGE, SHOP_NEW_WEAPON_XP_SURCHARGE,
+  SHOP_PASSIVE_XP_SURCHARGE, SHOP_HEAL_XP_SURCHARGE,
+  WEAPON_DATA, PASSIVE_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK,
+  XP_BASE
 } from '../../constants';
 import { SUPPLY_DATA, getSupplyCost } from '../../data/supplies';
 import { createWeapon, upgradeWeapon } from './Weapon';
@@ -115,19 +118,23 @@ export function generateUpgradeOptions(
 }
 
 function getWeaponUpgradeCost(player: Player, weapon: Weapon): number {
-  return 6 + (weapon.level + 1) * 2 + Math.floor(player.level / 3);
+  return 6 + (weapon.level + 1) * 2 + getProgressionSurcharge(player, SHOP_WEAPON_XP_SURCHARGE);
 }
 
 function getNewWeaponCost(player: Player): number {
-  return 8 + player.weapons.length * 3 + Math.floor(player.level / 2);
+  return 8 + player.weapons.length * 3 + getProgressionSurcharge(player, SHOP_NEW_WEAPON_XP_SURCHARGE);
 }
 
 function getPassiveCost(player: Player, currentLevel: number): number {
-  return 5 + (currentLevel + 1) * 2 + Math.floor(player.level / 4);
+  return 5 + (currentLevel + 1) * 2 + getProgressionSurcharge(player, SHOP_PASSIVE_XP_SURCHARGE);
 }
 
 function getHealCost(player: Player): number {
-  return 6 + Math.floor(player.level / 2);
+  return 6 + getProgressionSurcharge(player, SHOP_HEAL_XP_SURCHARGE);
+}
+
+function getProgressionSurcharge(player: Player, ratio: number): number {
+  return Math.floor(Math.max(0, player.xpToNext - XP_BASE) * ratio);
 }
 
 export function getShopOptionCount(player: Player): number {
@@ -217,7 +224,10 @@ function rollSupplyOption(player: Player): UpgradeOption | undefined {
   if (player.hp <= player.maxHp * 0.65) {
     return createSupplyOption(SupplyType.FIELD_RATION, player.level);
   }
-  if (player.level < 4 || Math.random() >= 0.35) return undefined;
+  if (player.level < 4) return undefined;
+
+  const supplyChance = Math.min(0.85, 0.35 * player.luck);
+  if (Math.random() >= supplyChance) return undefined;
 
   return createSupplyOption(
     Math.random() < 0.5 ? SupplyType.OVERCLOCK : SupplyType.AEGIS_CHARM,

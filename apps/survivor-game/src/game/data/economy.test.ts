@@ -68,6 +68,11 @@ describe('run economy', () => {
     expect(getExpectedShardReward(EnemyType.DEMON, false, true)).toBe(250);
   });
 
+  it('applies curse multiplier to expected shard rewards', () => {
+    expect(getExpectedShardReward(EnemyType.MUMMY, false, false, 1.5)).toBe(7.5);
+    expect(getExpectedShardReward(EnemyType.DEMON, false, true, 1.5)).toBe(375);
+  });
+
   it('keeps the first three minutes playable without a separate currency bottleneck', () => {
     const threeMinutes = simulateInstantClear(180);
 

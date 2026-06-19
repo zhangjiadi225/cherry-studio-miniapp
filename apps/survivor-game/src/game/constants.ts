@@ -43,6 +43,10 @@ export const SHOP_MAX_OPTION_COUNT = 6;
 export const SHOP_LEVELS_PER_EXTRA_OPTION = 5;
 export const SHOP_REROLL_BASE_COST = 10;
 export const SHOP_REROLL_COST_STEP = 10;
+export const SHOP_WEAPON_XP_SURCHARGE = 0.18;
+export const SHOP_NEW_WEAPON_XP_SURCHARGE = 0.14;
+export const SHOP_PASSIVE_XP_SURCHARGE = 0.12;
+export const SHOP_HEAL_XP_SURCHARGE = 0.08;
 
 // ===== Screen Shake =====
 export const SHAKE_HIT_DURATION = 0.1;
@@ -58,8 +62,6 @@ export const BLOOD_POOL_RADIUS = 40;
 
 // ===== Combat =====
 export const CONTACT_COOLDOWN = 0.5;
-export const HEALTH_DROP_CHANCE = 0.03;
-export const HEALTH_DROP_AMOUNT = 20;
 export const FIND_ENEMY_RANGE = 800;
 export const LIGHTNING_RANGE = 600;
 export const HOLY_WATER_RANGE = 500;

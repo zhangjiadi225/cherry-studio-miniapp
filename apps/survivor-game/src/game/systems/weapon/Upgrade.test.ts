@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PASSIVE_DATA } from '../../constants';
+import { PASSIVE_DATA, WEAPON_DATA } from '../../constants';
 import { GenericModifierType, SupplyType, WeaponType } from '../../types';
 import { createPlayer } from '../player/Player';
 import { createWeapon } from './Weapon';
@@ -23,28 +23,27 @@ describe('generateUpgradeOptions', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  it('keeps offering weapon upgrades after the old level cap band', () => {
+  it('stops offering weapon upgrades at max level', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.42);
     const player = createPlayer();
     const weapon = createWeapon(WeaponType.MAGIC_WAND);
-    weapon.level = 12;
+    weapon.level = WEAPON_DATA[WeaponType.MAGIC_WAND].maxLevel!;
     player.weapons.push(weapon);
 
     const options = generateUpgradeOptions(player, 6, false);
 
     expect(options.some((option) =>
       option.type === 'weapon' &&
-      option.weaponType === WeaponType.MAGIC_WAND &&
-      option.title.includes(`Lv${weapon.level + 1}`)
-    )).toBe(true);
+      option.weaponType === WeaponType.MAGIC_WAND
+    )).toBe(false);
   });
 
-  it('does not exhaust the shop while owned weapons can keep scaling', () => {
+  it('falls back to heal when the whole build is maxed', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.42);
     const player = createPlayer();
     for (const type of Object.values(WeaponType)) {
       const weapon = createWeapon(type);
-      weapon.level = 30;
+      weapon.level = WEAPON_DATA[type].maxLevel!;
       player.weapons.push(weapon);
     }
     player.passives = Object.entries(PASSIVE_DATA).map(([type, data]) => ({
@@ -54,8 +53,25 @@ describe('generateUpgradeOptions', () => {
 
     const options = generateUpgradeOptions(player, 4, false);
 
-    expect(options.some((option) => option.type === 'weapon')).toBe(true);
-    expect(options.every((option) => option.type !== 'heal')).toBe(true);
+    expect(options).toHaveLength(1);
+    expect(options[0].type).toBe('heal');
+  });
+
+  it('scales late-run upgrade costs with the XP curve', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.42);
+    const player = createPlayer();
+    player.level = 28;
+    player.xpToNext = 4135;
+    const weapon = createWeapon(WeaponType.MAGIC_WAND);
+    weapon.level = 7;
+    player.weapons.push(weapon);
+
+    const options = generateUpgradeOptions(player, 6, false);
+    const magicWandUpgrade = options.find((option) =>
+      option.type === 'weapon' && option.weaponType === WeaponType.MAGIC_WAND
+    );
+
+    expect(magicWandUpgrade?.cost).toBeGreaterThan(700);
   });
 
   it('offers a field ration when the player is badly hurt', () => {
@@ -71,6 +87,18 @@ describe('generateUpgradeOptions', () => {
       option.type === 'supply' &&
       option.supplyType === SupplyType.FIELD_RATION
     )).toBe(true);
+  });
+
+  it('uses luck when rolling optional supply cards', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const player = createPlayer();
+    player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
+    player.level = 5;
+    player.luck = 1.5;
+
+    const options = generateUpgradeOptions(player, 4, false);
+
+    expect(options.some((option) => option.type === 'supply')).toBe(true);
   });
 
   it('limits modifier cards to the star-chart unlocked modifier pool', () => {

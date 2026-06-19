@@ -213,23 +213,6 @@ export function spawnTrailParticles(
   }
 }
 
-export function spawnHealParticles(
-  particles: Particle[],
-  x: number, y: number,
-  count: number = 8
-) {
-  for (let i = 0; i < count; i++) {
-    const angle = (i / count) * Math.PI * 2;
-    const speed = randFloat(40, 80);
-    particles.push(createParticle(x, y, '#44ff88', speed, 0.8, 3, {
-      type: 'star',
-      glow: true,
-      glowRadius: 12,
-      angle,
-      rotSpeed: randFloat(-2, 2),
-    }));
-  }
-}
 
 export function spawnLevelUpParticles(
   particles: Particle[],

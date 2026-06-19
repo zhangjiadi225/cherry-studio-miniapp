@@ -4,7 +4,7 @@ import {
 } from './types';
 import {
   GAME_DURATION, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
-  HEALTH_DROP_CHANCE, HEALTH_DROP_AMOUNT, CONTACT_COOLDOWN,
+  CONTACT_COOLDOWN,
   MAGIC_CIRCLE_HEAL_RATE, MAGIC_CIRCLE_RADIUS,
 } from './constants';
 import { Input } from './systems/input/Input';
@@ -23,11 +23,11 @@ import { createCamera, updateCamera, shakeCamera } from './systems/camera/Camera
 import { createXPGem, updateXPGem } from './systems/player/XPGem';
 import {
   updateParticle, spawnHitParticles, spawnDeathParticles, spawnXPParticles,
-  spawnExplosionParticles, spawnHealParticles, spawnLevelUpParticles
+  spawnExplosionParticles, spawnLevelUpParticles
 } from './effects/Particle';
 import { createDamageNumber, updateDamageNumber } from './effects/DamageNumber';
 import {
-  type CodexTab, type DesktopTab, type MetaState,
+  type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   loadMetaState, applyRunReward, getInitialShards,
   buyMetaUpgrade, selectSkin, CHARACTER_SKINS,
 } from './systems/meta/MetaProgression';
@@ -61,6 +61,7 @@ export class Game {
   private meta: MetaState = loadMetaState();
   private desktopTab: DesktopTab = 'start';
   private codexTab: CodexTab = 'weapons';
+  private hoveredStarId?: MetaUpgradeNode['id'];
   private player = createPlayer();
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
@@ -98,6 +99,7 @@ export class Game {
   };
   private readonly handleKeyDown = (e: KeyboardEvent) => this.onKeyDown(e);
   private readonly handleCanvasClick = (e: MouseEvent) => this.onClick(e);
+  private readonly handleCanvasMouseMove = (e: MouseEvent) => this.onMouseMove(e);
   private readonly handleCanvasTouchStart = (e: TouchEvent) => this.onTouchStart(e);
   private readonly handleVisibilityChange = () => {
     if (document.hidden && gameState.is('playing')) {
@@ -114,6 +116,7 @@ export class Game {
 
     window.addEventListener('keydown', this.handleKeyDown);
     canvas.addEventListener('click', this.handleCanvasClick);
+    canvas.addEventListener('mousemove', this.handleCanvasMouseMove);
     canvas.addEventListener('touchstart', this.handleCanvasTouchStart, { passive: true });
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
 
@@ -126,6 +129,7 @@ export class Game {
     this.destroyed = true;
     window.removeEventListener('keydown', this.handleKeyDown);
     this.canvas.removeEventListener('click', this.handleCanvasClick);
+    this.canvas.removeEventListener('mousemove', this.handleCanvasMouseMove);
     this.canvas.removeEventListener('touchstart', this.handleCanvasTouchStart);
     document.removeEventListener('visibilitychange', this.handleVisibilityChange);
     cancelAnimationFrame(this.animationFrameId);
@@ -181,6 +185,14 @@ export class Game {
     }
   }
 
+  private onMouseMove(e: MouseEvent) {
+    if (!gameState.is('menu')) return;
+    const rect = this.canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    this.hoveredStarId = this.desktopTab === 'growth' ? this.getMetaStarIdAtPoint(x, y) : undefined;
+  }
+
   private onTouchStart(e: TouchEvent) {
     if (gameState.is('menu')) {
       this.handleDesktopClick(e);
@@ -219,10 +231,10 @@ export class Game {
   }
 
   private handleDesktopKey(e: KeyboardEvent) {
-    if (e.code === 'Digit1') this.desktopTab = 'start';
-    else if (e.code === 'Digit2') this.desktopTab = 'growth';
-    else if (e.code === 'Digit3') this.desktopTab = 'skins';
-    else if (e.code === 'Digit4') this.desktopTab = 'codex';
+    if (e.code === 'Digit1') this.setDesktopTab('start');
+    else if (e.code === 'Digit2') this.setDesktopTab('skins');
+    else if (e.code === 'Digit3') this.setDesktopTab('growth');
+    else if (e.code === 'Digit4') this.setDesktopTab('codex');
     else if (this.desktopTab === 'codex' && e.code === 'KeyQ') this.shiftCodexTab(-1);
     else if (this.desktopTab === 'codex' && e.code === 'KeyE') this.shiftCodexTab(1);
     else if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.shiftDesktopTab(-1);
@@ -231,9 +243,14 @@ export class Game {
   }
 
   private shiftDesktopTab(dir: number) {
-    const tabs: DesktopTab[] = ['start', 'growth', 'skins', 'codex'];
+    const tabs: DesktopTab[] = ['start', 'skins', 'growth', 'codex'];
     const index = tabs.indexOf(this.desktopTab);
-    this.desktopTab = tabs[(index + dir + tabs.length) % tabs.length];
+    this.setDesktopTab(tabs[(index + dir + tabs.length) % tabs.length]);
+  }
+
+  private setDesktopTab(tab: DesktopTab) {
+    this.desktopTab = tab;
+    if (tab !== 'growth') this.hoveredStarId = undefined;
   }
 
   private shiftCodexTab(dir: number) {
@@ -248,13 +265,15 @@ export class Game {
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const x = clientX - rect.left;
     const y = clientY - rect.top;
-    const w = this.renderer.getWidth();
-    const h = this.renderer.getHeight();
 
     const tabs = this.renderer.getDesktopTabRects();
     for (const tab of tabs) {
       if (x >= tab.x && x <= tab.x + tab.w && y >= tab.y && y <= tab.y + tab.h) {
-        this.desktopTab = tab.id;
+        if (tab.id === 'start') {
+          this.startGame();
+          return;
+        }
+        this.setDesktopTab(tab.id);
         return;
       }
     }
@@ -268,27 +287,19 @@ export class Game {
     }
 
     if (this.desktopTab === 'growth') {
-      const nodes = this.renderer.getMetaStarNodeRects();
-      for (const nodeRect of nodes) {
-        const cx = nodeRect.x + nodeRect.w / 2;
-        const cy = nodeRect.y + nodeRect.h / 2;
-        const dx = x - cx;
-        const dy = y - cy;
-        const r = nodeRect.w / 2 + 8;
-        if (dx * dx + dy * dy <= r * r) {
-          this.meta = buyMetaUpgrade(this.meta, nodeRect.id);
-          return;
-        }
+      const nodeId = this.getMetaStarIdAtPoint(x, y);
+      if (nodeId) {
+        this.hoveredStarId = nodeId;
+        this.meta = buyMetaUpgrade(this.meta, nodeId);
       }
       return;
     }
 
     if (this.desktopTab === 'skins') {
-      const layout = this.getDesktopCardLayout(CHARACTER_SKINS.length, 3, 236, 318, 18, 218);
-      for (let i = 0; i < CHARACTER_SKINS.length; i++) {
-        const card = layout(i);
+      const cards = this.renderer.getSkinCardRects();
+      for (const card of cards) {
         if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
-          this.meta = selectSkin(this.meta, CHARACTER_SKINS[i].id);
+          this.meta = selectSkin(this.meta, CHARACTER_SKINS[card.index].id);
           return;
         }
       }
@@ -296,41 +307,27 @@ export class Game {
     }
 
     if (this.desktopTab === 'codex') {
-      const tabs: CodexTab[] = ['weapons', 'passives', 'enemies', 'modules'];
-      const tabW = 128;
-      const tabH = 38;
-      const gap = 12;
-      const totalW = tabs.length * tabW + (tabs.length - 1) * gap;
-      const startX = w / 2 - totalW / 2;
-      const tabY = 214;
-      for (let i = 0; i < tabs.length; i++) {
-        const tx = startX + i * (tabW + gap);
-        if (x >= tx && x <= tx + tabW && y >= tabY && y <= tabY + tabH) {
-          this.codexTab = tabs[i];
+      const tabs = this.renderer.getCodexTabRects();
+      for (const tab of tabs) {
+        if (x >= tab.x && x <= tab.x + tab.w && y >= tab.y && y <= tab.y + tab.h) {
+          this.codexTab = tab.id;
           return;
         }
       }
     }
   }
 
-  private getDesktopCardLayout(
-    count: number,
-    columns: number,
-    cardW: number,
-    cardH: number,
-    gap: number,
-    startY: number
-  ) {
-    const w = this.renderer.getWidth();
-    const visibleColumns = Math.min(columns, count);
-    const totalW = visibleColumns * cardW + (visibleColumns - 1) * gap;
-    const startX = w / 2 - totalW / 2;
-    return (index: number) => ({
-      x: startX + (index % columns) * (cardW + gap),
-      y: startY + Math.floor(index / columns) * (cardH + gap),
-      w: cardW,
-      h: cardH,
-    });
+  private getMetaStarIdAtPoint(x: number, y: number): MetaUpgradeNode['id'] | undefined {
+    const nodes = this.renderer.getMetaStarNodeRects();
+    for (const nodeRect of nodes) {
+      const cx = nodeRect.x + nodeRect.w / 2;
+      const cy = nodeRect.y + nodeRect.h / 2;
+      const dx = x - cx;
+      const dy = y - cy;
+      const r = nodeRect.w / 2 + 10;
+      if (dx * dx + dy * dy <= r * r) return nodeRect.id;
+    }
+    return undefined;
   }
 
   // ──────────────────────────── Game Lifecycle ────────────────────────────
@@ -628,11 +625,6 @@ export class Game {
       this.damageNumbers.push(createDamageNumber(this.player.x, this.player.y, heal, '#ff6666', 14));
     }
 
-    if (Math.random() < HEALTH_DROP_CHANCE * this.player.luck) {
-      this.player.hp = Math.min(this.player.maxHp, this.player.hp + HEALTH_DROP_AMOUNT);
-      this.damageNumbers.push(createDamageNumber(this.player.x, this.player.y, HEALTH_DROP_AMOUNT, COLORS.heal, 18));
-      spawnHealParticles(this.particles, this.player.x, this.player.y, 6);
-    }
   }
 
   private checkPlayerDeath() {
@@ -774,7 +766,7 @@ export class Game {
     this.renderer.clear();
 
     if (gameState.is('menu')) {
-      this.renderer.drawDesktop(this.meta, this.desktopTab, this.codexTab);
+      this.renderer.drawDesktop(this.meta, this.desktopTab, this.codexTab, this.hoveredStarId);
       return;
     }
 

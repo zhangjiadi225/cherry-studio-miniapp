@@ -28,11 +28,18 @@ describe('weapon output model', () => {
     expect(projectedOutput(WeaponType.BIBLE, 8)).toBeGreaterThan(70);
   });
 
-  it('lets weapons keep scaling after the old level cap band', () => {
-    const weapon = weaponAtLevel(WeaponType.MAGIC_WAND, 12);
+  it('caps weapon upgrades at level 8', () => {
+    const weapon = weaponAtLevel(WeaponType.MAGIC_WAND, 8);
 
-    expect(weapon.level).toBe(12);
-    expect(upgradeWeapon(weapon)).toBe(true);
-    expect(weapon.level).toBe(13);
+    expect(weapon.level).toBe(8);
+    expect(upgradeWeapon(weapon)).toBe(false);
+    expect(weapon.level).toBe(8);
+  });
+
+  it('keeps capped magic wand output under runaway scaling', () => {
+    const levelOneOutput = projectedOutput(WeaponType.MAGIC_WAND, 1);
+    const cappedOutput = projectedOutput(WeaponType.MAGIC_WAND, 8);
+
+    expect(cappedOutput / levelOneOutput).toBeLessThan(40);
   });
 });

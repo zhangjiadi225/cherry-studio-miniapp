@@ -30,7 +30,12 @@ export const SUPPLY_DATA: Record<SupplyType, {
   },
 };
 
+const SUPPLY_SCALING_START_LEVEL = 4;
+const SUPPLY_LATE_LEVEL_COST = 0.75;
+
 export function getSupplyCost(type: SupplyType, playerLevel: number): number {
   const data = SUPPLY_DATA[type];
-  return data.baseCost + Math.floor(Math.max(1, playerLevel) * data.levelCost);
+  const level = Math.max(1, playerLevel);
+  const lateLevel = Math.max(0, level - SUPPLY_SCALING_START_LEVEL);
+  return data.baseCost + Math.floor(level * data.levelCost) + Math.floor(lateLevel * lateLevel * SUPPLY_LATE_LEVEL_COST);
 }

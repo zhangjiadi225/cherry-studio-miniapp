@@ -29,7 +29,7 @@ export const WEAPON_DATA: Record<WeaponType, {
   [WeaponType.WHIP]: {
     name: '鞭子',
     icon: '🪄',
-    desc: '每升1级多一节鞭身，无限成长',
+    desc: '每升1级多一节鞭身，最高8级',
     family: 'swing',
     baseDamage: 15,
     baseCooldown: 1.5,
@@ -40,6 +40,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseDuration: 0.5,
     baseKnockback: 50,
     perLevel: { damage: 5, count: 0, growthLabel: '鞭身+1' },
+    maxLevel: 8,
   },
   [WeaponType.MAGIC_WAND]: {
     name: '魔法弹',
@@ -55,6 +56,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseDuration: 2,
     baseKnockback: 30,
     perLevel: { damage: 5, count: 1, speed: 30 },
+    maxLevel: 8,
   },
   [WeaponType.BIBLE]: {
     name: '圣经',
@@ -70,6 +72,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseDuration: 4,
     baseKnockback: 60,
     perLevel: { damage: 7, count: 1, duration: 0.5, area: 0.1, cooldown: -0.15 },
+    maxLevel: 8,
   },
   [WeaponType.GARLIC]: {
     name: '大蒜',
@@ -85,6 +88,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseDuration: 999,
     baseKnockback: 20,
     perLevel: { damage: 2, area: 0.15 },
+    maxLevel: 8,
   },
   [WeaponType.FIRE_WAND]: {
     name: '火焰弹',
@@ -100,6 +104,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseDuration: 2,
     baseKnockback: 80,
     perLevel: { damage: 10, area: 0.2, count: 1 },
+    maxLevel: 8,
   },
   [WeaponType.HOLY_WATER]: {
     name: '圣水',
@@ -115,6 +120,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseDuration: 3,
     baseKnockback: 0,
     perLevel: { damage: 5, count: 1, area: 0.15, duration: 0.5 },
+    maxLevel: 8,
   },
   [WeaponType.LIGHTNING]: {
     name: '闪电',
@@ -130,6 +136,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseDuration: 0.1,
     baseKnockback: 100,
     perLevel: { damage: 8, count: 1, cooldown: -0.15 },
+    maxLevel: 8,
   },
   [WeaponType.AXE]: {
     name: '斧头',
@@ -145,5 +152,6 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseDuration: 2.5,
     baseKnockback: 70,
     perLevel: { damage: 12, count: 1, area: 0.15 },
+    maxLevel: 8,
   },
 };

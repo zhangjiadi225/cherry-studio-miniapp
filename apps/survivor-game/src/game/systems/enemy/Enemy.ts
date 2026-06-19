@@ -54,7 +54,7 @@ export function createEnemy(
   enemy.knockbackY = 0;
   enemy.hitFlash = 0;
   enemy.animTimer = Math.random() * Math.PI * 2;
-  enemy.xpValue = data.xpValue * (isElite ? ELITE_XP_MULT : 1);
+  enemy.xpValue = data.xpValue * (isElite ? ELITE_XP_MULT : 1) * curseMult;
   enemy.contactCooldown = CONTACT_COOLDOWN;
   return enemy;
 }
