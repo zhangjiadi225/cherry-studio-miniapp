@@ -722,7 +722,6 @@ export class Game {
     if (!option) return;
     this.refreshWeaponRefs();
     eventBus.emit(GameEvent.UPGRADE_SELECT, option);
-    this.finishShop();
   }
 
   private rerollShop() {

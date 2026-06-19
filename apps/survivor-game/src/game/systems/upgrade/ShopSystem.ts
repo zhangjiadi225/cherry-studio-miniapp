@@ -48,7 +48,10 @@ export class ShopSystem {
     applyUpgrade(player, option);
     option.purchased = true;
 
-    const nextAvailable = this.options.findIndex((o) => !o.purchased);
+    const nextAffordable = this.options.findIndex((o) => !o.purchased && player.shards >= o.cost);
+    const nextAvailable = nextAffordable >= 0
+      ? nextAffordable
+      : this.options.findIndex((o) => !o.purchased);
     if (nextAvailable >= 0) this.selectedIndex = nextAvailable;
     return option;
   }
@@ -77,7 +80,7 @@ export class ShopSystem {
     const cardH = 230;
     const totalW = this.options.length * (cardW + cardGap) - cardGap;
     const startX = (w - totalW) / 2;
-    const cardY = h / 2 - cardH / 2 - 5;
+    const cardY = h / 2 - cardH / 2 + 8;
 
     for (let i = 0; i < this.options.length; i++) {
       const cardX = startX + i * (cardW + cardGap);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PASSIVE_DATA, WEAPON_DATA } from '../../constants';
+import { PASSIVE_DATA, UPGRADE_RARITY_DATA, WEAPON_DATA } from '../../constants';
 import { GenericModifierType, SupplyType, WeaponType } from '../../types';
 import { createPlayer } from '../player/Player';
 import { createWeapon } from './Weapon';
@@ -74,6 +74,32 @@ describe('generateUpgradeOptions', () => {
     expect(magicWandUpgrade?.cost).toBeGreaterThan(700);
   });
 
+  it('assigns higher rarity and price to stronger weapon levels', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.42);
+    const earlyPlayer = createPlayer();
+    const earlyWeapon = createWeapon(WeaponType.MAGIC_WAND);
+    earlyWeapon.level = 2;
+    earlyPlayer.weapons.push(earlyWeapon);
+
+    const latePlayer = createPlayer();
+    const lateWeapon = createWeapon(WeaponType.MAGIC_WAND);
+    lateWeapon.level = 7;
+    latePlayer.weapons.push(lateWeapon);
+
+    const earlyOption = generateUpgradeOptions(earlyPlayer, 6, false).find((option) =>
+      option.type === 'weapon' && option.weaponType === WeaponType.MAGIC_WAND
+    );
+    const lateOption = generateUpgradeOptions(latePlayer, 6, false).find((option) =>
+      option.type === 'weapon' && option.weaponType === WeaponType.MAGIC_WAND
+    );
+
+    expect(earlyOption?.rarity).toBe('common');
+    expect(lateOption?.rarity).toBe('legendary');
+    expect(lateOption!.cost).toBeGreaterThan(earlyOption!.cost);
+    expect(UPGRADE_RARITY_DATA[lateOption!.rarity].costMultiplier)
+      .toBeGreaterThan(UPGRADE_RARITY_DATA[earlyOption!.rarity].costMultiplier);
+  });
+
   it('offers a field ration when the player is badly hurt', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.9);
     const player = createPlayer();
@@ -126,6 +152,7 @@ describe('generateUpgradeOptions', () => {
       icon: '✚',
       type: 'supply',
       supplyType: SupplyType.FIELD_RATION,
+      rarity: 'uncommon',
       cost: 9,
       isMaxed: false,
     });

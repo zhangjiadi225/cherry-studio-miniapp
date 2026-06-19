@@ -1,6 +1,6 @@
 import type { RenderContext } from './WorldRenderer';
 import type { Player, Enemy, UpgradeOption } from '../types';
-import { COLORS, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA, GENERIC_MODIFIER_DATA } from '../constants';
+import { COLORS, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA, GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA } from '../constants';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   META_UPGRADES, CHARACTER_SKINS, hasMetaUpgrade, canBuyMetaUpgrade,
@@ -1589,13 +1589,17 @@ export function drawUpgradeScreen(
   ctx.fillStyle = '#ffd700';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('升级商店', w / 2, h / 2 - 180);
+  ctx.fillText('升级商店', w / 2, h / 2 - 190);
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
 
   ctx.font = 'bold 18px "Segoe UI", sans-serif';
   ctx.fillStyle = '#8fe8ff';
-  ctx.fillText(`魂晶 ${Math.floor(shards)}`, w / 2, h / 2 - 142);
+  ctx.fillText(`魂晶 ${Math.floor(shards)}`, w / 2, h / 2 - 154);
+
+  ctx.font = '13px "Segoe UI", sans-serif';
+  ctx.fillStyle = COLORS.uiDim;
+  ctx.fillText('可连续购买多个成长，买完后继续战斗', w / 2, h / 2 - 128);
 
   const cardGap = 12;
   const optionCount = Math.max(options.length, 1);
@@ -1603,7 +1607,7 @@ export function drawUpgradeScreen(
   const cardH = 230;
   const totalW = options.length * (cardW + cardGap) - cardGap;
   const startX = (w - totalW) / 2;
-  const cardY = h / 2 - cardH / 2 - 5;
+  const cardY = h / 2 - cardH / 2 + 8;
 
   for (let i = 0; i < options.length; i++) {
     const opt = options[i];
@@ -1614,6 +1618,9 @@ export function drawUpgradeScreen(
     const sold = !!opt.purchased;
     const unavailable = sold || !affordable;
     const isModifier = opt.type === 'modifier';
+    const rarity = UPGRADE_RARITY_DATA[opt.rarity];
+    const accent = rarity.color;
+    const accentDark = rarity.darkColor;
 
     ctx.save();
     ctx.translate(x, y);
@@ -1627,26 +1634,21 @@ export function drawUpgradeScreen(
       sold ? [
         [0, 'rgba(45,85,60,0.92)'],
         [1, 'rgba(25,50,35,0.92)'],
-      ] : isModifier ? [
-        [0, selected ? 'rgba(95,55,145,0.96)' : 'rgba(70,45,115,0.92)'],
-        [1, selected ? 'rgba(50,35,92,0.96)' : 'rgba(36,28,68,0.92)'],
-      ] : selected ? [
-        [0, 'rgba(85,75,135,0.95)'],
-        [1, 'rgba(45,42,82,0.95)'],
       ] : [
-        [0, 'rgba(50,50,80,0.9)'],
-        [1, 'rgba(30,30,50,0.9)'],
+        [0, colorWithAlpha(accent, selected ? 0.3 : 0.18)],
+        [0.42, colorWithAlpha(accentDark, selected ? 0.62 : 0.42)],
+        [1, selected ? 'rgba(22,24,46,0.96)' : 'rgba(20,22,38,0.92)'],
       ];
-    const cardGrad = cachedLinearGradient(ctx, `upgrade-card-${sold}-${isModifier}-${selected}-${cardH}`, 0, 0, 0, cardH, cardStops);
+    const cardGrad = cachedLinearGradient(ctx, `upgrade-card-${sold}-${opt.rarity}-${selected}-${cardH}`, 0, 0, 0, cardH, cardStops);
     ctx.fillStyle = cardGrad;
     ctx.beginPath();
-    ctx.roundRect(0, 0, cardW, cardH, 12);
+    ctx.roundRect(0, 0, cardW, cardH, 8);
     ctx.fill();
 
-    ctx.strokeStyle = selected ? '#ffd166' : isModifier ? '#b277ff' : 'rgba(100,100,150,0.5)';
+    ctx.strokeStyle = selected ? accent : colorWithAlpha(accent, 0.45);
     ctx.lineWidth = selected ? 2 : 1;
     ctx.beginPath();
-    ctx.roundRect(0, 0, cardW, cardH, 12);
+    ctx.roundRect(0, 0, cardW, cardH, 8);
     ctx.stroke();
 
     ctx.shadowColor = 'transparent';
@@ -1655,14 +1657,28 @@ export function drawUpgradeScreen(
     if (unavailable) {
       ctx.fillStyle = 'rgba(0,0,0,0.28)';
       ctx.beginPath();
-      ctx.roundRect(0, 0, cardW, cardH, 12);
+      ctx.roundRect(0, 0, cardW, cardH, 8);
       ctx.fill();
     }
 
-    ctx.fillStyle = isModifier ? 'rgba(178,119,255,0.22)' : selected ? 'rgba(255,209,102,0.18)' : 'rgba(80,80,120,0.3)';
+    ctx.fillStyle = colorWithAlpha(accent, unavailable ? 0.14 : selected ? 0.28 : 0.2);
     ctx.beginPath();
     ctx.arc(cardW / 2, 46, 32, 0, Math.PI * 2);
     ctx.fill();
+
+    const rarityBadgeW = 48;
+    ctx.fillStyle = colorWithAlpha(accent, sold ? 0.16 : 0.22);
+    ctx.beginPath();
+    ctx.roundRect(cardW - rarityBadgeW - 10, 10, rarityBadgeW, 22, 8);
+    ctx.fill();
+    ctx.strokeStyle = colorWithAlpha(accent, sold ? 0.38 : 0.65);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(cardW - rarityBadgeW - 10, 10, rarityBadgeW, 22, 8);
+    ctx.stroke();
+    ctx.font = 'bold 11px "Segoe UI", sans-serif';
+    ctx.fillStyle = unavailable ? colorWithAlpha(accent, 0.75) : accent;
+    ctx.fillText(rarity.label, cardW - rarityBadgeW / 2 - 10, 21);
 
     ctx.font = '42px serif';
     ctx.textAlign = 'center';
@@ -1720,7 +1736,7 @@ export function drawUpgradeScreen(
     ctx.stroke();
     ctx.font = 'bold 13px "Segoe UI", sans-serif';
     ctx.fillStyle = sold ? '#88ff88' : affordable ? '#ffd166' : '#ff8888';
-    ctx.fillText(sold ? (isModifier ? '已安装' : '已购买') : `魂晶 ${opt.cost}`, cardW / 2, priceY + 13);
+    ctx.fillText(sold ? (isModifier ? '已安装' : '已购买') : `${rarity.label} · 魂晶 ${opt.cost}`, cardW / 2, priceY + 13);
 
     ctx.restore();
   }

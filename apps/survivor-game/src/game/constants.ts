@@ -1,4 +1,4 @@
-import type { MapZone } from './types';
+import type { MapZone, UpgradeRarity } from './types';
 
 export { COLORS, ZONE_COLORS } from './data/colors';
 export { ENEMY_DATA } from './data/enemies';
@@ -47,6 +47,44 @@ export const SHOP_WEAPON_XP_SURCHARGE = 0.18;
 export const SHOP_NEW_WEAPON_XP_SURCHARGE = 0.14;
 export const SHOP_PASSIVE_XP_SURCHARGE = 0.12;
 export const SHOP_HEAL_XP_SURCHARGE = 0.08;
+
+export const UPGRADE_RARITY_DATA: Record<UpgradeRarity, {
+  label: string;
+  color: string;
+  darkColor: string;
+  costMultiplier: number;
+}> = {
+  common: {
+    label: '白色',
+    color: '#f4f7fb',
+    darkColor: '#687284',
+    costMultiplier: 1,
+  },
+  uncommon: {
+    label: '绿色',
+    color: '#76e89a',
+    darkColor: '#1f6f46',
+    costMultiplier: 1.18,
+  },
+  rare: {
+    label: '蓝色',
+    color: '#6fb7ff',
+    darkColor: '#245a96',
+    costMultiplier: 1.38,
+  },
+  epic: {
+    label: '紫色',
+    color: '#c78dff',
+    darkColor: '#6d3ca0',
+    costMultiplier: 1.65,
+  },
+  legendary: {
+    label: '金色',
+    color: '#ffd166',
+    darkColor: '#9a6a10',
+    costMultiplier: 2.05,
+  },
+};
 
 // ===== Screen Shake =====
 export const SHAKE_HIT_DURATION = 0.1;

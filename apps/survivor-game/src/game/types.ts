@@ -165,6 +165,8 @@ export interface XPGem {
   type: 'small' | 'medium' | 'large';
 }
 
+export type UpgradeRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+
 export interface UpgradeOption {
   title: string;
   description: string;
@@ -174,6 +176,7 @@ export interface UpgradeOption {
   passiveType?: PassiveType;
   modifierType?: GenericModifierType;
   supplyType?: SupplyType;
+  rarity: UpgradeRarity;
   cost: number;
   isMaxed: boolean;
   purchased?: boolean;

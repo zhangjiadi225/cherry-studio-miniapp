@@ -1,11 +1,14 @@
-import { Player, UpgradeOption, WeaponType, PassiveType, Weapon, GenericModifierType, SupplyType } from '../../types';
+import {
+  Player, UpgradeOption, WeaponType, PassiveType, Weapon, GenericModifierType, SupplyType,
+  type UpgradeRarity,
+} from '../../types';
 import {
   SHOP_OPTION_COUNT, SHOP_MAX_OPTION_COUNT, SHOP_LEVELS_PER_EXTRA_OPTION,
   SHOP_REROLL_BASE_COST, SHOP_REROLL_COST_STEP,
   SHOP_WEAPON_XP_SURCHARGE, SHOP_NEW_WEAPON_XP_SURCHARGE,
   SHOP_PASSIVE_XP_SURCHARGE, SHOP_HEAL_XP_SURCHARGE,
   WEAPON_DATA, PASSIVE_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK,
-  XP_BASE
+  XP_BASE, UPGRADE_RARITY_DATA
 } from '../../constants';
 import { SUPPLY_DATA, getSupplyCost } from '../../data/supplies';
 import { createWeapon, upgradeWeapon } from './Weapon';
@@ -23,13 +26,16 @@ export function generateUpgradeOptions(
   for (const w of player.weapons) {
     const data = WEAPON_DATA[w.type];
     if (data.maxLevel === undefined || w.level < data.maxLevel) {
+      const nextLevel = w.level + 1;
+      const rarity = getWeaponLevelRarity(nextLevel);
       allOptions.push({
-        title: `${data.name} Lv${w.level + 1}`,
+        title: `${data.name} Lv${nextLevel}`,
         description: getWeaponUpgradeDesc(w),
         icon: data.icon,
         type: 'weapon',
         weaponType: w.type,
-        cost: getWeaponUpgradeCost(player, w),
+        rarity,
+        cost: applyRarityCost(getWeaponUpgradeBaseCost(player, w), rarity),
         isMaxed: false,
       });
     }
@@ -37,6 +43,7 @@ export function generateUpgradeOptions(
 
   if (player.weapons.length < 6) {
     const ownedTypes = new Set(player.weapons.map(w => w.type));
+    const rarity = getNewWeaponRarity(player);
     for (const [type, data] of Object.entries(WEAPON_DATA)) {
       if (!ownedTypes.has(type as WeaponType)) {
         allOptions.push({
@@ -45,7 +52,8 @@ export function generateUpgradeOptions(
           icon: data.icon,
           type: 'weapon',
           weaponType: type as WeaponType,
-          cost: getNewWeaponCost(player),
+          rarity,
+          cost: applyRarityCost(getNewWeaponBaseCost(player), rarity),
           isMaxed: false,
         });
       }
@@ -55,13 +63,16 @@ export function generateUpgradeOptions(
   for (const [type, data] of Object.entries(PASSIVE_DATA)) {
     const currentLevel = getPassiveLevel(player, type as PassiveType);
     if (currentLevel < data.maxLevel) {
+      const nextLevel = currentLevel + 1;
+      const rarity = getPassiveLevelRarity(nextLevel, data.maxLevel);
       allOptions.push({
-        title: `${data.name} Lv${currentLevel + 1}`,
+        title: `${data.name} Lv${nextLevel}`,
         description: data.desc,
         icon: data.icon,
         type: 'passive',
         passiveType: type as PassiveType,
-        cost: getPassiveCost(player, currentLevel),
+        rarity,
+        cost: applyRarityCost(getPassiveBaseCost(player, currentLevel), rarity),
         isMaxed: false,
       });
     }
@@ -109,7 +120,8 @@ export function generateUpgradeOptions(
       description: '恢复30%最大生命值',
       icon: '❤️‍🩹',
       type: 'heal',
-      cost: getHealCost(player),
+      rarity: 'common',
+      cost: applyRarityCost(getHealBaseCost(player), 'common'),
       isMaxed: true,
     });
   }
@@ -117,24 +129,50 @@ export function generateUpgradeOptions(
   return result.slice(0, count);
 }
 
-function getWeaponUpgradeCost(player: Player, weapon: Weapon): number {
+function getWeaponUpgradeBaseCost(player: Player, weapon: Weapon): number {
   return 6 + (weapon.level + 1) * 2 + getProgressionSurcharge(player, SHOP_WEAPON_XP_SURCHARGE);
 }
 
-function getNewWeaponCost(player: Player): number {
+function getNewWeaponBaseCost(player: Player): number {
   return 8 + player.weapons.length * 3 + getProgressionSurcharge(player, SHOP_NEW_WEAPON_XP_SURCHARGE);
 }
 
-function getPassiveCost(player: Player, currentLevel: number): number {
+function getPassiveBaseCost(player: Player, currentLevel: number): number {
   return 5 + (currentLevel + 1) * 2 + getProgressionSurcharge(player, SHOP_PASSIVE_XP_SURCHARGE);
 }
 
-function getHealCost(player: Player): number {
+function getHealBaseCost(player: Player): number {
   return 6 + getProgressionSurcharge(player, SHOP_HEAL_XP_SURCHARGE);
 }
 
 function getProgressionSurcharge(player: Player, ratio: number): number {
   return Math.floor(Math.max(0, player.xpToNext - XP_BASE) * ratio);
+}
+
+function applyRarityCost(baseCost: number, rarity: UpgradeRarity): number {
+  return Math.max(1, Math.round(baseCost * UPGRADE_RARITY_DATA[rarity].costMultiplier));
+}
+
+function getWeaponLevelRarity(nextLevel: number): UpgradeRarity {
+  if (nextLevel >= 8) return 'legendary';
+  if (nextLevel >= 7) return 'epic';
+  if (nextLevel >= 6) return 'rare';
+  if (nextLevel >= 4) return 'uncommon';
+  return 'common';
+}
+
+function getNewWeaponRarity(player: Player): UpgradeRarity {
+  if (player.weapons.length >= 5) return 'legendary';
+  if (player.weapons.length >= 3) return 'epic';
+  return 'rare';
+}
+
+function getPassiveLevelRarity(nextLevel: number, maxLevel: number): UpgradeRarity {
+  if (maxLevel <= 1) return 'epic';
+  if (nextLevel >= maxLevel) return 'epic';
+  if (nextLevel >= 4) return 'rare';
+  if (nextLevel >= 3) return 'uncommon';
+  return 'common';
 }
 
 export function getShopOptionCount(player: Player): number {
@@ -196,6 +234,7 @@ function rollModifierOption(player: Player, modifierPool: GenericModifierType[])
       if (weapon.level < modifier.unlockLevel) continue;
       if (!modifier.compatibleFamilies.includes(weapon.family)) continue;
       if (weapon.modifiers.filter(m => m === modifier.id).length >= modifier.maxStacks) continue;
+      const rarity = getModifierRarity(modifier.priceTier);
 
       options.push({
         title: `${modifier.name} · ${weaponData.name}`,
@@ -204,7 +243,8 @@ function rollModifierOption(player: Player, modifierPool: GenericModifierType[])
         type: 'modifier',
         weaponType: weapon.type,
         modifierType: modifier.id,
-        cost: getModifierCost(weapon, modifier.id),
+        rarity,
+        cost: applyRarityCost(getModifierBaseCost(weapon, modifier.id), rarity),
         isMaxed: false,
       });
     }
@@ -215,9 +255,16 @@ function rollModifierOption(player: Player, modifierPool: GenericModifierType[])
   return options[0];
 }
 
-function getModifierCost(weapon: Weapon, modifierType: GenericModifierType): number {
+function getModifierBaseCost(weapon: Weapon, modifierType: GenericModifierType): number {
   const modifier = GENERIC_MODIFIER_DATA[modifierType];
   return 12 + weapon.level * 3 + modifier.priceTier * 4;
+}
+
+function getModifierRarity(priceTier: number): UpgradeRarity {
+  if (priceTier >= 4) return 'legendary';
+  if (priceTier >= 3) return 'epic';
+  if (priceTier >= 2) return 'rare';
+  return 'uncommon';
 }
 
 function rollSupplyOption(player: Player): UpgradeOption | undefined {
@@ -237,15 +284,23 @@ function rollSupplyOption(player: Player): UpgradeOption | undefined {
 
 function createSupplyOption(type: SupplyType, playerLevel: number): UpgradeOption {
   const data = SUPPLY_DATA[type];
+  const rarity = getSupplyRarity(type);
   return {
     title: data.name,
     description: data.desc,
     icon: data.icon,
     type: 'supply',
     supplyType: type,
-    cost: getSupplyCost(type, playerLevel),
+    rarity,
+    cost: applyRarityCost(getSupplyCost(type, playerLevel), rarity),
     isMaxed: false,
   };
+}
+
+function getSupplyRarity(type: SupplyType): UpgradeRarity {
+  if (type === SupplyType.OVERCLOCK) return 'epic';
+  if (type === SupplyType.AEGIS_CHARM) return 'rare';
+  return 'uncommon';
 }
 
 function applySupply(player: Player, type: SupplyType) {
