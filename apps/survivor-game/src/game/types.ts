@@ -3,6 +3,18 @@ export interface Vec2 {
   y: number;
 }
 
+export interface TouchJoystickState {
+  active: boolean;
+  startX: number;
+  startY: number;
+  knobX: number;
+  knobY: number;
+  dirX: number;
+  dirY: number;
+  distance: number;
+  maxRadius: number;
+}
+
 export interface Camera {
   x: number;
   y: number;

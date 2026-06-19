@@ -828,6 +828,9 @@ export class Game {
     this.renderer.drawMinimap(this.player, this.enemies);
     this.renderer.drawAudioButton(this.audio.isMuted());
     this.renderer.drawPauseButton();
+    if (gameState.is('playing')) {
+      this.renderer.drawVirtualJoystick(this.input.getJoystickState());
+    }
 
     if (this.activeBoss?.hp && this.activeBoss.hp > 0) {
       this.renderer.drawBossBar(ENEMY_DATA[this.activeBoss.type].name, this.activeBoss.hp, this.activeBoss.maxHp);

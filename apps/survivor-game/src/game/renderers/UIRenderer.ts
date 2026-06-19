@@ -1,10 +1,11 @@
 import type { RenderContext } from './WorldRenderer';
-import type { Player, Enemy, UpgradeOption } from '../types';
+import type { Player, Enemy, UpgradeOption, TouchJoystickState } from '../types';
 import { COLORS, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA, GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA } from '../constants';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   META_UPGRADES, CHARACTER_SKINS, hasMetaUpgrade, canBuyMetaUpgrade,
 } from '../systems/meta/MetaProgression';
+import { getShopLayout, isMobileViewport } from '../systems/upgrade/ShopLayout';
 
 const gradientCache = new Map<string, CanvasGradient>();
 const GRADIENT_CACHE_LIMIT = 160;
@@ -55,9 +56,10 @@ function cachedRadialGradient(
 
 export function drawUI(rc: RenderContext, player: Player, elapsed: number, killCount: number, objective?: string) {
   const { ctx, w, h } = rc;
-  const padding = 16;
-  const barW = Math.min(320, w - 32);
-  const barH = 14;
+  const mobile = isMobileViewport(w, h);
+  const padding = mobile ? 10 : 16;
+  const barW = mobile ? Math.min(240, Math.max(172, w - 142)) : Math.min(320, w - 32);
+  const barH = mobile ? 12 : 14;
   const barX = padding;
   const barY = padding;
 
@@ -97,68 +99,84 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   ctx.textBaseline = 'middle';
   ctx.fillText(`${Math.floor(xpRatio * 100)}%`, barX + barW / 2, barY + barH / 2);
 
+  const rowY = barY + barH + 6;
+  const rowH = mobile ? 22 : 24;
+  const levelW = mobile ? 46 : 50;
+  const hpW = mobile ? 94 : 120;
+  const shardW = mobile ? 82 : 104;
+  const gap = mobile ? 6 : 10;
+
   // Level badge
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
   ctx.beginPath();
-  ctx.roundRect(barX, barY + barH + 6, 50, 24, 6);
+  ctx.roundRect(barX, rowY, levelW, rowH, 6);
   ctx.fill();
   ctx.strokeStyle = '#44ff44';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(barX, barY + barH + 6, 50, 24, 6);
+  ctx.roundRect(barX, rowY, levelW, rowH, 6);
   ctx.stroke();
-  ctx.font = 'bold 14px "Segoe UI", sans-serif';
+  ctx.font = `bold ${mobile ? 12 : 14}px "Segoe UI", sans-serif`;
   ctx.fillStyle = '#44ff44';
   ctx.textAlign = 'center';
-  ctx.fillText(`Lv.${player.level}`, barX + 25, barY + barH + 18);
+  ctx.fillText(`Lv.${player.level}`, barX + levelW / 2, rowY + rowH / 2);
 
   // HP display
+  const hpX = barX + levelW + gap;
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
   ctx.beginPath();
-  ctx.roundRect(barX + 60, barY + barH + 6, 120, 24, 6);
+  ctx.roundRect(hpX, rowY, hpW, rowH, 6);
   ctx.fill();
   ctx.strokeStyle = COLORS.danger;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(barX + 60, barY + barH + 6, 120, 24, 6);
+  ctx.roundRect(hpX, rowY, hpW, rowH, 6);
   ctx.stroke();
-  ctx.font = '13px "Segoe UI", sans-serif';
+  ctx.font = `${mobile ? 11 : 13}px "Segoe UI", sans-serif`;
   ctx.fillStyle = COLORS.danger;
   ctx.textAlign = 'center';
-  ctx.fillText(`❤️ ${Math.ceil(player.hp)}/${player.maxHp}`, barX + 120, barY + barH + 18);
+  ctx.fillText(`${mobile ? '' : '❤️ '}${Math.ceil(player.hp)}/${player.maxHp}`, hpX + hpW / 2, rowY + rowH / 2);
 
   // Spendable soul shard display
+  const shardX = hpX + hpW + gap;
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
   ctx.beginPath();
-  ctx.roundRect(barX + 190, barY + barH + 6, 104, 24, 6);
+  ctx.roundRect(shardX, rowY, shardW, rowH, 6);
   ctx.fill();
   ctx.strokeStyle = '#8fe8ff';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(barX + 190, barY + barH + 6, 104, 24, 6);
+  ctx.roundRect(shardX, rowY, shardW, rowH, 6);
   ctx.stroke();
-  ctx.font = '13px "Segoe UI", sans-serif';
+  ctx.font = `${mobile ? 11 : 13}px "Segoe UI", sans-serif`;
   ctx.fillStyle = '#8fe8ff';
   ctx.textAlign = 'center';
-  ctx.fillText(`魂晶 ${Math.floor(player.shards)}`, barX + 242, barY + barH + 18);
+  ctx.fillText(`魂晶 ${Math.floor(player.shards)}`, shardX + shardW / 2, rowY + rowH / 2);
 
   // Phase indicator
   const phase = elapsed < 60 ? '初期' : elapsed < 180 ? '前期' : elapsed < 300 ? '中期' : elapsed < 600 ? '后期' : '终局';
   const phaseColor = elapsed < 60 ? '#88ff88' : elapsed < 180 ? '#ffff88' : elapsed < 300 ? '#ffaa44' : elapsed < 600 ? '#ff6644' : '#ff4444';
+  const timerW = mobile ? 86 : 100;
+  const timerH = mobile ? 28 : 32;
+  const timerY = mobile ? 58 : 8;
+  const phaseW = mobile ? 68 : 88;
+  const phaseH = mobile ? 22 : 28;
+  const phaseX = mobile ? padding : w - 224;
+  const phaseY = mobile ? timerY + timerH + 8 : 12;
 
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.beginPath();
-  ctx.roundRect(w - 100, 12, 88, 28, 6);
+  ctx.roundRect(phaseX, phaseY, phaseW, phaseH, 6);
   ctx.fill();
   ctx.strokeStyle = phaseColor;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(w - 100, 12, 88, 28, 6);
+  ctx.roundRect(phaseX, phaseY, phaseW, phaseH, 6);
   ctx.stroke();
-  ctx.font = '12px "Segoe UI", sans-serif';
+  ctx.font = `${mobile ? 11 : 12}px "Segoe UI", sans-serif`;
   ctx.fillStyle = phaseColor;
   ctx.textAlign = 'center';
-  ctx.fillText(`阶段: ${phase}`, w - 56, 26);
+  ctx.fillText(mobile ? phase : `阶段: ${phase}`, phaseX + phaseW / 2, phaseY + phaseH / 2);
 
   // Timer (top center)
   const minutes = Math.floor(elapsed / 60);
@@ -167,36 +185,41 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
 
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
   ctx.beginPath();
-  ctx.roundRect(w / 2 - 50, 8, 100, 32, 8);
+  ctx.roundRect(w / 2 - timerW / 2, timerY, timerW, timerH, 8);
   ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,0.3)';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(w / 2 - 50, 8, 100, 32, 8);
+  ctx.roundRect(w / 2 - timerW / 2, timerY, timerW, timerH, 8);
   ctx.stroke();
-  ctx.font = 'bold 22px "Segoe UI", monospace';
+  ctx.font = `bold ${mobile ? 18 : 22}px "Segoe UI", monospace`;
   ctx.textAlign = 'center';
   ctx.fillStyle = COLORS.uiText;
-  ctx.fillText(timeStr, w / 2, 24);
+  ctx.fillText(timeStr, w / 2, timerY + timerH / 2);
 
   // Kill count
+  const killW = mobile ? 62 : 88;
+  const killH = mobile ? 22 : 24;
+  const killX = mobile ? phaseX + phaseW + 6 : w - 100;
+  const killY = mobile ? phaseY : 50;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.beginPath();
-  ctx.roundRect(w - 100, 48, 88, 24, 6);
+  ctx.roundRect(killX, killY, killW, killH, 6);
   ctx.fill();
-  ctx.font = '14px "Segoe UI", sans-serif';
+  ctx.font = `${mobile ? 11 : 14}px "Segoe UI", sans-serif`;
   ctx.textAlign = 'center';
   ctx.fillStyle = COLORS.uiDim;
-  ctx.fillText(`💀 ${killCount}`, w - 56, 60);
+  ctx.fillText(`💀 ${killCount}`, killX + killW / 2, killY + killH / 2);
 
   if (objective) {
     ctx.font = 'bold 14px "Segoe UI", sans-serif';
-    const toastW = Math.min(420, w - 32);
+    const mobileMapSize = Math.max(72, Math.min(88, w * 0.22));
+    const toastW = mobile ? Math.max(180, w - mobileMapSize - 48) : Math.min(420, w - 32);
     const objectiveLines = getWrappedLines(ctx, objective, toastW - 28, 2);
     const lineHeight = 16;
     const toastH = objectiveLines.length > 1 ? 52 : 36;
-    const toastX = w / 2 - toastW / 2;
-    const toastY = 82;
+    const toastX = mobile ? padding : w / 2 - toastW / 2;
+    const toastY = mobile ? Math.max(126, phaseY + phaseH + 12) : 82;
     ctx.fillStyle = 'rgba(5,10,22,0.82)';
     ctx.beginPath();
     ctx.roundRect(toastX, toastY, toastW, toastH, 8);
@@ -211,86 +234,132 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
     ctx.textBaseline = 'middle';
     const textY = toastY + toastH / 2 - ((objectiveLines.length - 1) * lineHeight) / 2;
     objectiveLines.forEach((line, index) => {
-      ctx.fillText(line, w / 2, textY + index * lineHeight);
+      ctx.fillText(line, toastX + toastW / 2, textY + index * lineHeight);
     });
   }
 
-  // Weapon icons (bottom left)
-  const weaponY = h - 55;
+  if (mobile) {
+    drawMobileLoadoutSummary(ctx, player, padding, timerY);
+  } else {
+    drawDesktopLoadoutDocks(ctx, player, w, h, padding);
+  }
+}
+
+function drawMobileLoadoutSummary(ctx: CanvasRenderingContext2D, player: Player, x: number, y: number) {
+  const weapons = player.weapons.length;
+  const passives = player.passives.length;
+  if (weapons === 0 && passives === 0) return;
+
+  const w = 118;
+  const h = 28;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 8);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(143,232,255,0.32)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 8);
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 12px "Segoe UI", sans-serif';
+  ctx.fillStyle = 'rgba(230,244,255,0.86)';
+  ctx.fillText(`技能 ${weapons}   被动 ${passives}`, x + w / 2, y + h / 2);
+  ctx.restore();
+}
+
+function drawDesktopLoadoutDocks(ctx: CanvasRenderingContext2D, player: Player, w: number, h: number, padding: number) {
+  const dockGap = 96;
+  const sideW = Math.max(220, (w - padding * 2 - dockGap) / 2);
+  const preferredWeaponSize = 60;
+  const preferredPassiveSize = 54;
+  const minSize = w < 840 ? 42 : 48;
+  const weaponSize = fitDockSlotSize(player.weapons.length, sideW, preferredWeaponSize, minSize);
+  const passiveSize = fitDockSlotSize(player.passives.length, sideW, preferredPassiveSize, minSize);
+  const weaponStep = weaponSize + 8;
+  const passiveStep = passiveSize + 8;
+
+  const weaponY = h - weaponSize - 18;
   for (let i = 0; i < player.weapons.length; i++) {
     const wep = player.weapons[i];
     const data = WEAPON_DATA[wep.type];
-    const wx = padding + i * 44;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
-    ctx.beginPath();
-    ctx.roundRect(wx, weaponY, 40, 40, 8);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(100,100,150,0.5)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(wx, weaponY, 40, 40, 8);
-    ctx.stroke();
-
-    ctx.font = '22px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = COLORS.uiText;
-    ctx.fillText(data.icon, wx + 20, weaponY + 20);
-
-    ctx.fillStyle = '#222222';
-    ctx.beginPath();
-    ctx.arc(wx + 34, weaponY + 34, 10, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#44ff44';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(wx + 34, weaponY + 34, 10, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.font = 'bold 10px "Segoe UI", sans-serif';
-    ctx.fillStyle = '#44ff44';
-    ctx.fillText(`${wep.level}`, wx + 34, weaponY + 34);
+    const wx = padding + i * weaponStep;
+    drawLoadoutSlot(ctx, wx, weaponY, weaponSize, data.icon, wep.level, 'rgba(255,126,126,0.62)', '#44ff44', true);
   }
 
-  // Passive icons (bottom right)
-  if (player.passives.length > 0) {
-    const passiveY = h - 55;
-    const passiveStartX = w - padding - 40;
-    for (let i = 0; i < player.passives.length; i++) {
-      const pa = player.passives[i];
-      const data = PASSIVE_DATA[pa.type];
-      const px = passiveStartX - i * 44;
-
-      ctx.fillStyle = 'rgba(0,0,0,0.75)';
-      ctx.beginPath();
-      ctx.roundRect(px, passiveY, 40, 40, 8);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(100,150,100,0.5)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(px, passiveY, 40, 40, 8);
-      ctx.stroke();
-
-      ctx.font = '18px serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = COLORS.uiText;
-      ctx.fillText(data.icon, px + 20, passiveY + 18);
-
-      ctx.font = 'bold 9px "Segoe UI", sans-serif';
-      ctx.fillStyle = '#88ff88';
-      ctx.fillText(`${pa.level}`, px + 20, passiveY + 34);
-    }
+  if (player.passives.length === 0) return;
+  const passiveY = h - passiveSize - 20;
+  for (let i = 0; i < player.passives.length; i++) {
+    const pa = player.passives[i];
+    const data = PASSIVE_DATA[pa.type];
+    const px = w - padding - passiveSize - i * passiveStep;
+    drawLoadoutSlot(ctx, px, passiveY, passiveSize, data.icon, pa.level, 'rgba(116,224,146,0.58)', '#88ff88', false);
   }
+}
+
+function fitDockSlotSize(count: number, maxW: number, preferred: number, min: number) {
+  if (count <= 1) return preferred;
+  return Math.min(preferred, Math.max(min, (maxW - 8 * (count - 1)) / count));
+}
+
+function drawLoadoutSlot(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  icon: string,
+  level: number,
+  stroke: string,
+  badgeColor: string,
+  prominentBadge: boolean
+) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.76)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, size, size, 10);
+  ctx.fill();
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.roundRect(x, y, size, size, 10);
+  ctx.stroke();
+
+  ctx.font = `${Math.floor(size * (prominentBadge ? 0.52 : 0.46))}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = COLORS.uiText;
+  ctx.fillText(icon, x + size / 2, y + size * 0.48);
+
+  const badgeR = prominentBadge ? Math.max(11, size * 0.2) : Math.max(9, size * 0.17);
+  const badgeX = x + size - badgeR * 0.78;
+  const badgeY = y + size - badgeR * 0.78;
+  ctx.fillStyle = '#191b24';
+  ctx.beginPath();
+  ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = badgeColor;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.font = `800 ${Math.max(10, Math.floor(size * 0.2))}px "Segoe UI", sans-serif`;
+  ctx.fillStyle = badgeColor;
+  ctx.fillText(`${level}`, badgeX, badgeY);
+  ctx.restore();
 }
 
 // ──────────────────────────── Minimap ────────────────────────────
 
 export function drawMinimap(rc: RenderContext, player: Player, enemies: Enemy[]) {
-  const { ctx, w } = rc;
-  const mapSize = 110;
+  const { ctx, w, h } = rc;
+  const mobile = isMobileViewport(w, h);
+  const mapSize = mobile ? Math.max(72, Math.min(88, w * 0.22)) : 110;
   const mapX = w - mapSize - 16;
-  const mapY = 85;
+  const mapY = mobile ? 116 : 85;
   const scale = mapSize / 3000;
 
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -362,14 +431,100 @@ export function drawMinimap(rc: RenderContext, player: Player, enemies: Enemy[])
   ctx.fillText('小地图', mapX + mapSize / 2, mapY + mapSize + 12);
 }
 
+// ──────────────────────────── Touch Joystick ────────────────────────────
+
+export function drawVirtualJoystick(rc: RenderContext, joystick: TouchJoystickState) {
+  if (!joystick.active) return;
+
+  const { ctx } = rc;
+  const baseR = joystick.maxRadius;
+  const knobR = Math.max(18, baseR * 0.38);
+  const activeRatio = Math.min(1, joystick.distance / joystick.maxRadius);
+  const alpha = 0.42 + activeRatio * 0.28;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = alpha;
+
+  ctx.fillStyle = cachedRadialGradient(
+    ctx,
+    `touch-joy-base-${baseR}`,
+    joystick.startX,
+    joystick.startY,
+    baseR * 0.18,
+    joystick.startX,
+    joystick.startY,
+    baseR * 1.35,
+    [
+      [0, 'rgba(143,232,255,0.14)'],
+      [0.62, 'rgba(143,232,255,0.07)'],
+      [1, 'rgba(143,232,255,0)'],
+    ]
+  );
+  ctx.beginPath();
+  ctx.arc(joystick.startX, joystick.startY, baseR * 1.35, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(143,232,255,0.48)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(joystick.startX, joystick.startY, baseR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,209,102,0.28)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(joystick.startX, joystick.startY, baseR * 0.62, 0, Math.PI * 2);
+  ctx.stroke();
+
+  if (activeRatio > 0.05) {
+    ctx.strokeStyle = 'rgba(143,232,255,0.38)';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(joystick.startX, joystick.startY);
+    ctx.lineTo(joystick.knobX, joystick.knobY);
+    ctx.stroke();
+  }
+
+  ctx.shadowColor = 'rgba(143,232,255,0.8)';
+  ctx.shadowBlur = 14;
+  ctx.fillStyle = cachedRadialGradient(
+    ctx,
+    `touch-joy-knob-${knobR}`,
+    joystick.knobX,
+    joystick.knobY,
+    0,
+    joystick.knobX,
+    joystick.knobY,
+    knobR,
+    [
+      [0, 'rgba(255,244,207,0.9)'],
+      [0.48, 'rgba(143,232,255,0.75)'],
+      [1, 'rgba(54,115,132,0.55)'],
+    ]
+  );
+  ctx.beginPath();
+  ctx.arc(joystick.knobX, joystick.knobY, knobR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(joystick.knobX, joystick.knobY, knobR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 // ──────────────────────────── Boss Bar ────────────────────────────
 
 export function drawBossBar(rc: RenderContext, name: string, hp: number, maxHp: number) {
-  const { ctx, w } = rc;
-  const barW = Math.min(400, w - 60);
-  const barH = 18;
+  const { ctx, w, h } = rc;
+  const mobile = isMobileViewport(w, h);
+  const barW = Math.min(mobile ? 250 : 400, w - (mobile ? 80 : 60));
+  const barH = mobile ? 14 : 18;
   const barX = (w - barW) / 2;
-  const barY = 48;
+  const barY = mobile ? 228 : 62;
 
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
   ctx.beginPath();
@@ -401,13 +556,13 @@ export function drawBossBar(rc: RenderContext, name: string, hp: number, maxHp: 
     ctx.fill();
   }
 
-  ctx.font = 'bold 14px "Segoe UI", sans-serif';
+  ctx.font = `bold ${mobile ? 12 : 14}px "Segoe UI", sans-serif`;
   ctx.fillStyle = '#ff6666';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
   ctx.fillText(`👹 ${name}`, w / 2, barY - 6);
 
-  ctx.font = '11px "Segoe UI", sans-serif';
+  ctx.font = `${mobile ? 10 : 11}px "Segoe UI", sans-serif`;
   ctx.fillStyle = '#ffffff';
   ctx.textBaseline = 'middle';
   ctx.fillText(`${Math.ceil(hp)} / ${maxHp}`, w / 2, barY + barH / 2);
@@ -572,6 +727,19 @@ function getSkinPanelRect(w: number, h: number): Rect {
 
 export function getSkinCardRects(w: number, h: number = 720): Array<Rect & { index: number }> {
   const panel = getSkinPanelRect(w, h);
+  if (isMobileViewport(w, h)) {
+    const gap = 10;
+    const cardW = panel.w - 28;
+    const cardH = Math.min(154, Math.max(126, (panel.h - 92 - gap * (CHARACTER_SKINS.length - 1)) / CHARACTER_SKINS.length));
+    const startY = panel.y + 76;
+    return CHARACTER_SKINS.map((_, index) => ({
+      index,
+      x: panel.x + 14,
+      y: startY + index * (cardH + gap),
+      w: cardW,
+      h: cardH,
+    }));
+  }
   const gap = Math.max(18, Math.min(30, panel.w * 0.025));
   const innerW = panel.w - 72;
   const cardW = Math.min(286, Math.max(198, (innerW - gap * (CHARACTER_SKINS.length - 1)) / CHARACTER_SKINS.length));
@@ -696,6 +864,15 @@ function getBranchAccent(branch: MetaUpgradeNode['branch']): string {
 // ---- 衣橱 ----
 function drawSkinPanel(rc: RenderContext, meta: MetaState) {
   const { ctx, w, h } = rc;
+  const mobile = isMobileViewport(w, h);
+  const panel = getSkinPanelRect(w, h);
+  if (mobile) {
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.font = `900 22px ${DESKTOP_FONT}`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('衣橱', panel.x + 18, panel.y + 20);
+  }
   const cards = getSkinCardRects(w, h);
   for (let i = 0; i < CHARACTER_SKINS.length; i++) {
     const skin = CHARACTER_SKINS[i];
@@ -705,6 +882,45 @@ function drawSkinPanel(rc: RenderContext, meta: MetaState) {
     if (selected) { ctx.shadowColor = `${skin.glow}0.5)`; ctx.shadowBlur = 24; }
     uiPanel(ctx, c.x, c.y, c.w, c.h, selected ? skin.outline : 'rgba(150,160,200,0.22)', 14);
     ctx.restore();
+
+    if (mobile) {
+      const avatarX = c.x + 52;
+      const avatarY = c.y + c.h / 2;
+      const avatarR = Math.min(34, c.h * 0.25);
+      ctx.fillStyle = `${skin.glow}0.18)`;
+      ctx.beginPath(); ctx.arc(avatarX, avatarY, avatarR * 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = skin.body;
+      ctx.beginPath(); ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = skin.outline; ctx.lineWidth = 2.2; ctx.stroke();
+
+      const textX = c.x + 96;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.font = `800 17px ${DESKTOP_FONT}`;
+      ctx.fillStyle = selected ? '#ffd166' : '#ffffff';
+      ctx.fillText(skin.name, textX, c.y + 18);
+      ctx.font = `12px ${DESKTOP_FONT}`;
+      ctx.fillStyle = 'rgba(200,210,235,0.72)';
+      ctx.fillText(skin.archetype, textX, c.y + 43);
+      ctx.fillStyle = 'rgba(190,200,225,0.66)';
+      drawWrappedText(ctx, skin.desc, textX, c.y + 66, c.w - 116, 15, 2);
+
+      const badgeW = 78;
+      const badgeX = c.x + c.w - badgeW - 14;
+      const badgeY = c.y + c.h - 34;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      if (selected) {
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath(); ctx.roundRect(badgeX, badgeY, badgeW, 24, 12); ctx.fill();
+        ctx.fillStyle = '#2a1206'; ctx.font = `700 12px ${DESKTOP_FONT}`;
+        ctx.fillText('已装备', badgeX + badgeW / 2, badgeY + 12);
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect(badgeX, badgeY, badgeW, 24, 12); ctx.stroke();
+        ctx.fillStyle = 'rgba(225,232,250,0.82)'; ctx.font = `600 12px ${DESKTOP_FONT}`;
+        ctx.fillText('装备', badgeX + badgeW / 2, badgeY + 12);
+      }
+      continue;
+    }
 
     const ex = c.x + c.w / 2;
     const ey = c.y + c.h * 0.30;
@@ -808,37 +1024,43 @@ function drawMetaGrowth(rc: RenderContext, meta: MetaState, hoveredId?: MetaUpgr
 function drawMetaDetail(ctx: CanvasRenderingContext2D, rect: Rect, meta: MetaState, node?: MetaUpgradeNode) {
   uiPanel(ctx, rect.x, rect.y, rect.w, rect.h, 'rgba(255,255,255,0.12)', 16);
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  const compact = rect.h < 230 || rect.w < 310;
   if (!node) {
     const owned = meta.unlockedUpgrades.length;
     const avail = META_UPGRADES.filter((n) => canBuyMetaUpgrade(meta, n)).length;
-    ctx.font = `900 22px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
-    ctx.fillText('星点详情', rect.x + 22, rect.y + 24);
-    ctx.font = `14px ${DESKTOP_FONT}`; ctx.fillStyle = 'rgba(224,236,255,0.62)';
-    drawWrappedText(ctx, '移到星点查看消耗、效果与解锁内容。', rect.x + 22, rect.y + 62, rect.w - 44, 22, 3);
-    ctx.font = `800 14px ${DESKTOP_FONT}`; ctx.fillStyle = '#9dffba';
-    ctx.fillText(`已点亮 ${owned}`, rect.x + 22, rect.y + 142);
+    ctx.font = `900 ${compact ? 18 : 22}px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
+    ctx.fillText('星点详情', rect.x + 18, rect.y + 16);
+    ctx.font = `${compact ? 12 : 14}px ${DESKTOP_FONT}`; ctx.fillStyle = 'rgba(224,236,255,0.62)';
+    drawWrappedText(ctx, '点星点查看消耗、效果与解锁内容。', rect.x + 18, rect.y + (compact ? 46 : 62), rect.w - 36, compact ? 17 : 22, compact ? 2 : 3);
+    ctx.font = `800 ${compact ? 12 : 14}px ${DESKTOP_FONT}`; ctx.fillStyle = '#9dffba';
+    ctx.fillText(`已点亮 ${owned}`, rect.x + 18, rect.y + (compact ? 104 : 142));
     ctx.fillStyle = '#ffd166';
-    ctx.fillText(`可点亮 ${avail}`, rect.x + 22, rect.y + 168);
+    ctx.fillText(`可点亮 ${avail}`, rect.x + (compact ? 104 : 22), rect.y + (compact ? 104 : 168));
     return;
   }
   const owned = hasMetaUpgrade(meta, node.id);
   const avail = canBuyMetaUpgrade(meta, node);
   const acc = getBranchAccent(node.branch);
-  ctx.font = `38px serif`; ctx.fillStyle = owned ? '#ffffff' : colorWithAlpha(acc, 0.85);
-  ctx.fillText(node.icon, rect.x + 22, rect.y + 24);
-  ctx.font = `900 22px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
-  ctx.fillText(node.name, rect.x + 74, rect.y + 30);
-  ctx.font = `800 13px ${DESKTOP_FONT}`;
+  ctx.font = `${compact ? 28 : 38}px serif`; ctx.fillStyle = owned ? '#ffffff' : colorWithAlpha(acc, 0.85);
+  ctx.fillText(node.icon, rect.x + 18, rect.y + (compact ? 16 : 24));
+  ctx.font = `900 ${compact ? 17 : 22}px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
+  ctx.fillText(node.name, rect.x + (compact ? 58 : 74), rect.y + (compact ? 20 : 30));
+  ctx.font = `800 ${compact ? 11 : 13}px ${DESKTOP_FONT}`;
   ctx.fillStyle = owned ? '#9dffba' : avail ? '#ffd166' : '#8fa7d8';
-  ctx.fillText(owned ? '已点亮' : avail ? '可点亮' : '未解锁', rect.x + 74, rect.y + 58);
-  ctx.font = `800 13px ${DESKTOP_FONT}`; ctx.fillStyle = acc;
-  ctx.fillText(`消耗 ${node.cost} 魂火`, rect.x + 22, rect.y + 96);
-  ctx.font = `14px ${DESKTOP_FONT}`; ctx.fillStyle = 'rgba(229,237,255,0.76)';
-  drawWrappedText(ctx, node.desc, rect.x + 22, rect.y + 124, rect.w - 44, 21, 4);
-  ctx.font = `800 13px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
-  ctx.fillText('局内效果', rect.x + 22, rect.y + 228);
-  ctx.font = `14px ${DESKTOP_FONT}`; ctx.fillStyle = colorWithAlpha(acc, 0.95);
-  drawWrappedText(ctx, node.effect, rect.x + 22, rect.y + 252, rect.w - 44, 21, 2);
+  ctx.fillText(owned ? '已点亮' : avail ? '可点亮' : '未解锁', rect.x + (compact ? 58 : 74), rect.y + (compact ? 44 : 58));
+  ctx.font = `800 ${compact ? 11 : 13}px ${DESKTOP_FONT}`; ctx.fillStyle = acc;
+  ctx.fillText(`消耗 ${node.cost} 魂火`, rect.x + 18, rect.y + (compact ? 72 : 96));
+  ctx.font = `${compact ? 12 : 14}px ${DESKTOP_FONT}`; ctx.fillStyle = 'rgba(229,237,255,0.76)';
+  drawWrappedText(ctx, node.desc, rect.x + 18, rect.y + (compact ? 94 : 124), rect.w - 36, compact ? 16 : 21, compact ? 2 : 4);
+  if (!compact) {
+    ctx.font = `800 13px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
+    ctx.fillText('局内效果', rect.x + 22, rect.y + 228);
+    ctx.font = `14px ${DESKTOP_FONT}`; ctx.fillStyle = colorWithAlpha(acc, 0.95);
+    drawWrappedText(ctx, node.effect, rect.x + 22, rect.y + 252, rect.w - 44, 21, 2);
+  } else {
+    ctx.font = `12px ${DESKTOP_FONT}`; ctx.fillStyle = colorWithAlpha(acc, 0.95);
+    drawWrappedText(ctx, node.effect, rect.x + 18, rect.y + rect.h - 40, rect.w - 36, 16, 2);
+  }
 }
 
 // ---- 图鉴 ----
@@ -866,23 +1088,27 @@ function getCodexCards(tab: CodexTab): CodexCard[] {
 
 function drawCodexPanel(rc: RenderContext, activeTab: CodexTab) {
   const { ctx, w, h } = rc;
+  const mobile = isMobileViewport(w, h);
   const panel = getCodexPanelRect(w, h);
   uiPanel(ctx, panel.x, panel.y, panel.w, panel.h, 'rgba(211,168,255,0.2)', 18);
 
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-  ctx.font = `900 24px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
-  ctx.fillText('图鉴', panel.x + 26, panel.y + 22);
+  ctx.font = `900 ${mobile ? 22 : 24}px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
+  ctx.fillText('图鉴', panel.x + (mobile ? 18 : 26), panel.y + (mobile ? 18 : 22));
 
   drawCodexTabs(rc, activeTab);
 
   const cards = getCodexCards(activeTab);
-  const cols = panel.w >= 1040 ? 4 : 3;
-  const gap = 16;
+  const cols = mobile ? 2 : panel.w >= 1040 ? 4 : 3;
+  const gap = mobile ? 10 : 16;
   const cardW = (panel.w - 56 - gap * (cols - 1)) / cols;
-  const cardH = Math.min(150, Math.max(122, (panel.h - 158 - gap * 2) / 3));
+  const rows = Math.ceil(cards.length / cols);
+  const cardH = mobile
+    ? Math.min(118, Math.max(94, (panel.h - 140 - gap * Math.max(0, rows - 1)) / rows))
+    : Math.min(150, Math.max(122, (panel.h - 158 - gap * 2) / 3));
   const totalW = cols * cardW + (cols - 1) * gap;
   const sx = panel.x + panel.w / 2 - totalW / 2;
-  const sy = panel.y + 128;
+  const sy = panel.y + (mobile ? 118 : 128);
   for (let i = 0; i < cards.length; i++) {
     const cd = cards[i];
     const x = sx + (i % cols) * (cardW + gap);
@@ -892,17 +1118,17 @@ function drawCodexPanel(rc: RenderContext, activeTab: CodexTab) {
     ctx.strokeStyle = colorWithAlpha(cd.accent, 0.6); ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.roundRect(x, y, cardW, cardH, 10); ctx.stroke();
     ctx.fillStyle = colorWithAlpha(cd.accent, 0.16);
-    ctx.beginPath(); ctx.arc(x + 34, y + 36, 22, 0, Math.PI * 2); ctx.fill();
-    ctx.font = `24px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff';
-    ctx.fillText(cd.icon, x + 34, y + 37);
+    ctx.beginPath(); ctx.arc(x + (mobile ? 26 : 34), y + (mobile ? 30 : 36), mobile ? 18 : 22, 0, Math.PI * 2); ctx.fill();
+    ctx.font = `${mobile ? 20 : 24}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff';
+    ctx.fillText(cd.icon, x + (mobile ? 26 : 34), y + (mobile ? 31 : 37));
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.font = `700 15px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
-    ctx.fillText(cd.title, x + 66, y + 30);
-    ctx.font = `11px ${DESKTOP_FONT}`; ctx.fillStyle = cd.accent;
-    ctx.fillText(cd.tag, x + 66, y + 48);
+    ctx.font = `700 ${mobile ? 12 : 15}px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
+    ctx.fillText(cd.title, x + (mobile ? 50 : 66), y + (mobile ? 25 : 30));
+    ctx.font = `${mobile ? 9 : 11}px ${DESKTOP_FONT}`; ctx.fillStyle = cd.accent;
+    ctx.fillText(cd.tag, x + (mobile ? 50 : 66), y + (mobile ? 41 : 48));
     ctx.textBaseline = 'top';
-    ctx.font = `12px ${DESKTOP_FONT}`; ctx.fillStyle = 'rgba(190,199,230,0.85)';
-    drawWrappedText(ctx, cd.desc, x + 16, y + 66, cardW - 32, 16, 2);
+    ctx.font = `${mobile ? 10 : 12}px ${DESKTOP_FONT}`; ctx.fillStyle = 'rgba(190,199,230,0.85)';
+    drawWrappedText(ctx, cd.desc, x + 12, y + (mobile ? 56 : 66), cardW - 24, mobile ? 13 : 16, mobile ? 2 : 2);
   }
 }
 
@@ -1005,6 +1231,33 @@ function getMetaStarPanel(w: number, h: number) {
   const panelH = Math.min(650, content.h);
   const panelX = content.x + (content.w - panelW) / 2;
   const panelY = content.y + (content.h - panelH) / 2;
+  if (isMobileViewport(w, h)) {
+    const innerPad = 14;
+    const detailH = Math.min(190, Math.max(150, panelH * 0.28));
+    const chart: Rect = {
+      x: panelX + innerPad,
+      y: panelY + 64,
+      w: panelW - innerPad * 2,
+      h: Math.max(220, panelH - detailH - 90),
+    };
+    const detail: Rect = {
+      x: chart.x,
+      y: chart.y + chart.h + 10,
+      w: chart.w,
+      h: detailH,
+    };
+    return {
+      x: panelX,
+      y: panelY,
+      w: panelW,
+      h: panelH,
+      chart,
+      detail,
+      cx: chart.x + chart.w * 0.5,
+      cy: chart.y + chart.h * 0.52,
+      scale: Math.min(chart.w * 0.42, chart.h * 0.38),
+    };
+  }
   const innerPad = 32;
   const detailW = Math.min(330, Math.max(278, panelW * 0.29));
   const chart: Rect = {
@@ -1085,6 +1338,7 @@ function getWrappedLines(
 
 export function drawPaused(rc: RenderContext) {
   const { ctx, w, h } = rc;
+  const mobile = isMobileViewport(w, h);
 
   ctx.fillStyle = cachedRadialGradient(ctx, `paused-overlay-${w}-${h}`, w / 2, h / 2, 0, w / 2, h / 2, w * 0.5, [
     [0, 'rgba(0,0,20,0.7)'],
@@ -1104,7 +1358,7 @@ export function drawPaused(rc: RenderContext) {
 
   ctx.font = '16px "Segoe UI", sans-serif';
   ctx.fillStyle = COLORS.uiDim;
-  ctx.fillText('按 ESC 或 P 继续', w / 2, h / 2 + 70);
+  ctx.fillText(mobile ? '点按屏幕继续' : '按 ESC 或 P 继续', w / 2, h / 2 + 70);
 }
 
 export function drawUpgradeScreen(
@@ -1117,6 +1371,7 @@ export function drawUpgradeScreen(
   canPaidReroll: boolean
 ) {
   const { ctx, w, h } = rc;
+  const layout = getShopLayout(w, h, options.length);
 
   ctx.fillStyle = cachedRadialGradient(ctx, `upgrade-overlay-${w}-${h}`, w / 2, h / 2, 0, w / 2, h / 2, w * 0.7, [
     [0, 'rgba(0,0,30,0.85)'],
@@ -1126,35 +1381,29 @@ export function drawUpgradeScreen(
 
   ctx.shadowColor = '#ffd700';
   ctx.shadowBlur = 12;
-  ctx.font = 'bold 34px "Segoe UI", sans-serif';
+  ctx.font = `bold ${layout.mobile ? 26 : 34}px "Segoe UI", sans-serif`;
   ctx.fillStyle = '#ffd700';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('升级商店', w / 2, h / 2 - 190);
+  ctx.fillText('升级商店', w / 2, layout.titleY);
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
 
-  ctx.font = 'bold 18px "Segoe UI", sans-serif';
+  ctx.font = `bold ${layout.mobile ? 15 : 18}px "Segoe UI", sans-serif`;
   ctx.fillStyle = '#8fe8ff';
-  ctx.fillText(`魂晶 ${Math.floor(shards)}`, w / 2, h / 2 - 154);
+  ctx.fillText(`魂晶 ${Math.floor(shards)}`, w / 2, layout.shardsY);
 
-  ctx.font = '13px "Segoe UI", sans-serif';
+  ctx.font = `${layout.mobile ? 12 : 13}px "Segoe UI", sans-serif`;
   ctx.fillStyle = COLORS.uiDim;
-  ctx.fillText('可连续购买多个成长，买完后继续战斗', w / 2, h / 2 - 128);
+  ctx.fillText(layout.mobile ? '点卡片购买，点按钮刷新或继续' : '可连续购买多个成长，买完后继续战斗', w / 2, layout.helperY);
 
-  const cardGap = 12;
-  const optionCount = Math.max(options.length, 1);
-  const cardW = Math.min(180, (w - 90) / optionCount - cardGap);
-  const cardH = 230;
-  const totalW = options.length * (cardW + cardGap) - cardGap;
-  const startX = (w - totalW) / 2;
-  const cardY = h / 2 - cardH / 2 + 8;
-
-  for (let i = 0; i < options.length; i++) {
-    const opt = options[i];
-    const x = startX + i * (cardW + cardGap);
-    const y = cardY;
-    const selected = i === selectedIndex;
+  for (const card of layout.cards) {
+    const opt = options[card.index];
+    const x = card.x;
+    const y = card.y;
+    const cardW = card.w;
+    const cardH = card.h;
+    const selected = card.index === selectedIndex;
     const affordable = shards >= opt.cost;
     const sold = !!opt.purchased;
     const unavailable = sold || !affordable;
@@ -1165,6 +1414,18 @@ export function drawUpgradeScreen(
 
     ctx.save();
     ctx.translate(x, y);
+    const compact = layout.compact;
+    const ultraCompact = cardH < 132;
+    const iconGlowY = ultraCompact ? 28 : compact ? 34 : 46;
+    const iconY = ultraCompact ? 34 : compact ? 40 : 53;
+    const iconGlowR = ultraCompact ? 20 : compact ? 24 : 32;
+    const titleY = ultraCompact ? 66 : compact ? 76 : 96;
+    const descY = ultraCompact ? 84 : compact ? 98 : 122;
+    const lineHeight = ultraCompact ? 13 : compact ? 15 : 18;
+    const maxLines = ultraCompact ? 1 : compact ? 2 : 3;
+    const typeY = ultraCompact ? cardH - 50 : compact ? cardH - 56 : 180;
+    const priceY = cardH - (compact ? 32 : 38);
+    const priceH = compact ? 24 : 26;
 
     if (selected) {
       ctx.shadowColor = affordable && !sold ? '#ffd166' : '#6666ff';
@@ -1204,37 +1465,38 @@ export function drawUpgradeScreen(
 
     ctx.fillStyle = colorWithAlpha(accent, unavailable ? 0.14 : selected ? 0.28 : 0.2);
     ctx.beginPath();
-    ctx.arc(cardW / 2, 46, 32, 0, Math.PI * 2);
+    ctx.arc(cardW / 2, iconGlowY, iconGlowR, 0, Math.PI * 2);
     ctx.fill();
 
-    const rarityBadgeW = 48;
+    const rarityBadgeW = compact ? 42 : 48;
+    const rarityBadgeH = compact ? 19 : 22;
     ctx.fillStyle = colorWithAlpha(accent, sold ? 0.16 : 0.22);
     ctx.beginPath();
-    ctx.roundRect(cardW - rarityBadgeW - 10, 10, rarityBadgeW, 22, 8);
+    ctx.roundRect(cardW - rarityBadgeW - 10, 10, rarityBadgeW, rarityBadgeH, 8);
     ctx.fill();
     ctx.strokeStyle = colorWithAlpha(accent, sold ? 0.38 : 0.65);
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(cardW - rarityBadgeW - 10, 10, rarityBadgeW, 22, 8);
+    ctx.roundRect(cardW - rarityBadgeW - 10, 10, rarityBadgeW, rarityBadgeH, 8);
     ctx.stroke();
-    ctx.font = 'bold 11px "Segoe UI", sans-serif';
+    ctx.font = `bold ${compact ? 10 : 11}px "Segoe UI", sans-serif`;
     ctx.fillStyle = unavailable ? colorWithAlpha(accent, 0.75) : accent;
-    ctx.fillText(rarity.label, cardW - rarityBadgeW / 2 - 10, 21);
+    ctx.fillText(rarity.label, cardW - rarityBadgeW / 2 - 10, 10 + rarityBadgeH / 2);
 
-    ctx.font = '42px serif';
+    ctx.font = `${ultraCompact ? 28 : compact ? 34 : 42}px serif`;
     ctx.textAlign = 'center';
     ctx.fillStyle = unavailable ? 'rgba(255,255,255,0.65)' : COLORS.uiText;
-    ctx.fillText(opt.icon, cardW / 2, 53);
+    ctx.fillText(opt.icon, cardW / 2, iconY);
 
-    ctx.font = 'bold 15px "Segoe UI", sans-serif';
+    ctx.font = `bold ${compact ? 13 : 15}px "Segoe UI", sans-serif`;
     ctx.fillStyle = unavailable ? '#999999' : selected ? '#ffffff' : '#dddddd';
-    ctx.fillText(opt.title, cardW / 2, 96);
+    ctx.fillText(opt.title, cardW / 2, titleY);
 
-    ctx.font = '12px "Segoe UI", sans-serif';
+    ctx.font = `${compact ? 11 : 12}px "Segoe UI", sans-serif`;
     ctx.fillStyle = unavailable ? '#888888' : '#aaaaaa';
     const words = opt.description.split('');
     let line = '';
-    let lineY = 122;
+    let lineY = descY;
     let lines = 0;
     const maxLineWidth = cardW - 30;
     for (const char of words) {
@@ -1242,49 +1504,46 @@ export function drawUpgradeScreen(
       if (ctx.measureText(testLine).width > maxLineWidth) {
         ctx.fillText(line, cardW / 2, lineY);
         line = char;
-        lineY += 18;
+        lineY += lineHeight;
         lines++;
-        if (lines >= 3) break;
+        if (lines >= maxLines) break;
       } else {
         line = testLine;
       }
     }
-    if (line && lines < 3) ctx.fillText(line, cardW / 2, lineY);
+    if (line && lines < maxLines) ctx.fillText(line, cardW / 2, lineY);
 
-    const badgeY = 180;
     const badgeText = opt.type === 'weapon' ? '⚔️ 武器' :
                       opt.type === 'passive' ? '🛡️ 被动' :
                       opt.type === 'modifier' ? '✦ 通用模块' :
                       opt.type === 'supply' ? '✚ 战术补给' : '❤️ 治疗';
-    ctx.font = '11px "Segoe UI", sans-serif';
+    ctx.font = `${compact ? 10 : 11}px "Segoe UI", sans-serif`;
     ctx.fillStyle = opt.type === 'weapon' ? '#ff9999' :
                     opt.type === 'passive' ? '#88ff88' :
                     opt.type === 'modifier' ? '#d3a8ff' :
                     opt.type === 'supply' ? '#ffd166' : '#ffb3c1';
-    ctx.fillText(badgeText, cardW / 2, badgeY);
+    ctx.fillText(badgeText, cardW / 2, typeY);
 
     const priceW = cardW - 34;
     const priceX = 17;
-    const priceY = cardH - 38;
     ctx.fillStyle = sold ? 'rgba(68,255,136,0.14)' : affordable ? 'rgba(255,209,102,0.14)' : 'rgba(255,80,80,0.14)';
     ctx.beginPath();
-    ctx.roundRect(priceX, priceY, priceW, 26, 13);
+    ctx.roundRect(priceX, priceY, priceW, priceH, 13);
     ctx.fill();
     ctx.strokeStyle = sold ? '#44ff88' : affordable ? '#ffd166' : '#ff7777';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(priceX, priceY, priceW, 26, 13);
+    ctx.roundRect(priceX, priceY, priceW, priceH, 13);
     ctx.stroke();
-    ctx.font = 'bold 13px "Segoe UI", sans-serif';
+    ctx.font = `bold ${compact ? 11 : 13}px "Segoe UI", sans-serif`;
     ctx.fillStyle = sold ? '#88ff88' : affordable ? '#ffd166' : '#ff8888';
-    ctx.fillText(sold ? (isModifier ? '已安装' : '已购买') : `${rarity.label} · 魂晶 ${opt.cost}`, cardW / 2, priceY + 13);
+    ctx.fillText(sold ? (isModifier ? '已安装' : '已购买') : `${rarity.label} · 魂晶 ${opt.cost}`, cardW / 2, priceY + priceH / 2);
 
     ctx.restore();
   }
 
-  const btnY = h / 2 + 155;
-  const btnW = 150;
-  const btnH = 38;
+  const rerollButton = layout.rerollButton;
+  const continueButton = layout.continueButton;
   const canReroll = canFreeReroll || (canPaidReroll && shards >= rerollCost);
   const rerollLabel = canFreeReroll ? '免费刷新' : canPaidReroll ? `刷新 魂晶 ${rerollCost}` : '刷新未解锁';
 
@@ -1293,32 +1552,36 @@ export function drawUpgradeScreen(
 
   ctx.fillStyle = canReroll ? 'rgba(255,209,102,0.18)' : 'rgba(80,80,100,0.45)';
   ctx.beginPath();
-  ctx.roundRect(w / 2 - 165, btnY, btnW, btnH, 8);
+  ctx.roundRect(rerollButton.x, rerollButton.y, rerollButton.w, rerollButton.h, 8);
   ctx.fill();
   ctx.strokeStyle = canReroll ? '#ffd166' : 'rgba(160,160,180,0.45)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.roundRect(w / 2 - 165, btnY, btnW, btnH, 8);
+  ctx.roundRect(rerollButton.x, rerollButton.y, rerollButton.w, rerollButton.h, 8);
   ctx.stroke();
-  ctx.font = 'bold 14px "Segoe UI", sans-serif';
+  ctx.font = `bold ${layout.mobile ? 13 : 14}px "Segoe UI", sans-serif`;
   ctx.fillStyle = canReroll ? '#ffd166' : '#999999';
-  ctx.fillText(rerollLabel, w / 2 - 90, btnY + btnH / 2);
+  ctx.fillText(rerollLabel, rerollButton.x + rerollButton.w / 2, rerollButton.y + rerollButton.h / 2);
 
   ctx.fillStyle = 'rgba(100,140,255,0.18)';
   ctx.beginPath();
-  ctx.roundRect(w / 2 + 15, btnY, btnW, btnH, 8);
+  ctx.roundRect(continueButton.x, continueButton.y, continueButton.w, continueButton.h, 8);
   ctx.fill();
   ctx.strokeStyle = '#88aaff';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.roundRect(w / 2 + 15, btnY, btnW, btnH, 8);
+  ctx.roundRect(continueButton.x, continueButton.y, continueButton.w, continueButton.h, 8);
   ctx.stroke();
   ctx.fillStyle = '#dde6ff';
-  ctx.fillText('继续战斗', w / 2 + 90, btnY + btnH / 2);
+  ctx.fillText('继续战斗', continueButton.x + continueButton.w / 2, continueButton.y + continueButton.h / 2);
 
-  ctx.font = '14px "Segoe UI", sans-serif';
+  ctx.font = `${layout.mobile ? 11 : 14}px "Segoe UI", sans-serif`;
   ctx.fillStyle = COLORS.uiDim;
-  ctx.fillText('← → 选择 | Enter 购买 | R 刷新 | Space/Esc 继续', w / 2, btnY + 60);
+  ctx.fillText(
+    layout.mobile ? '点选卡片后自动购买' : '← → 选择 | Enter 购买 | R 刷新 | Space/Esc 继续',
+    w / 2,
+    layout.footerY
+  );
 }
 
 export function drawGameOver(rc: RenderContext, stats: {

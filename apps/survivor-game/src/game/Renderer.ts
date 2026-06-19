@@ -1,4 +1,4 @@
-import type { Player, Enemy, Projectile, XPGem, Particle, DamageNumber, Camera, UpgradeOption, MapObstacle } from './types';
+import type { Player, Enemy, Projectile, XPGem, Particle, DamageNumber, Camera, UpgradeOption, MapObstacle, TouchJoystickState } from './types';
 import type { CodexTab, DesktopTab, MetaState, MetaUpgradeNode } from './systems/meta/MetaProgression';
 import { COLORS } from './constants';
 import { WorldRenderer, type RenderContext } from './renderers/WorldRenderer';
@@ -8,7 +8,7 @@ import {
 } from './renderers/EntityRenderer';
 import { drawParticle, drawDamageNumber, drawDamageFlash, drawLevelUpFlash, drawBossWarning } from './renderers/EffectsRenderer';
 import {
-  drawUI, drawMinimap, drawBossBar,
+  drawUI, drawMinimap, drawBossBar, drawVirtualJoystick,
   drawAudioButton as drawAudioBtn, drawPauseButton as drawPauseBtn,
 	  getAudioButtonRect as getAudioRect,
 	  getDesktopStartButtonRect as getStartButtonRect,
@@ -121,6 +121,7 @@ export class Renderer {
     drawUI(this.rc, player, elapsed, killCount, objective);
   }
   drawMinimap(player: Player, enemies: Enemy[]) { drawMinimap(this.rc, player, enemies); }
+  drawVirtualJoystick(joystick: TouchJoystickState) { drawVirtualJoystick(this.rc, joystick); }
   drawBossBar(name: string, hp: number, maxHp: number) { drawBossBar(this.rc, name, hp, maxHp); }
   drawAudioButton(muted: boolean) { drawAudioBtn(this.rc, muted); }
   drawPauseButton() { drawPauseBtn(this.rc); }

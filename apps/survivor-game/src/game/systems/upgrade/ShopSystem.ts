@@ -8,6 +8,7 @@ import {
 } from '../meta/MetaProgression';
 import type { Player, UpgradeOption } from '../../types';
 import { applyUpgrade, generateUpgradeOptions } from '../weapon/Upgrade';
+import { getShopLayout } from './ShopLayout';
 
 export type ShopClickAction = 'buy' | 'reroll' | 'continue';
 
@@ -75,28 +76,18 @@ export class ShopSystem {
   handleClick(x: number, y: number, w: number, h: number): ShopClickAction | undefined {
     if (this.options.length === 0) return undefined;
 
-    const cardGap = 12;
-    const cardW = Math.min(180, (w - 90) / this.options.length - cardGap);
-    const cardH = 230;
-    const totalW = this.options.length * (cardW + cardGap) - cardGap;
-    const startX = (w - totalW) / 2;
-    const cardY = h / 2 - cardH / 2 + 8;
-
-    for (let i = 0; i < this.options.length; i++) {
-      const cardX = startX + i * (cardW + cardGap);
-      if (x >= cardX && x <= cardX + cardW && y >= cardY && y <= cardY + cardH) {
-        this.selectedIndex = i;
+    const layout = getShopLayout(w, h, this.options.length);
+    for (const card of layout.cards) {
+      if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
+        this.selectedIndex = card.index;
         return 'buy';
       }
     }
 
-    const btnY = h / 2 + 155;
-    const btnW = 150;
-    const btnH = 38;
-    const rerollX = w / 2 - 165;
-    const continueX = w / 2 + 15;
-    if (x >= rerollX && x <= rerollX + btnW && y >= btnY && y <= btnY + btnH) return 'reroll';
-    if (x >= continueX && x <= continueX + btnW && y >= btnY && y <= btnY + btnH) return 'continue';
+    const reroll = layout.rerollButton;
+    const cont = layout.continueButton;
+    if (x >= reroll.x && x <= reroll.x + reroll.w && y >= reroll.y && y <= reroll.y + reroll.h) return 'reroll';
+    if (x >= cont.x && x <= cont.x + cont.w && y >= cont.y && y <= cont.y + cont.h) return 'continue';
     return undefined;
   }
 

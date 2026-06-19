@@ -1,3 +1,8 @@
+import type { TouchJoystickState } from '../../types';
+
+const TOUCH_DEAD_ZONE = 15;
+const TOUCH_MAX_RADIUS = 58;
+
 export class Input {
   keys = new Set<string>();
   private touchStart: { x: number; y: number } | null = null;
@@ -63,6 +68,24 @@ export class Input {
     this.touchStart = null;
     this.touchCurrent = null;
     this.isTouching = false;
+    this.touchDir = { x: 0, y: 0 };
+  }
+
+  private getTouchVector() {
+    if (!this.touchStart || !this.touchCurrent) {
+      return { dx: 0, dy: 0, distance: 0, dirX: 0, dirY: 0 };
+    }
+    const dx = this.touchCurrent.x - this.touchStart.x;
+    const dy = this.touchCurrent.y - this.touchStart.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const active = distance > TOUCH_DEAD_ZONE;
+    return {
+      dx,
+      dy,
+      distance,
+      dirX: active ? dx / distance : 0,
+      dirY: active ? dy / distance : 0,
+    };
   }
 
   getMoveDir(): { x: number; y: number } {
@@ -76,16 +99,45 @@ export class Input {
       return { x: kx / len, y: ky / len };
     }
 
-    if (this.touchStart && this.touchCurrent) {
-      const dx = this.touchCurrent.x - this.touchStart.x;
-      const dy = this.touchCurrent.y - this.touchStart.y;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      if (len > 15) {
-        return { x: dx / len, y: dy / len };
-      }
+    const touch = this.getTouchVector();
+    this.touchDir = { x: touch.dirX, y: touch.dirY };
+    if (touch.distance > TOUCH_DEAD_ZONE) {
+      return { x: touch.dirX, y: touch.dirY };
     }
 
     return { x: 0, y: 0 };
+  }
+
+  getJoystickState(): TouchJoystickState {
+    if (!this.touchStart || !this.touchCurrent || !this.isTouching) {
+      return {
+        active: false,
+        startX: 0,
+        startY: 0,
+        knobX: 0,
+        knobY: 0,
+        dirX: 0,
+        dirY: 0,
+        distance: 0,
+        maxRadius: TOUCH_MAX_RADIUS,
+      };
+    }
+
+    const touch = this.getTouchVector();
+    const clampedDistance = Math.min(touch.distance, TOUCH_MAX_RADIUS);
+    const knobX = this.touchStart.x + touch.dirX * clampedDistance;
+    const knobY = this.touchStart.y + touch.dirY * clampedDistance;
+    return {
+      active: true,
+      startX: this.touchStart.x,
+      startY: this.touchStart.y,
+      knobX: touch.distance > TOUCH_DEAD_ZONE ? knobX : this.touchStart.x,
+      knobY: touch.distance > TOUCH_DEAD_ZONE ? knobY : this.touchStart.y,
+      dirX: touch.dirX,
+      dirY: touch.dirY,
+      distance: clampedDistance,
+      maxRadius: TOUCH_MAX_RADIUS,
+    };
   }
 
   consumeTap(): boolean {
