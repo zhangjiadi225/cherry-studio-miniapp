@@ -11,6 +11,7 @@ export const GameEvent = {
   BOSS_SPAWN: 'boss:spawn',
   BOSS_DEATH: 'boss:death',
   WEAPON_FIRE: 'weapon:fire',
+  MODIFIER_TRIGGER: 'modifier:trigger',
   XP_COLLECTED: 'xp:collected',
   UPGRADE_SELECT: 'upgrade:select',
   PAUSE: 'pause',

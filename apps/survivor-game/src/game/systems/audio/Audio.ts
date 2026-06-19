@@ -1,5 +1,6 @@
-import { WeaponType } from '../../types';
+import { GenericModifierType, WeaponType } from '../../types';
 import { eventBus, GameEvent } from '../../events';
+import { GENERIC_MODIFIER_DATA } from '../../constants';
 
 type OscillatorKind = OscillatorType;
 
@@ -10,6 +11,7 @@ export class AudioSystem {
   private master?: GainNode;
   private muted = localStorage.getItem(MUTE_STORAGE_KEY) === '1';
   private readonly unsubs: Array<() => void> = [];
+  private readonly modifierSoundTimes = new Map<GenericModifierType, number>();
 
   constructor() {
     this.unsubs.push(
@@ -18,7 +20,8 @@ export class AudioSystem {
       eventBus.on(GameEvent.PLAYER_LEVEL_UP, () => this.playLevelUp()),
       eventBus.on(GameEvent.XP_COLLECTED, () => this.playXp()),
       eventBus.on(GameEvent.BOSS_WARNING, () => this.playBossWarning()),
-      eventBus.on(GameEvent.WEAPON_FIRE, (weaponType) => this.playWeaponFire(weaponType))
+      eventBus.on(GameEvent.WEAPON_FIRE, (weaponType) => this.playWeaponFire(weaponType)),
+      eventBus.on(GameEvent.MODIFIER_TRIGGER, (modifierType) => this.playModifierTrigger(modifierType))
     );
   }
 
@@ -96,6 +99,51 @@ export class AudioSystem {
   private playXp() {
     if (this.muted) return;
     this.playTone(740, 0.045, 'triangle', 0.035);
+  }
+
+  private playModifierTrigger(modifierType: GenericModifierType) {
+    if (this.muted) return;
+    const context = this.ensureContext();
+    if (!context || !this.master) return;
+    const now = context.currentTime;
+    const last = this.modifierSoundTimes.get(modifierType) ?? -Infinity;
+    if (now - last < 0.09) return;
+    this.modifierSoundTimes.set(modifierType, now);
+
+    switch (GENERIC_MODIFIER_DATA[modifierType].visual.audio) {
+      case 'rush':
+        this.playSweep(980, 740, 0.055, 'sine', 0.035);
+        break;
+      case 'echo':
+        this.playTone(780, 0.045, 'triangle', 0.04);
+        this.playTone(1040, 0.04, 'triangle', 0.032, 0.035);
+        break;
+      case 'crack':
+        this.playSweep(620, 340, 0.065, 'square', 0.04);
+        break;
+      case 'chain':
+        this.playTone(920, 0.035, 'square', 0.035);
+        this.playTone(1280, 0.035, 'square', 0.028, 0.03);
+        break;
+      case 'pulse':
+        this.playSweep(280, 150, 0.08, 'sine', 0.045);
+        break;
+      case 'push':
+        this.playSweep(190, 95, 0.07, 'triangle', 0.038);
+        break;
+      case 'burst':
+        this.playSweep(270, 95, 0.09, 'sawtooth', 0.05);
+        break;
+      case 'thunder':
+        this.playTone(1180, 0.04, 'square', 0.05);
+        this.playSweep(820, 360, 0.08, 'square', 0.035, 0.035);
+        break;
+      case 'cascade':
+        this.playTone(760, 0.035, 'triangle', 0.04);
+        this.playTone(940, 0.035, 'triangle', 0.035, 0.035);
+        this.playTone(1120, 0.04, 'triangle', 0.03, 0.07);
+        break;
+    }
   }
 
   private playHit() {

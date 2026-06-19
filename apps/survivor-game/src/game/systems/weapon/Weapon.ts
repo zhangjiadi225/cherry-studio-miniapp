@@ -89,6 +89,7 @@ export function updateWeapon(
   }
   if (fired) {
     w.timer = 0;
+    emitTriggeredModifiers(w, 'onFire');
     eventBus.emit(GameEvent.WEAPON_FIRE, w.type);
   }
 }
@@ -140,6 +141,14 @@ function hasModifierEffect(w: Weapon, trigger: 'onFire', effect: 'extraCast' | '
     modifier.effect === effect &&
     hasModifier(w, modifier.id)
   );
+}
+
+function emitTriggeredModifiers(w: Weapon, trigger: 'onFire') {
+  for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
+    if (modifier.trigger === trigger && hasModifier(w, modifier.id)) {
+      eventBus.emit(GameEvent.MODIFIER_TRIGGER, modifier.id);
+    }
+  }
 }
 
 function getCastDamages(w: Weapon, damage: number): number[] {

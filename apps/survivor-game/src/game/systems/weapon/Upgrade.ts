@@ -7,6 +7,7 @@ import {
   SHOP_REROLL_BASE_COST, SHOP_REROLL_COST_STEP,
   SHOP_WEAPON_XP_SURCHARGE, SHOP_NEW_WEAPON_XP_SURCHARGE,
   SHOP_PASSIVE_XP_SURCHARGE, SHOP_HEAL_XP_SURCHARGE,
+  SHOP_PASSIVE_OPTION_CHANCE, SHOP_FIELD_RATION_OPTION_CHANCE,
   WEAPON_DATA, PASSIVE_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK,
   XP_BASE, UPGRADE_RARITY_DATA
 } from '../../constants';
@@ -62,6 +63,7 @@ export function generateUpgradeOptions(
 
   for (const [type, data] of Object.entries(PASSIVE_DATA)) {
     const currentLevel = getPassiveLevel(player, type as PassiveType);
+    if (Math.random() >= SHOP_PASSIVE_OPTION_CHANCE) continue;
     if (currentLevel < data.maxLevel) {
       const nextLevel = currentLevel + 1;
       const rarity = getPassiveLevelRarity(nextLevel, data.maxLevel);
@@ -78,44 +80,15 @@ export function generateUpgradeOptions(
     }
   }
 
+  if (includeModifiers) {
+    allOptions.push(...getModifierOptions(player, modifierPool));
+  }
+  allOptions.push(...getSupplyOptions(player));
+
   shuffleArray(allOptions);
 
-  const weaponUpgrades = allOptions.filter(o => o.type === 'weapon' && player.weapons.some(w => w.type === o.weaponType));
-  const newWeapons = allOptions.filter(o => o.type === 'weapon' && !player.weapons.some(w => w.type === o.weaponType));
-  const passives = allOptions.filter(o => o.type === 'passive');
-
-  const result: UpgradeOption[] = [];
-
-  if (weaponUpgrades.length > 0) result.push(weaponUpgrades.shift()!);
-  if (weaponUpgrades.length > 0 && Math.random() < 0.5) result.push(weaponUpgrades.shift()!);
-  if (newWeapons.length > 0 && player.weapons.length < 3) result.push(newWeapons.shift()!);
-
-  const remaining = [...weaponUpgrades, ...newWeapons, ...passives];
-  shuffleArray(remaining);
-  while (result.length < count && remaining.length > 0) {
-    result.push(remaining.shift()!);
-  }
-
-  const modifierOption = includeModifiers ? rollModifierOption(player, modifierPool) : undefined;
-  if (modifierOption) {
-    if (result.length < count) {
-      result.push(modifierOption);
-    } else if (result.length > 1) {
-      result[result.length - 1] = modifierOption;
-    }
-  }
-
-  const supplyOption = rollSupplyOption(player);
-  if (supplyOption) {
-    if (result.length < count) {
-      result.push(supplyOption);
-    } else if (result.length > 2) {
-      result[result.length - 1] = supplyOption;
-    }
-  }
-
-  if (result.length === 0) {
-    result.push({
+  if (allOptions.length === 0) {
+    allOptions.push({
       title: '恢复生命',
       description: '恢复30%最大生命值',
       icon: '❤️‍🩹',
@@ -126,7 +99,7 @@ export function generateUpgradeOptions(
     });
   }
 
-  return result.slice(0, count);
+  return allOptions.slice(0, count);
 }
 
 function getWeaponUpgradeBaseCost(player: Player, weapon: Weapon): number {
@@ -222,11 +195,10 @@ function getWeaponUpgradeDesc(w: Weapon): string {
   return parts.join(' ');
 }
 
-function rollModifierOption(player: Player, modifierPool: GenericModifierType[]): UpgradeOption | undefined {
-  if (modifierPool.length === 0) return undefined;
-  if (Math.random() >= 0.4) return undefined;
-
+function getModifierOptions(player: Player, modifierPool: GenericModifierType[]): UpgradeOption[] {
+  if (modifierPool.length === 0) return [];
   const options: UpgradeOption[] = [];
+
   for (const weapon of player.weapons) {
     const weaponData = WEAPON_DATA[weapon.type];
     for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
@@ -250,9 +222,7 @@ function rollModifierOption(player: Player, modifierPool: GenericModifierType[])
     }
   }
 
-  if (options.length === 0) return undefined;
-  shuffleArray(options);
-  return options[0];
+  return options;
 }
 
 function getModifierBaseCost(weapon: Weapon, modifierType: GenericModifierType): number {
@@ -267,19 +237,24 @@ function getModifierRarity(priceTier: number): UpgradeRarity {
   return 'uncommon';
 }
 
-function rollSupplyOption(player: Player): UpgradeOption | undefined {
-  if (player.hp <= player.maxHp * 0.65) {
-    return createSupplyOption(SupplyType.FIELD_RATION, player.level);
+function getSupplyOptions(player: Player): UpgradeOption[] {
+  const options: UpgradeOption[] = [];
+
+  if (player.hp <= player.maxHp * 0.65 && Math.random() < SHOP_FIELD_RATION_OPTION_CHANCE) {
+    options.push(createSupplyOption(SupplyType.FIELD_RATION, player.level));
   }
-  if (player.level < 4) return undefined;
 
-  const supplyChance = Math.min(0.85, 0.35 * player.luck);
-  if (Math.random() >= supplyChance) return undefined;
+  if (player.level >= 4) {
+    const supplyChance = Math.min(0.85, 0.35 * player.luck);
+    if (Math.random() < supplyChance) {
+      options.push(createSupplyOption(SupplyType.OVERCLOCK, player.level));
+    }
+    if (Math.random() < supplyChance) {
+      options.push(createSupplyOption(SupplyType.AEGIS_CHARM, player.level));
+    }
+  }
 
-  return createSupplyOption(
-    Math.random() < 0.5 ? SupplyType.OVERCLOCK : SupplyType.AEGIS_CHARM,
-    player.level
-  );
+  return options;
 }
 
 function createSupplyOption(type: SupplyType, playerLevel: number): UpgradeOption {

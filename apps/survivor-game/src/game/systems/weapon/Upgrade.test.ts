@@ -17,7 +17,7 @@ describe('generateUpgradeOptions', () => {
 
     const options = generateUpgradeOptions(player, 6, false);
     const keys = options.map((option) =>
-      `${option.type}:${option.weaponType ?? ''}:${option.passiveType ?? ''}:${option.modifierType ?? ''}`
+      `${option.type}:${option.weaponType ?? ''}:${option.passiveType ?? ''}:${option.modifierType ?? ''}:${option.supplyType ?? ''}`
     );
 
     expect(new Set(keys).size).toBe(keys.length);
@@ -30,7 +30,7 @@ describe('generateUpgradeOptions', () => {
     weapon.level = WEAPON_DATA[WeaponType.MAGIC_WAND].maxLevel!;
     player.weapons.push(weapon);
 
-    const options = generateUpgradeOptions(player, 6, false);
+    const options = generateUpgradeOptions(player, 40, false);
 
     expect(options.some((option) =>
       option.type === 'weapon' &&
@@ -86,10 +86,10 @@ describe('generateUpgradeOptions', () => {
     lateWeapon.level = 7;
     latePlayer.weapons.push(lateWeapon);
 
-    const earlyOption = generateUpgradeOptions(earlyPlayer, 6, false).find((option) =>
+    const earlyOption = generateUpgradeOptions(earlyPlayer, 40, false).find((option) =>
       option.type === 'weapon' && option.weaponType === WeaponType.MAGIC_WAND
     );
-    const lateOption = generateUpgradeOptions(latePlayer, 6, false).find((option) =>
+    const lateOption = generateUpgradeOptions(latePlayer, 40, false).find((option) =>
       option.type === 'weapon' && option.weaponType === WeaponType.MAGIC_WAND
     );
 
@@ -101,13 +101,13 @@ describe('generateUpgradeOptions', () => {
   });
 
   it('offers a field ration when the player is badly hurt', () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    vi.spyOn(Math, 'random').mockReturnValue(0.1);
     const player = createPlayer();
     player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
     player.level = 5;
     player.hp = 40;
 
-    const options = generateUpgradeOptions(player, 4, false);
+    const options = generateUpgradeOptions(player, 40, false);
 
     expect(options.some((option) =>
       option.type === 'supply' &&
@@ -115,14 +115,39 @@ describe('generateUpgradeOptions', () => {
     )).toBe(true);
   });
 
+  it('does not guarantee field ration when the player is hurt', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    const player = createPlayer();
+    player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
+    player.level = 5;
+    player.hp = 40;
+
+    const options = generateUpgradeOptions(player, 40, false);
+
+    expect(options.some((option) =>
+      option.type === 'supply' &&
+      option.supplyType === SupplyType.FIELD_RATION
+    )).toBe(false);
+  });
+
+  it('gates passive attribute cards by chance', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9);
+    const player = createPlayer();
+    player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
+
+    const options = generateUpgradeOptions(player, 40, false);
+
+    expect(options.some((option) => option.type === 'passive')).toBe(false);
+  });
+
   it('uses luck when rolling optional supply cards', () => {
-    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    vi.spyOn(Math, 'random').mockReturnValue(0.1);
     const player = createPlayer();
     player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
     player.level = 5;
     player.luck = 1.5;
 
-    const options = generateUpgradeOptions(player, 4, false);
+    const options = generateUpgradeOptions(player, 40, false);
 
     expect(options.some((option) => option.type === 'supply')).toBe(true);
   });
@@ -134,7 +159,7 @@ describe('generateUpgradeOptions', () => {
     weapon.level = 5;
     player.weapons.push(weapon);
 
-    const options = generateUpgradeOptions(player, 6, true, [GenericModifierType.SPLIT_CORE]);
+    const options = generateUpgradeOptions(player, 40, true, [GenericModifierType.SPLIT_CORE]);
 
     const modifierOptions = options.filter((option) => option.type === 'modifier');
     expect(modifierOptions.length).toBeGreaterThan(0);

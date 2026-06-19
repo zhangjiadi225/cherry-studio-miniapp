@@ -1,9 +1,10 @@
-import { Enemy, Projectile, Particle, DamageNumber, WeaponType } from '../../types';
+import { Enemy, Projectile, Particle, DamageNumber, WeaponType, type GenericModifierType } from '../../types';
 import { ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from '../../constants';
 import { damageEnemy } from '../enemy/Enemy';
 import type { MapSystem } from '../map/MapSystem';
 import { createDamageNumber } from '../../effects/DamageNumber';
 import { spawnExplosionParticles, spawnHitParticles } from '../../effects/Particle';
+import { eventBus, GameEvent } from '../../events';
 import { updateProjectile } from '../weapon/Weapon';
 import { pools } from '../../utils/PoolManager';
 import { SpatialGrid } from '../../utils/SpatialGrid';
@@ -78,7 +79,8 @@ export class ProjectileCombat {
     projectile.hitEnemies.add(enemy.id);
     const dir = { x: enemy.x - projectile.x, y: enemy.y - projectile.y };
     const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
-    const knockback = projectile.knockback + (this.projectileHasEffect(projectile, 'knockback') ? 120 : 0);
+    const knockbackModifier = this.getProjectileModifierByEffect(projectile, 'knockback');
+    const knockback = projectile.knockback + (knockbackModifier ? 120 : 0);
     const isDead = damageEnemy(enemy, projectile.damage, (dir.x / len) * knockback, (dir.y / len) * knockback);
     const hitColor = ENEMY_DATA[enemy.type].color;
 
@@ -99,6 +101,9 @@ export class ProjectileCombat {
     const dmgColor = this.getProjectileDamageColor(projectile);
     const dmgSize = projectile.damage >= 30 ? 18 : projectile.damage >= 20 ? 16 : 14;
     ctx.damageNumbers.push(createDamageNumber(enemy.x, enemy.y, projectile.damage, dmgColor, dmgSize));
+    if (knockbackModifier) {
+      this.triggerModifierFeedback(ctx, knockbackModifier.id, enemy.x, enemy.y);
+    }
     this.triggerProjectileModifiers(ctx, projectile, enemy, isDead);
     return isDead;
   }
@@ -108,12 +113,13 @@ export class ProjectileCombat {
       if (!this.projectileHasModifier(projectile, modifier.id)) continue;
 
       if (modifier.trigger === 'onKill' && isDead) {
+        this.triggerModifierFeedback(ctx, modifier.id, enemy.x, enemy.y);
         switch (modifier.effect) {
           case 'deathExplosion':
-            this.spawnDeathExplosion(ctx, projectile, enemy, 92, 0.45, '#ff9a45');
+            this.spawnDeathExplosion(ctx, projectile, enemy, 92, 0.45, modifier.visual.accent);
             break;
           case 'lightningExplosion':
-            this.spawnDeathExplosion(ctx, projectile, enemy, 126, 0.38, '#8fe8ff');
+            this.spawnDeathExplosion(ctx, projectile, enemy, 126, 0.38, modifier.visual.accent);
             break;
           case 'chainExplosion':
             this.spawnChainExplosion(ctx, projectile, enemy);
@@ -127,18 +133,22 @@ export class ProjectileCombat {
         case 'pulse':
           if (!projectile.pulseDone) {
             projectile.pulseDone = true;
+            this.triggerModifierFeedback(ctx, modifier.id, projectile.x, projectile.y);
             this.spawnImpactPulse(ctx, projectile);
           }
           break;
         case 'chain':
           if (!projectile.chainDone) {
             projectile.chainDone = true;
-            this.spawnChainHit(ctx, projectile, enemy);
+            if (this.spawnChainHit(ctx, projectile, enemy)) {
+              this.triggerModifierFeedback(ctx, modifier.id, enemy.x, enemy.y);
+            }
           }
           break;
         case 'split':
           if (!projectile.splitDone && this.canSplitProjectile(projectile)) {
             projectile.splitDone = true;
+            this.triggerModifierFeedback(ctx, modifier.id, projectile.x, projectile.y);
             this.spawnSplitProjectiles(ctx, projectile);
           }
           break;
@@ -150,11 +160,33 @@ export class ProjectileCombat {
     return (projectile.modifierMask & GENERIC_MODIFIER_MASK[modifier]) !== 0;
   }
 
-  private projectileHasEffect(projectile: Projectile, effect: 'knockback'): boolean {
-    return Object.values(GENERIC_MODIFIER_DATA).some((modifier) =>
+  private getProjectileModifierByEffect(projectile: Projectile, effect: 'knockback') {
+    return Object.values(GENERIC_MODIFIER_DATA).find((modifier) =>
       modifier.effect === effect &&
       this.projectileHasModifier(projectile, modifier.id)
     );
+  }
+
+  private triggerModifierFeedback(
+    ctx: ProjectileCombatContext,
+    modifierType: GenericModifierType,
+    x: number,
+    y: number
+  ) {
+    const modifier = GENERIC_MODIFIER_DATA[modifierType];
+    const visual = modifier.visual;
+    const isKill = visual.layer === 'kill';
+    const isControl = visual.layer === 'control';
+    spawnExplosionParticles(ctx.particles, x, y, visual.accent, isKill ? 18 : 10, {
+      speed: isKill ? 190 : isControl ? 120 : 145,
+      life: isKill ? 0.62 : 0.42,
+      radius: isKill ? 3.5 : 2.6,
+      type: visual.particle,
+      glow: true,
+      innerColor: visual.color,
+      ringCount: isControl ? 4 : 6,
+    });
+    eventBus.emit(GameEvent.MODIFIER_TRIGGER, modifierType);
   }
 
   private getProjectileDamageColor(projectile: Projectile): string {
@@ -226,7 +258,7 @@ export class ProjectileCombat {
     }
   }
 
-  private spawnChainHit(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy) {
+  private spawnChainHit(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy): boolean {
     let best: Enemy | undefined;
     let bestDistSq = Infinity;
     const chainRadius = 240;
@@ -240,7 +272,7 @@ export class ProjectileCombat {
         bestDistSq = dSq;
       }
     });
-    if (!best) return;
+    if (!best) return false;
 
     projectile.hitEnemies.add(best.id);
     const dir = { x: best.x - source.x, y: best.y - source.y };
@@ -251,6 +283,7 @@ export class ProjectileCombat {
       speed: 130, life: 0.35, radius: 2.5, type: 'star', glow: true,
     });
     ctx.damageNumbers.push(createDamageNumber(best.x, best.y, damage, '#bde7ff', 13));
+    return true;
   }
 
   private canSplitProjectile(projectile: Projectile): boolean {

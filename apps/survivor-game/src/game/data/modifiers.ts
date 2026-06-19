@@ -12,6 +12,15 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
     maxStacks: 1,
     priceTier: 2,
     unlockLevel: 3,
+    visual: {
+      glyph: 'II',
+      color: '#dfe9ff',
+      accent: '#8bb7ff',
+      glow: 'rgba(155,190,255,',
+      layer: 'cast',
+      particle: 'star',
+      audio: 'echo',
+    },
   },
   [GenericModifierType.SPLIT_CORE]: {
     id: GenericModifierType.SPLIT_CORE,
@@ -24,6 +33,15 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
     maxStacks: 1,
     priceTier: 2,
     unlockLevel: 3,
+    visual: {
+      glyph: 'X',
+      color: '#ffdd8a',
+      accent: '#ff8d5a',
+      glow: 'rgba(255,155,90,',
+      layer: 'hit',
+      particle: 'spark',
+      audio: 'crack',
+    },
   },
   [GenericModifierType.CHAIN_CONDUCTOR]: {
     id: GenericModifierType.CHAIN_CONDUCTOR,
@@ -36,6 +54,15 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
     maxStacks: 1,
     priceTier: 2,
     unlockLevel: 3,
+    visual: {
+      glyph: 'Z',
+      color: '#9fe8ff',
+      accent: '#4bb7ff',
+      glow: 'rgba(90,205,255,',
+      layer: 'hit',
+      particle: 'star',
+      audio: 'chain',
+    },
   },
   [GenericModifierType.IMPACT_PULSE]: {
     id: GenericModifierType.IMPACT_PULSE,
@@ -48,6 +75,15 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
     maxStacks: 1,
     priceTier: 1,
     unlockLevel: 3,
+    visual: {
+      glyph: 'O',
+      color: '#d4a6ff',
+      accent: '#925dff',
+      glow: 'rgba(176,116,255,',
+      layer: 'hit',
+      particle: 'circle',
+      audio: 'pulse',
+    },
   },
   [GenericModifierType.REPULSION_FIELD]: {
     id: GenericModifierType.REPULSION_FIELD,
@@ -60,6 +96,15 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
     maxStacks: 1,
     priceTier: 1,
     unlockLevel: 3,
+    visual: {
+      glyph: '>>',
+      color: '#a5ffe5',
+      accent: '#3fd8b8',
+      glow: 'rgba(92,232,200,',
+      layer: 'control',
+      particle: 'spark',
+      audio: 'push',
+    },
   },
   [GenericModifierType.VELOCITY_RUNE]: {
     id: GenericModifierType.VELOCITY_RUNE,
@@ -72,6 +117,15 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
     maxStacks: 1,
     priceTier: 1,
     unlockLevel: 2,
+    visual: {
+      glyph: '>',
+      color: '#7df7ff',
+      accent: '#2aa8ff',
+      glow: 'rgba(90,225,255,',
+      layer: 'trail',
+      particle: 'spark',
+      audio: 'rush',
+    },
   },
   [GenericModifierType.DEATH_BURST]: {
     id: GenericModifierType.DEATH_BURST,
@@ -84,6 +138,15 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
     maxStacks: 1,
     priceTier: 2,
     unlockLevel: 4,
+    visual: {
+      glyph: '*',
+      color: '#ffb45f',
+      accent: '#ff6b3d',
+      glow: 'rgba(255,126,66,',
+      layer: 'kill',
+      particle: 'square',
+      audio: 'burst',
+    },
   },
   [GenericModifierType.LIGHTNING_BURST]: {
     id: GenericModifierType.LIGHTNING_BURST,
@@ -96,6 +159,15 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
     maxStacks: 1,
     priceTier: 3,
     unlockLevel: 5,
+    visual: {
+      glyph: 'Z*',
+      color: '#d7fbff',
+      accent: '#71dfff',
+      glow: 'rgba(130,232,255,',
+      layer: 'kill',
+      particle: 'star',
+      audio: 'thunder',
+    },
   },
   [GenericModifierType.CHAIN_BURST]: {
     id: GenericModifierType.CHAIN_BURST,
@@ -108,6 +180,15 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
     maxStacks: 1,
     priceTier: 3,
     unlockLevel: 5,
+    visual: {
+      glyph: '*>',
+      color: '#ffe08a',
+      accent: '#ffb84d',
+      glow: 'rgba(255,205,92,',
+      layer: 'kill',
+      particle: 'spark',
+      audio: 'cascade',
+    },
   },
 };
 

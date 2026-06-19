@@ -104,7 +104,9 @@ export class Renderer {
   drawEnemy(e: Enemy) { drawEnemy(this.rc, e); }
   drawProjectile(p: Projectile) { drawProjectile(this.rc, p); }
   drawXPGem(gem: XPGem) { drawXPGem(this.rc, gem); }
-  drawGarlicAura(player: Player, radius: number) { drawGarlicAura(this.rc, player, radius); }
+  drawGarlicAura(player: Player, radius: number, modifierMask: number = 0) {
+    drawGarlicAura(this.rc, player, radius, modifierMask);
+  }
   drawPickupRange(player: Player) { drawPickupRange(this.rc, player); }
 
   // ─── Effects ───

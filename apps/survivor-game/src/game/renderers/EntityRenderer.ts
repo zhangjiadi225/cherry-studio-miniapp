@@ -1,7 +1,7 @@
 import type { RenderContext } from './WorldRenderer';
-import type { Player, Enemy, Projectile, XPGem } from '../types';
+import type { Player, Enemy, Projectile, XPGem, GenericModifierVisual } from '../types';
 import { WeaponType, EnemyType } from '../types';
-import { COLORS, ENEMY_DATA } from '../constants';
+import { COLORS, ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from '../constants';
 import { getSkinById } from '../systems/meta/MetaProgression';
 
 // ──────────────────────────── Helpers ────────────────────────────
@@ -652,6 +652,143 @@ function seededRandom(seed: number): number {
   return (s >>> 0) / 0x7fffffff;
 }
 
+function getActiveModifierVisuals(mask: number): GenericModifierVisual[] {
+  if (mask === 0) return [];
+  return Object.values(GENERIC_MODIFIER_DATA)
+    .filter((modifier) => (mask & GENERIC_MODIFIER_MASK[modifier.id]) !== 0)
+    .map((modifier) => modifier.visual);
+}
+
+function drawModifierTrail(ctx: CanvasRenderingContext2D, p: Projectile, visual: GenericModifierVisual, alpha: number, index: number) {
+  const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+  const ux = speed > 1 ? p.vx / speed : Math.cos(p.animTimer + index);
+  const uy = speed > 1 ? p.vy / speed : Math.sin(p.animTimer + index);
+  const len = Math.max(18, p.radius * 2.2) + index * 5;
+
+  ctx.strokeStyle = `${visual.glow}${alpha * 0.38})`;
+  ctx.lineWidth = Math.max(2, p.radius * 0.22);
+  ctx.lineCap = 'round';
+  for (let i = 1; i <= 3; i++) {
+    const spread = (i - 2) * 0.35;
+    const px = -uy * spread * p.radius;
+    const py = ux * spread * p.radius;
+    ctx.beginPath();
+    ctx.moveTo(p.x - ux * len * 0.25 + px, p.y - uy * len * 0.25 + py);
+    ctx.lineTo(p.x - ux * len * i * 0.42 + px, p.y - uy * len * i * 0.42 + py);
+    ctx.stroke();
+  }
+}
+
+function drawModifierGlyph(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  visual: GenericModifierVisual,
+  alpha: number,
+  size: number
+) {
+  ctx.fillStyle = `${visual.glow}${alpha * 0.18})`;
+  ctx.beginPath();
+  ctx.arc(x, y, size * 0.95, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.85;
+  ctx.strokeStyle = visual.color;
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(x, y, size * 0.62, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = visual.color;
+  ctx.font = `bold ${Math.max(8, size * 0.62)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(visual.glyph, x, y + 0.5);
+  ctx.restore();
+}
+
+function drawModifierRing(ctx: CanvasRenderingContext2D, p: Projectile, visual: GenericModifierVisual, alpha: number, index: number) {
+  const radius = Math.max(12, p.radius * (1.35 + index * 0.24));
+  const phase = p.animTimer * (1.2 + index * 0.12);
+  ctx.strokeStyle = `${visual.glow}${alpha * 0.36})`;
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 3; i++) {
+    const start = phase + i * 2.09;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, radius, start, start + 0.7);
+    ctx.stroke();
+  }
+  const gx = p.x + Math.cos(phase) * radius;
+  const gy = p.y + Math.sin(phase) * radius;
+  drawModifierGlyph(ctx, gx, gy, visual, alpha * 0.85, 12);
+}
+
+function drawModifierPushMarkers(ctx: CanvasRenderingContext2D, p: Projectile, visual: GenericModifierVisual, alpha: number, index: number) {
+  const radius = Math.max(13, p.radius * (1.45 + index * 0.2));
+  ctx.save();
+  ctx.globalAlpha = alpha * 0.58;
+  ctx.strokeStyle = visual.color;
+  ctx.lineWidth = 1.7;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    const angle = p.animTimer * 1.6 + i * Math.PI * 0.5;
+    const x = p.x + Math.cos(angle) * radius;
+    const y = p.y + Math.sin(angle) * radius;
+    const tx = Math.cos(angle) * 7;
+    const ty = Math.sin(angle) * 7;
+    ctx.beginPath();
+    ctx.moveTo(x - tx * 0.45, y - ty * 0.45);
+    ctx.lineTo(x + tx, y + ty);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawModifierKillSpikes(ctx: CanvasRenderingContext2D, p: Projectile, visual: GenericModifierVisual, alpha: number, index: number) {
+  const radius = Math.max(14, p.radius * (1.55 + index * 0.26));
+  ctx.strokeStyle = `${visual.glow}${alpha * 0.42})`;
+  ctx.lineWidth = 1.4;
+  for (let i = 0; i < 6; i++) {
+    const angle = p.animTimer * 0.9 + i * Math.PI / 3;
+    const inner = radius * 0.78;
+    const outer = radius + 4;
+    ctx.beginPath();
+    ctx.moveTo(p.x + Math.cos(angle) * inner, p.y + Math.sin(angle) * inner);
+    ctx.lineTo(p.x + Math.cos(angle) * outer, p.y + Math.sin(angle) * outer);
+    ctx.stroke();
+  }
+  drawModifierGlyph(ctx, p.x, p.y - radius, visual, alpha * 0.78, 12);
+}
+
+function drawModifierIdentityLayer(rc: RenderContext, p: Projectile, alpha: number) {
+  const visuals = getActiveModifierVisuals(p.modifierMask);
+  if (visuals.length === 0) return;
+
+  const { ctx } = rc;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  visuals.forEach((visual, index) => {
+    switch (visual.layer) {
+      case 'trail':
+        drawModifierTrail(ctx, p, visual, alpha, index);
+        break;
+      case 'cast':
+        drawModifierRing(ctx, p, visual, alpha * 0.9, index);
+        break;
+      case 'control':
+        drawModifierPushMarkers(ctx, p, visual, alpha, index);
+        break;
+      case 'kill':
+        drawModifierKillSpikes(ctx, p, visual, alpha * 0.82, index);
+        break;
+      case 'hit':
+        drawModifierRing(ctx, p, visual, alpha * 0.78, index);
+        break;
+    }
+  });
+  ctx.restore();
+}
+
 export function drawProjectile(rc: RenderContext, p: Projectile) {
   const { ctx } = rc;
   if (p.radius <= 0 || p.maxLife <= 0 || p.life <= 0) return;
@@ -1006,11 +1143,13 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
     case WeaponType.GARLIC:
       break;
   }
+
+  drawModifierIdentityLayer(rc, p, alpha);
 }
 
 // ──────────────────────────── Garlic Aura ────────────────────────────
 
-export function drawGarlicAura(rc: RenderContext, player: Player, radius: number) {
+export function drawGarlicAura(rc: RenderContext, player: Player, radius: number, modifierMask: number = 0) {
   const { ctx } = rc;
   const time = Date.now() * 0.001;
   const pulse = 0.15 + Math.sin(time * 3) * 0.05;
@@ -1041,6 +1180,35 @@ export function drawGarlicAura(rc: RenderContext, player: Player, radius: number
     ctx.beginPath();
     ctx.arc(player.x + Math.cos(angle) * dist, player.y + Math.sin(angle) * dist, size, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  const visuals = getActiveModifierVisuals(modifierMask);
+  if (visuals.length > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    visuals.forEach((visual, index) => {
+      const orbit = radius * (0.8 + index * 0.09);
+      const count = visual.layer === 'control' ? 6 : 3;
+      ctx.strokeStyle = `${visual.glow}${0.16 + pulse * 0.55})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, orbit, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let i = 0; i < count; i++) {
+        const angle = time * (0.55 + index * 0.08) + i * Math.PI * 2 / count;
+        drawModifierGlyph(
+          ctx,
+          player.x + Math.cos(angle) * orbit,
+          player.y + Math.sin(angle) * orbit,
+          visual,
+          0.62,
+          13
+        );
+      }
+    });
+    ctx.restore();
   }
 }
 

@@ -47,6 +47,8 @@ export const SHOP_WEAPON_XP_SURCHARGE = 0.18;
 export const SHOP_NEW_WEAPON_XP_SURCHARGE = 0.14;
 export const SHOP_PASSIVE_XP_SURCHARGE = 0.12;
 export const SHOP_HEAL_XP_SURCHARGE = 0.08;
+export const SHOP_PASSIVE_OPTION_CHANCE = 0.35;
+export const SHOP_FIELD_RATION_OPTION_CHANCE = 0.3;
 
 export const UPGRADE_RARITY_DATA: Record<UpgradeRarity, {
   label: string;

@@ -246,6 +246,20 @@ export interface GenericModifierData {
   maxStacks: number;
   priceTier: number;
   unlockLevel: number;
+  visual: GenericModifierVisual;
+}
+
+export type ModifierVisualLayer = 'cast' | 'trail' | 'hit' | 'control' | 'kill';
+export type ModifierAudioCue = 'rush' | 'echo' | 'crack' | 'chain' | 'pulse' | 'push' | 'burst' | 'thunder' | 'cascade';
+
+export interface GenericModifierVisual {
+  glyph: string;
+  color: string;
+  accent: string;
+  glow: string;
+  layer: ModifierVisualLayer;
+  particle: 'circle' | 'square' | 'star' | 'spark';
+  audio: ModifierAudioCue;
 }
 
 export const PassiveType = {

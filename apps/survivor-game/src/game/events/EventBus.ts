@@ -1,4 +1,4 @@
-import type { Enemy, GameState, UpgradeOption, WeaponType } from '../types';
+import type { Enemy, GameState, GenericModifierType, UpgradeOption, WeaponType } from '../types';
 import { GameEvent } from './GameEvents';
 
 export interface GameEventMap {
@@ -14,6 +14,7 @@ export interface GameEventMap {
   [GameEvent.BOSS_SPAWN]: [boss: Enemy];
   [GameEvent.BOSS_DEATH]: [boss: Enemy];
   [GameEvent.WEAPON_FIRE]: [weaponType: WeaponType];
+  [GameEvent.MODIFIER_TRIGGER]: [modifierType: GenericModifierType];
   [GameEvent.XP_COLLECTED]: [amount: number];
   [GameEvent.UPGRADE_SELECT]: [option: UpgradeOption];
   [GameEvent.PAUSE]: [];
