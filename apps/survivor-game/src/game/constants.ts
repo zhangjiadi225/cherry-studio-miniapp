@@ -10,6 +10,8 @@ export { WEAPON_DATA, getWeaponMetadataLabel } from './data/weapons';
 // ===== Game =====
 export const GAME_DURATION = 9 * 60; // 9 minutes
 export const ARENA_SIZE = 6000;
+export const MAP_ZONE_SIZE = 1200;
+export const MAP_GRID_SIZE = 96;
 export const DIFFICULTY_INTERVAL = 30; // seconds
 export const DIFFICULTY_STEP = 0.03;
 export const SPAWN_INTERVAL_BASE = 1.5; // seconds
@@ -99,10 +101,10 @@ export const SHAKE_BOSS_DURATION = 0.3;
 export const SHAKE_BOSS_INTENSITY = 6;
 
 // ===== Obstacle Config =====
-export const OBSTACLE_CELL_SIZE = 200;
+export const OBSTACLE_CELL_SIZE = 240;
 export const OBSTACLE_HP = 10;
 export const BLOOD_POOL_SLOW = 0.5;
-export const BLOOD_POOL_RADIUS = 40;
+export const BLOOD_POOL_RADIUS = 54;
 
 // ===== Combat =====
 export const CONTACT_COOLDOWN = 0.5;

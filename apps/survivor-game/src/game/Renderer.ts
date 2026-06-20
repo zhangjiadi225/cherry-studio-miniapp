@@ -134,7 +134,7 @@ export class Renderer {
   drawUI(player: Player, elapsed: number, killCount: number, objective?: string, runDuration?: number) {
     drawUI(this.rc, player, elapsed, killCount, objective, runDuration);
   }
-  drawMinimap(player: Player, enemies: Enemy[]) { drawMinimap(this.rc, player, enemies); }
+  drawMinimap(player: Player, enemies: Enemy[], obstacles: MapObstacle[]) { drawMinimap(this.rc, player, enemies, obstacles); }
   drawVirtualJoystick(joystick: TouchJoystickState) { drawVirtualJoystick(this.rc, joystick); }
   drawBossBar(name: string, hp: number, maxHp: number) { drawBossBar(this.rc, name, hp, maxHp); }
   drawAudioButton(muted: boolean) { drawAudioBtn(this.rc, muted); }

@@ -95,6 +95,7 @@ export class Game {
   private projectiles: Projectile[] = [];
   private enemyProjectiles: EnemyProjectile[] = [];
   private minimapEnemies: Enemy[] = [];
+  private minimapObstacles: MapObstacle[] = [];
   private visibleObstacles: MapObstacle[] = [];
   private xpGems: XPGem[] = [];
   private particles: Particle[] = [];
@@ -116,6 +117,7 @@ export class Game {
   private damageFlashTimer = 0;
   private levelUpFlashTimer = 0;
   private minimapRefreshTimer = 0;
+  private mapCleanupTimer = 0;
   private perfEnabled = false;
   private perfStats: PerformanceStats = {
     fps: 0,
@@ -430,6 +432,7 @@ export class Game {
     this.projectiles = [];
     this.enemyProjectiles = [];
     this.minimapEnemies.length = 0;
+    this.minimapObstacles.length = 0;
     this.xpGems = [];
     this.particles = [];
     this.damageNumbers = [];
@@ -448,6 +451,7 @@ export class Game {
     this.damageFlashTimer = 0;
     this.levelUpFlashTimer = 0;
     this.minimapRefreshTimer = 0;
+    this.mapCleanupTimer = 0;
     this.lastDamageSource = undefined;
     this.gameOverStats = undefined;
     this.endlessModeActive = false;
@@ -572,6 +576,7 @@ export class Game {
       particles: this.particles,
       damageNumbers: this.damageNumbers,
     }, dt);
+    this.cleanupMapObstacles(dt);
 
     for (const e of this.enemies) {
       if (e.hp <= 0) this.onEnemyDeath(e);
@@ -663,6 +668,20 @@ export class Game {
     if (this.minimapRefreshTimer > 0) return;
     this.minimapRefreshTimer = MINIMAP_REFRESH_INTERVAL;
     this.enemyGrid.collectNearby(this.player.x, this.player.y, MINIMAP_QUERY_RADIUS, this.minimapEnemies);
+    this.mapSystem.collectNearby(
+      this.player.x - MINIMAP_WORLD_HALF_SIZE,
+      this.player.y - MINIMAP_WORLD_HALF_SIZE,
+      this.player.x + MINIMAP_WORLD_HALF_SIZE,
+      this.player.y + MINIMAP_WORLD_HALF_SIZE,
+      this.minimapObstacles
+    );
+  }
+
+  private cleanupMapObstacles(dt: number) {
+    this.mapCleanupTimer += dt;
+    if (this.mapCleanupTimer < 2) return;
+    this.mapCleanupTimer = 0;
+    this.mapSystem.cleanupDestroyed();
   }
 
   private releaseDeadEnemyProjectiles() {
@@ -1072,7 +1091,7 @@ export class Game {
       this.objectiveTimer > 0 ? this.objectiveMessage : undefined,
       this.runDifficulty.duration
     );
-    this.renderer.drawMinimap(this.player, this.minimapEnemies);
+    this.renderer.drawMinimap(this.player, this.minimapEnemies, this.minimapObstacles);
     this.renderer.drawAudioButton(this.audio.isMuted());
     this.renderer.drawPauseButton();
     if (gameState.is('playing')) {

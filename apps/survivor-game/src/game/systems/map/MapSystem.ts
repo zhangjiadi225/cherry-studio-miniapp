@@ -1,7 +1,16 @@
-import { MapObstacle } from '../../types';
-import { hashXY } from '../../utils/math';
+import { MapObstacle, MapZone } from '../../types';
+import { hashXY, getZone } from '../../utils/math';
 import { circleRectOverlap, pushCircleFromRect } from '../../utils/collision';
 import { ARENA_SIZE, OBSTACLE_CELL_SIZE, OBSTACLE_HP, BLOOD_POOL_RADIUS, BLOOD_POOL_SLOW } from '../../constants';
+
+const START_SAFE_RADIUS = 500;
+const GRID_BUCKET_SIZE = OBSTACLE_CELL_SIZE * 2;
+const OBSTACLE_QUERY_PADDING = 220;
+type ObstacleOptions = {
+  landmark?: boolean;
+  rotation?: number;
+  variant?: number;
+};
 
 export class MapSystem {
   private obstacles: MapObstacle[] = [];
@@ -20,73 +29,48 @@ export class MapSystem {
       for (let gy = minCoord; gy < maxCoord; gy += cellSize) {
         const h = hashXY(gx, gy);
 
-        if (h % 7 !== 0) continue;
+        if (h % this.getZoneDensity(getZone(gx, gy)) !== 0) continue;
 
         const dx0 = Math.abs(gx) < 150 ? 0 : gx;
         const dy0 = Math.abs(gy) < 150 ? 0 : gy;
         if (dx0 === 0 && dy0 === 0) continue;
 
-        const typeRoll = (h >> 8) % 100;
-        let type: MapObstacle['type'];
-        let w: number, hp: number;
+        const jitter = 96;
+        const ox = gx + ((h >>> 4) % (jitter * 2)) - jitter;
+        const oy = gy + ((h >>> 12) % (jitter * 2)) - jitter;
+        if (ox * ox + oy * oy < START_SAFE_RADIUS * START_SAFE_RADIUS) continue;
 
-        if (typeRoll < 30) {
-          type = 'tombstone'; w = 35; hp = Infinity;
-        } else if (typeRoll < 60) {
-          type = 'bone_wall'; w = 50; hp = OBSTACLE_HP;
-        } else if (typeRoll < 85) {
-          type = 'blood_pool'; w = BLOOD_POOL_RADIUS * 2; hp = Infinity;
-        } else {
-          type = 'magic_circle'; w = 60; hp = Infinity;
-        }
-
-        const ox = gx + ((h >> 4) % 80) - 40;
-        const oy = gy + ((h >> 12) % 80) - 40;
-        const h2 = (h >> 16) % 20;
+        const type = this.pickZoneObstacleType(getZone(ox, oy), (h >>> 8) % 100);
+        const w = this.getBaseSize(type);
+        const h2 = (h >>> 16) % 28;
         const size = w + h2;
 
-        const obstacle: MapObstacle = {
-          x: ox,
-          y: oy,
-          width: type === 'blood_pool' ? size * 1.3 : size,
-          height: type === 'blood_pool' ? size : size * 0.7,
-          type,
-          hp,
-          maxHp: hp,
-          radius: type === 'blood_pool' ? size * 0.65 : size * 0.5,
-        };
-
-        this.obstacles.push(obstacle);
-
-        const cx = Math.floor(ox / (cellSize * 2));
-        const cy = Math.floor(oy / (cellSize * 2));
-        let row = this.grid.get(cx);
-        if (!row) {
-          row = new Map();
-          this.grid.set(cx, row);
-        }
-        let bucket = row.get(cy);
-        if (!bucket) {
-          bucket = [];
-          row.set(cy, bucket);
-        }
-        bucket.push(obstacle);
+        this.addObstacle(type, ox, oy, size, {
+          rotation: ((h >>> 20) % 628) / 100,
+          variant: (h >>> 24) % 4,
+        });
       }
     }
+
+    this.addLandmarks();
   }
 
   getNearby(minX: number, minY: number, maxX: number, maxY: number): MapObstacle[] {
     const result: MapObstacle[] = [];
-    this.forNearby(minX, minY, maxX, maxY, (obs) => result.push(obs));
-    return result;
+    return this.collectNearby(minX, minY, maxX, maxY, result);
+  }
+
+  collectNearby(minX: number, minY: number, maxX: number, maxY: number, out: MapObstacle[]): MapObstacle[] {
+    out.length = 0;
+    this.forNearby(minX, minY, maxX, maxY, (obs) => out.push(obs));
+    return out;
   }
 
   forNearby(minX: number, minY: number, maxX: number, maxY: number, visit: (obs: MapObstacle) => void): void {
-    const cellSize = OBSTACLE_CELL_SIZE * 2;
-    const cx0 = Math.floor(minX / cellSize);
-    const cy0 = Math.floor(minY / cellSize);
-    const cx1 = Math.floor(maxX / cellSize);
-    const cy1 = Math.floor(maxY / cellSize);
+    const cx0 = Math.floor(minX / GRID_BUCKET_SIZE);
+    const cy0 = Math.floor(minY / GRID_BUCKET_SIZE);
+    const cx1 = Math.floor(maxX / GRID_BUCKET_SIZE);
+    const cy1 = Math.floor(maxY / GRID_BUCKET_SIZE);
     for (let cx = cx0; cx <= cx1; cx++) {
       const row = this.grid.get(cx);
       if (!row) continue;
@@ -112,10 +96,10 @@ export class MapSystem {
   collectVisible(camX: number, camY: number, viewW: number, viewH: number, out: MapObstacle[]): MapObstacle[] {
     out.length = 0;
     this.forNearby(
-      camX - viewW / 2 - 100,
-      camY - viewH / 2 - 100,
-      camX + viewW / 2 + 100,
-      camY + viewH / 2 + 100,
+      camX - viewW / 2 - OBSTACLE_QUERY_PADDING,
+      camY - viewH / 2 - OBSTACLE_QUERY_PADDING,
+      camX + viewW / 2 + OBSTACLE_QUERY_PADDING,
+      camY + viewH / 2 + OBSTACLE_QUERY_PADDING,
       (obs) => out.push(obs)
     );
     return out;
@@ -124,7 +108,7 @@ export class MapSystem {
   handleCircleCollision(x: number, y: number, radius: number): { x: number; y: number } {
     let pushX = 0;
     let pushY = 0;
-    this.forNearby(x - 100, y - 100, x + 100, y + 100, (obs) => {
+    this.forNearby(x - OBSTACLE_QUERY_PADDING, y - OBSTACLE_QUERY_PADDING, x + OBSTACLE_QUERY_PADDING, y + OBSTACLE_QUERY_PADDING, (obs) => {
       if (obs.type === 'blood_pool' || obs.type === 'magic_circle') return;
       if (obs.hp <= 0) return;
       const push = pushCircleFromRect(x + pushX, y + pushY, radius, obs.x, obs.y, obs.width, obs.height);
@@ -142,13 +126,13 @@ export class MapSystem {
 
   projectileHitsSolidObstacle(px: number, py: number, radius: number, damageBoneWall = false): boolean {
     let hit = false;
-    this.forNearby(px - 50, py - 50, px + 50, py + 50, (obs) => {
+    this.forNearby(px - OBSTACLE_QUERY_PADDING, py - OBSTACLE_QUERY_PADDING, px + OBSTACLE_QUERY_PADDING, py + OBSTACLE_QUERY_PADDING, (obs) => {
       if (hit) return;
       if (obs.type === 'blood_pool' || obs.type === 'magic_circle') return;
       if (obs.hp <= 0) return;
       if (circleRectOverlap(px, py, radius, obs.x, obs.y, obs.width, obs.height)) {
         if (damageBoneWall && obs.type === 'bone_wall') {
-          obs.hp -= 1;
+          obs.hp = Math.max(0, obs.hp - 1);
         }
         hit = true;
       }
@@ -158,7 +142,7 @@ export class MapSystem {
 
   getBloodPoolSlowFactor(x: number, y: number, radius: number): number {
     let slowest = 1;
-    this.forNearby(x - 100, y - 100, x + 100, y + 100, (obs) => {
+    this.forNearby(x - OBSTACLE_QUERY_PADDING, y - OBSTACLE_QUERY_PADDING, x + OBSTACLE_QUERY_PADDING, y + OBSTACLE_QUERY_PADDING, (obs) => {
       if (obs.type !== 'blood_pool') return;
       const dx = x - obs.x;
       const dy = y - obs.y;
@@ -171,5 +155,136 @@ export class MapSystem {
 
   getObstacles(): MapObstacle[] {
     return this.obstacles;
+  }
+
+  cleanupDestroyed(): number {
+    const before = this.obstacles.length;
+    this.obstacles = this.obstacles.filter(obs => obs.hp > 0);
+    if (this.obstacles.length !== before) this.rebuildGrid();
+    return before - this.obstacles.length;
+  }
+
+  private addLandmarks(): void {
+    const points: Array<{ x: number; y: number; type: MapObstacle['type']; size: number; rotation?: number; variant?: number }> = [
+      { x: -2180, y: 140, type: 'magic_circle', size: 154, rotation: -0.08, variant: 0 },
+      { x: 2180, y: -160, type: 'magic_circle', size: 148, rotation: 0.12, variant: 1 },
+      { x: -160, y: -2180, type: 'magic_circle', size: 150, rotation: 0.04, variant: 2 },
+      { x: 120, y: 2180, type: 'magic_circle', size: 146, rotation: -0.1, variant: 3 },
+      { x: -1080, y: -120, type: 'blood_pool', size: 172, rotation: 0.18, variant: 0 },
+      { x: 1080, y: 260, type: 'blood_pool', size: 164, rotation: -0.28, variant: 1 },
+      { x: -300, y: -1080, type: 'bone_wall', size: 138, rotation: 0.08, variant: 0 },
+      { x: 340, y: 1080, type: 'bone_wall', size: 146, rotation: -0.12, variant: 1 },
+      { x: -1060, y: -1040, type: 'tombstone', size: 132, rotation: -0.04, variant: 0 },
+      { x: 1060, y: 1060, type: 'tombstone', size: 128, rotation: 0.08, variant: 1 },
+    ];
+
+    for (const point of points) {
+      this.addObstacle(point.type, point.x, point.y, point.size, {
+        landmark: true,
+        rotation: point.rotation,
+        variant: point.variant,
+      });
+    }
+  }
+
+  private getZoneDensity(zone: MapZone): number {
+    switch (zone) {
+      case 'blood': return 4;
+      case 'bone': return 5;
+      case 'shadow': return 5;
+      case 'storm': return 6;
+    }
+  }
+
+  private pickZoneObstacleType(zone: MapZone, roll: number): MapObstacle['type'] {
+    switch (zone) {
+      case 'shadow':
+        if (roll < 55) return 'tombstone';
+        if (roll < 75) return 'bone_wall';
+        if (roll < 90) return 'blood_pool';
+        return 'magic_circle';
+      case 'blood':
+        if (roll < 58) return 'blood_pool';
+        if (roll < 78) return 'tombstone';
+        if (roll < 92) return 'bone_wall';
+        return 'magic_circle';
+      case 'bone':
+        if (roll < 52) return 'bone_wall';
+        if (roll < 82) return 'tombstone';
+        if (roll < 92) return 'blood_pool';
+        return 'magic_circle';
+      case 'storm':
+        if (roll < 38) return 'magic_circle';
+        if (roll < 64) return 'tombstone';
+        if (roll < 84) return 'bone_wall';
+        return 'blood_pool';
+    }
+  }
+
+  private getBaseSize(type: MapObstacle['type']): number {
+    switch (type) {
+      case 'tombstone': return 50;
+      case 'bone_wall': return 72;
+      case 'blood_pool': return BLOOD_POOL_RADIUS * 2;
+      case 'magic_circle': return 84;
+    }
+  }
+
+  private addObstacle(type: MapObstacle['type'], x: number, y: number, size: number, options: ObstacleOptions = {}): void {
+    const hp = type === 'bone_wall' ? OBSTACLE_HP : Infinity;
+    const landmark = options.landmark === true;
+    const width = type === 'blood_pool'
+      ? size * (landmark ? 1.55 : 1.42)
+      : type === 'bone_wall'
+        ? size * (landmark ? 1.55 : 1.18)
+        : size;
+    const height = type === 'blood_pool'
+      ? size
+      : type === 'bone_wall'
+        ? size * (landmark ? 0.86 : 0.7)
+        : size * (landmark ? 0.82 : 0.76);
+    const obstacle: MapObstacle = {
+      x,
+      y,
+      width,
+      height,
+      type,
+      zone: getZone(x, y),
+      variant: options.variant ?? (hashXY(x, y) % 4),
+      rotation: options.rotation ?? ((hashXY(x + 11, y - 7) % 60) - 30) * 0.01,
+      landmark,
+      hp,
+      maxHp: hp,
+      radius: type === 'blood_pool'
+        ? size * 0.72
+        : type === 'magic_circle'
+          ? size * 0.56
+          : size * 0.5,
+    };
+    this.obstacles.push(obstacle);
+    this.indexObstacle(obstacle);
+  }
+
+  private indexObstacle(obstacle: MapObstacle): void {
+    const cx = Math.floor(obstacle.x / GRID_BUCKET_SIZE);
+    const cy = Math.floor(obstacle.y / GRID_BUCKET_SIZE);
+    let row = this.grid.get(cx);
+    if (!row) {
+      row = new Map();
+      this.grid.set(cx, row);
+    }
+    let bucket = row.get(cy);
+    if (!bucket) {
+      bucket = [];
+      row.set(cy, bucket);
+    }
+    bucket.push(obstacle);
+  }
+
+  private rebuildGrid(): void {
+    this.grid.clear();
+    for (const obstacle of this.obstacles) {
+      this.indexObstacle(obstacle);
+    }
   }
 }

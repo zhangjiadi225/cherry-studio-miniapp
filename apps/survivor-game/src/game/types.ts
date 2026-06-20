@@ -389,6 +389,10 @@ export interface MapObstacle {
   width: number;
   height: number;
   type: 'tombstone' | 'bone_wall' | 'blood_pool' | 'magic_circle';
+  zone: MapZone;
+  variant: number;
+  rotation: number;
+  landmark?: boolean;
   hp: number;
   maxHp: number;
   radius: number;

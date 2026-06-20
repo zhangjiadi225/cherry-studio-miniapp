@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { circlesOverlap, compactArray } from './math';
+import { MAP_ZONE_SIZE } from '../constants';
+import { circlesOverlap, compactArray, getZone } from './math';
 
 describe('circlesOverlap', () => {
   it('returns true when circles overlap', () => {
@@ -32,5 +33,15 @@ describe('compactArray', () => {
     const none = [1, 2, 3];
     expect(compactArray(none, () => false)).toBe(0);
     expect(none).toEqual([1, 2, 3]);
+  });
+});
+
+describe('getZone', () => {
+  it('uses stable macro blocks with a storm starting area', () => {
+    expect(getZone(0, 0)).toBe('storm');
+    expect(getZone(MAP_ZONE_SIZE * 0.5 - 1, 0)).toBe('storm');
+    expect(getZone(MAP_ZONE_SIZE * 0.5 + 1, 0)).toBe('blood');
+    expect(getZone(0, MAP_ZONE_SIZE * 0.5 + 1)).toBe('bone');
+    expect(getZone(MAP_ZONE_SIZE * 0.5 + 1, MAP_ZONE_SIZE * 0.5 + 1)).toBe('shadow');
   });
 });

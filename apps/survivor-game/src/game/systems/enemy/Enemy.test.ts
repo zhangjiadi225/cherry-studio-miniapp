@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOSS_DMG_MULT, ELITE_DAMAGE_MULT, ENEMY_DATA } from '../../constants';
+import { BOSS_DMG_MULT, ELITE_DAMAGE_MULT, ENEMY_DATA, PLAYER_RADIUS } from '../../constants';
 import { getDifficultyParams } from '../../data/difficulty';
 import { RUN_DIFFICULTY_PRESETS } from '../../data/runDifficulties';
 import { EnemyType } from '../../types';
@@ -7,6 +7,13 @@ import { createEnemy, damageEnemy, getEnemyEnhancementUnlockAt, updateEnemy } fr
 import { createPlayer } from '../player/Player';
 
 describe('createEnemy', () => {
+  it('keeps enemy bodies readable against the player scale', () => {
+    expect(ENEMY_DATA[EnemyType.BAT].radius).toBeLessThan(PLAYER_RADIUS);
+    expect(ENEMY_DATA[EnemyType.ZOMBIE].radius).toBeGreaterThan(PLAYER_RADIUS);
+    expect(ENEMY_DATA[EnemyType.DEMON].radius).toBeGreaterThan(ENEMY_DATA[EnemyType.ZOMBIE].radius);
+    expect(ENEMY_DATA[EnemyType.WRAITH].radius).toBeGreaterThan(ENEMY_DATA[EnemyType.DEMON].radius);
+  });
+
   it('makes curse increase enemy reward as well as enemy pressure', () => {
     const enemy = createEnemy(EnemyType.MUMMY, 0, 0, 0, 1.5);
 

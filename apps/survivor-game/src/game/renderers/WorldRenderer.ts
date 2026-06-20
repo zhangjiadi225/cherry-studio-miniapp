@@ -1,5 +1,5 @@
 import type { Camera, MapObstacle } from '../types';
-import { COLORS, ZONE_COLORS, ARENA_HALF } from '../constants';
+import { COLORS, ZONE_COLORS, ARENA_HALF, MAP_GRID_SIZE } from '../constants';
 import { hashXY, getZone } from '../utils/math';
 
 /** 渲染器共享上下文（无状态函数用） */
@@ -53,7 +53,7 @@ export class WorldRenderer {
 
   drawGround(rc: RenderContext, cam: Camera) {
     const { ctx, w, h } = rc;
-    const gridSize = 80;
+    const gridSize = MAP_GRID_SIZE;
 
     // 缓存判断：镜头移动超过阈值才重绘静态部分
     const dx = Math.abs(cam.x - this.groundCacheCamX);
@@ -125,26 +125,31 @@ export class WorldRenderer {
     const endX = startX + cacheW + gridSize * 2;
     const endY = startY + cacheH + gridSize * 2;
 
+    this.drawZoneWash(gctx, startX, startY, endX, endY, gridSize);
     this.drawFloorDepth(gctx, startX, startY, endX, endY, gridSize);
 
-    // 主网格线
+    // 主网格线：按线段中点取区域色，避免跨区移动时整条线突然换色
     gctx.lineWidth = 0.5;
     gctx.globalAlpha = 0.3;
     for (let x = startX; x <= endX; x += gridSize) {
-      const zone = getZone(x, startY);
-      gctx.strokeStyle = ZONE_COLORS[zone].line;
-      gctx.beginPath();
-      gctx.moveTo(x, startY);
-      gctx.lineTo(x, endY);
-      gctx.stroke();
+      for (let y = startY; y < endY; y += gridSize) {
+        const zone = getZone(x, y + gridSize / 2);
+        gctx.strokeStyle = ZONE_COLORS[zone].line;
+        gctx.beginPath();
+        gctx.moveTo(x, y);
+        gctx.lineTo(x, Math.min(y + gridSize, endY));
+        gctx.stroke();
+      }
     }
     for (let y = startY; y <= endY; y += gridSize) {
-      const zone = getZone(startX, y);
-      gctx.strokeStyle = ZONE_COLORS[zone].line;
-      gctx.beginPath();
-      gctx.moveTo(startX, y);
-      gctx.lineTo(endX, y);
-      gctx.stroke();
+      for (let x = startX; x < endX; x += gridSize) {
+        const zone = getZone(x + gridSize / 2, y);
+        gctx.strokeStyle = ZONE_COLORS[zone].line;
+        gctx.beginPath();
+        gctx.moveTo(x, y);
+        gctx.lineTo(Math.min(x + gridSize, endX), y);
+        gctx.stroke();
+      }
     }
 
     // 次级网格线
@@ -153,36 +158,40 @@ export class WorldRenderer {
     const smallGrid = gridSize / 4;
     for (let x = startX; x <= endX; x += smallGrid) {
       if (x % gridSize !== 0) {
-        const zone = getZone(x, startY);
-        gctx.strokeStyle = ZONE_COLORS[zone].line;
-        gctx.beginPath();
-        gctx.moveTo(x, startY);
-        gctx.lineTo(x, endY);
-        gctx.stroke();
+        for (let y = startY; y < endY; y += gridSize) {
+          const zone = getZone(x, y + gridSize / 2);
+          gctx.strokeStyle = ZONE_COLORS[zone].line;
+          gctx.beginPath();
+          gctx.moveTo(x, y);
+          gctx.lineTo(x, Math.min(y + gridSize, endY));
+          gctx.stroke();
+        }
       }
     }
     for (let y = startY; y <= endY; y += smallGrid) {
       if (y % gridSize !== 0) {
-        const zone = getZone(startX, y);
-        gctx.strokeStyle = ZONE_COLORS[zone].line;
-        gctx.beginPath();
-        gctx.moveTo(startX, y);
-        gctx.lineTo(endX, y);
-        gctx.stroke();
+        for (let x = startX; x < endX; x += gridSize) {
+          const zone = getZone(x + gridSize / 2, y);
+          gctx.strokeStyle = ZONE_COLORS[zone].line;
+          gctx.beginPath();
+          gctx.moveTo(x, y);
+          gctx.lineTo(Math.min(x + gridSize, endX), y);
+          gctx.stroke();
+        }
       }
     }
 
     // 装饰圆点
     gctx.globalAlpha = 0.4;
     for (let x = startX; x <= endX; x += gridSize) {
-      const zone = getZone(x, startY);
-      gctx.fillStyle = ZONE_COLORS[zone].dot;
-      gctx.beginPath();
       for (let y = startY; y <= endY; y += gridSize) {
+        const zone = getZone(x, y);
+        gctx.fillStyle = ZONE_COLORS[zone].dot;
+        gctx.beginPath();
         gctx.moveTo(x + 1.5, y);
         gctx.arc(x, y, 1.5, 0, Math.PI * 2);
+        gctx.fill();
       }
-      gctx.fill();
     }
 
     // 区域装饰
@@ -391,132 +400,334 @@ export class WorldRenderer {
     for (const obs of obstacles) {
       switch (obs.type) {
         case 'tombstone': {
-          const w = obs.width;
-          const h = obs.height;
-          const stoneGrad = ctx.createLinearGradient(obs.x, obs.y - h / 2, obs.x, obs.y + h / 2);
-          stoneGrad.addColorStop(0, '#626276');
-          stoneGrad.addColorStop(0.45, '#3e4051');
-          stoneGrad.addColorStop(1, '#232533');
-          ctx.fillStyle = stoneGrad;
-          ctx.strokeStyle = '#818197';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.roundRect(obs.x - w / 2, obs.y - h / 2, w, h, 5);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = 'rgba(185,205,230,0.12)';
-          ctx.fillRect(obs.x - w / 2 + 3, obs.y - h / 2 + 4, w - 6, 3);
-          ctx.strokeStyle = '#b2b2c6';
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(obs.x, obs.y - h / 2 + 4);
-          ctx.lineTo(obs.x, obs.y + h / 2 - 4);
-          ctx.moveTo(obs.x - w / 4, obs.y - h / 4 + 2);
-          ctx.lineTo(obs.x + w / 4, obs.y - h / 4 + 2);
-          ctx.stroke();
-          ctx.strokeStyle = 'rgba(20,22,32,0.72)';
-          ctx.lineWidth = 1.2;
-          ctx.beginPath();
-          ctx.moveTo(obs.x + w * 0.18, obs.y - h * 0.25);
-          ctx.lineTo(obs.x + w * 0.08, obs.y - h * 0.04);
-          ctx.lineTo(obs.x + w * 0.2, obs.y + h * 0.1);
-          ctx.stroke();
-          ctx.fillStyle = 'rgba(0,0,0,0.3)';
-          ctx.beginPath();
-          ctx.ellipse(obs.x, obs.y + h / 2 + 3, w / 2, 4, 0, 0, Math.PI * 2);
-          ctx.fill();
+          if (obs.landmark) this.drawObeliskLandmark(ctx, obs, time);
+          else this.drawTombstone(ctx, obs);
           break;
         }
         case 'bone_wall': {
-          const w = obs.width;
-          const h = obs.height;
-          const ratio = obs.hp / obs.maxHp;
-          ctx.globalAlpha = 0.3 + ratio * 0.7;
-          ctx.fillStyle = ratio < 0.5 ? '#8a7a5a' : '#6a5a3a';
-          ctx.beginPath();
-          ctx.roundRect(obs.x - w / 2, obs.y - h / 2, w, h, 2);
-          ctx.fill();
-          ctx.strokeStyle = ratio < 0.5 ? '#aa9a7a' : '#8a7a5a';
-          ctx.lineWidth = 1.5;
-          for (let i = 0; i < 3; i++) {
-            const bx = obs.x - w / 3 + i * (w / 3);
-            const by = obs.y;
-            ctx.beginPath();
-            ctx.arc(bx - 3, by, 3, 0, Math.PI * 2);
-            ctx.arc(bx + 3, by, 3, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(bx - 2, by + 3);
-            ctx.lineTo(bx + 2, by + 3);
-            ctx.stroke();
-          }
-          if (ratio < 1) {
-            ctx.strokeStyle = '#ff6644';
-            ctx.lineWidth = 1;
-            ctx.globalAlpha = (1 - ratio) * 0.5;
-            for (let i = 0; i < 3 - Math.floor(ratio * 3); i++) {
-              const rx = obs.x - w / 3 + (hashXY(obs.x + i, obs.y) % 20);
-              const ry = obs.y - h / 4 + (hashXY(obs.x, obs.y + i) % (h / 2));
-              ctx.beginPath();
-              ctx.moveTo(rx, ry);
-              ctx.lineTo(rx + 4, ry + 3);
-              ctx.lineTo(rx - 1, ry + 6);
-              ctx.stroke();
-            }
-          }
-          ctx.globalAlpha = 1;
+          this.drawBoneWall(ctx, obs);
           break;
         }
         case 'blood_pool': {
-          const r = obs.radius;
-          const poolGrad = ctx.createRadialGradient(obs.x, obs.y, 0, obs.x, obs.y, r);
-          poolGrad.addColorStop(0, 'rgba(80,10,10,0.4)');
-          poolGrad.addColorStop(0.7, 'rgba(60,5,5,0.25)');
-          poolGrad.addColorStop(1, 'rgba(40,0,0,0)');
-          ctx.fillStyle = poolGrad;
-          ctx.beginPath();
-          ctx.ellipse(obs.x, obs.y, r, r * 0.65, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(120,20,20,0.2)';
-          ctx.lineWidth = 1;
-          const ripplePhase = time * 1.5 + hashXY(obs.x, obs.y) * 0.1;
-          for (let i = 0; i < 3; i++) {
-            const rr = r * (0.3 + ((ripplePhase + i * 0.35) % 1) * 0.6);
-            ctx.beginPath();
-            ctx.ellipse(obs.x, obs.y, rr, rr * 0.65, 0, 0, Math.PI * 2);
-            ctx.stroke();
-          }
+          if (obs.landmark) this.drawBloodRiftLandmark(ctx, obs, time);
+          else this.drawBloodPool(ctx, obs, time);
           break;
         }
         case 'magic_circle': {
-          const r = obs.radius;
-          const pulse = 0.15 + Math.sin(time * 2 + hashXY(obs.x, obs.y) * 0.05) * 0.05;
-          const auraGrad = ctx.createRadialGradient(obs.x, obs.y, r * 0.2, obs.x, obs.y, r * 1.3);
-          auraGrad.addColorStop(0, `rgba(100,0,150,${pulse})`);
-          auraGrad.addColorStop(0.6, `rgba(80,0,120,${pulse * 0.5})`);
-          auraGrad.addColorStop(1, 'rgba(60,0,100,0)');
-          ctx.fillStyle = auraGrad;
-          ctx.beginPath();
-          ctx.arc(obs.x, obs.y, r * 1.3, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = `rgba(160,80,255,${pulse * 2})`;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.arc(obs.x, obs.y, r, 0, Math.PI * 2);
-          ctx.stroke();
-          const rot = time * 0.3;
-          for (let i = 0; i < 5; i++) {
-            const a1 = rot + (i / 5) * Math.PI * 2 - Math.PI / 2;
-            const a2 = rot + (((i + 2) % 5) / 5) * Math.PI * 2 - Math.PI / 2;
-            ctx.beginPath();
-            ctx.moveTo(obs.x + Math.cos(a1) * r, obs.y + Math.sin(a1) * r);
-            ctx.lineTo(obs.x + Math.cos(a2) * r, obs.y + Math.sin(a2) * r);
-            ctx.stroke();
-          }
+          if (obs.landmark) this.drawRuneShrineLandmark(ctx, obs, time);
+          else this.drawMagicCircle(ctx, obs, time);
           break;
         }
       }
     }
+  }
+
+  private drawTombstone(ctx: CanvasRenderingContext2D, obs: MapObstacle) {
+    const w = obs.width;
+    const h = obs.height;
+    const accent = ZONE_COLORS[obs.zone].accent;
+    ctx.save();
+    ctx.translate(obs.x, obs.y);
+    ctx.rotate(obs.rotation * 0.22);
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.beginPath();
+    ctx.ellipse(0, h / 2 + 3, w / 2, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const stoneGrad = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+    stoneGrad.addColorStop(0, '#76798e');
+    stoneGrad.addColorStop(0.45, '#45485c');
+    stoneGrad.addColorStop(1, '#262837');
+    ctx.fillStyle = stoneGrad;
+    ctx.strokeStyle = '#969ab0';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.42, h * 0.42);
+    ctx.lineTo(-w * 0.42, -h * 0.18);
+    ctx.quadraticCurveTo(-w * 0.34, -h * 0.48, 0, -h * 0.5);
+    ctx.quadraticCurveTo(w * 0.34, -h * 0.48, w * 0.42, -h * 0.18);
+    ctx.lineTo(w * 0.42, h * 0.42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = hexToRgba(accent, 0.42);
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 0.28);
+    ctx.lineTo(0, h * 0.16);
+    ctx.moveTo(-w * 0.18, -h * 0.08);
+    ctx.lineTo(w * 0.18, -h * 0.08);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(20,22,32,0.7)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(w * 0.16, -h * 0.18);
+    ctx.lineTo(w * 0.05, h * 0.02);
+    ctx.lineTo(w * 0.18, h * 0.18);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawObeliskLandmark(ctx: CanvasRenderingContext2D, obs: MapObstacle, time: number) {
+    const w = obs.width;
+    const h = obs.height * 1.35;
+    const accent = ZONE_COLORS[obs.zone].accent;
+    const pulse = 0.22 + Math.sin(time * 1.8 + obs.variant) * 0.05;
+    ctx.save();
+    ctx.translate(obs.x, obs.y);
+    ctx.rotate(obs.rotation * 0.18);
+
+    const aura = ctx.createRadialGradient(0, 0, w * 0.15, 0, 0, w * 1.15);
+    aura.addColorStop(0, hexToRgba(accent, pulse));
+    aura.addColorStop(1, hexToRgba(accent, 0));
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.18, w * 0.82, h * 0.46, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.43, w * 0.72, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const grad = ctx.createLinearGradient(0, -h * 0.58, 0, h * 0.42);
+    grad.addColorStop(0, '#9ca2c4');
+    grad.addColorStop(0.35, '#5a607a');
+    grad.addColorStop(1, '#242839');
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = '#c2c8e4';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(0, -h * 0.62);
+    ctx.lineTo(w * 0.36, -h * 0.26);
+    ctx.lineTo(w * 0.28, h * 0.4);
+    ctx.lineTo(-w * 0.28, h * 0.4);
+    ctx.lineTo(-w * 0.36, -h * 0.26);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = hexToRgba(accent, 0.72);
+    ctx.lineWidth = 1.6;
+    for (let i = 0; i < 3; i++) {
+      const y = -h * 0.22 + i * h * 0.17;
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.12, y);
+      ctx.lineTo(0, y + h * 0.06);
+      ctx.lineTo(w * 0.12, y);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = hexToRgba(accent, 0.34);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.37, w * 0.55, h * 0.1, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawBoneWall(ctx: CanvasRenderingContext2D, obs: MapObstacle) {
+    const w = obs.width;
+    const h = obs.height;
+    const ratio = obs.hp / obs.maxHp;
+    const intact = 0.42 + ratio * 0.58;
+    const segments = obs.landmark ? 7 : 5;
+    ctx.save();
+    ctx.translate(obs.x, obs.y);
+    ctx.rotate(obs.rotation * 0.25);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.beginPath();
+    ctx.ellipse(0, h * 0.34, w * 0.54, h * 0.18, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalAlpha = intact;
+    ctx.strokeStyle = ratio < 0.45 ? '#8c7551' : '#d7c58d';
+    ctx.lineWidth = obs.landmark ? 5 : 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.42, h * 0.06);
+    ctx.quadraticCurveTo(-w * 0.16, -h * 0.12, 0, -h * 0.02);
+    ctx.quadraticCurveTo(w * 0.18, h * 0.12, w * 0.42, -h * 0.06);
+    ctx.stroke();
+
+    for (let i = 0; i < segments; i++) {
+      const t = i / (segments - 1);
+      const x = -w * 0.42 + t * w * 0.84;
+      const lean = (i % 2 === 0 ? -0.2 : 0.18) + obs.rotation * 0.08;
+      const len = h * (0.72 + ((obs.variant + i) % 3) * 0.07);
+      this.drawBoneSegment(ctx, x, 0, len, lean, obs.landmark ? 9 : 7, ratio);
+      if (obs.landmark && (i === 0 || i === segments - 1)) {
+        this.drawBoneSegment(ctx, x, -h * 0.03, h * 1.05, lean * 0.45, 12, ratio);
+      }
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = `rgba(255,96,66,${(1 - ratio) * 0.72})`;
+    ctx.lineWidth = 1.3;
+    for (let i = 0; i < 4 - Math.floor(ratio * 3); i++) {
+      const h0 = hashXY(obs.x + i * 13, obs.y - i * 7);
+      const x = -w * 0.34 + (h0 % Math.max(1, Math.floor(w * 0.68)));
+      const y = -h * 0.2 + ((h0 >> 8) % Math.max(1, Math.floor(h * 0.45)));
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 7, y + 5);
+      ctx.lineTo(x - 2, y + 12);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private drawBoneSegment(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    length: number,
+    angle: number,
+    thickness: number,
+    ratio: number
+  ) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    const fill = ratio < 0.45 ? '#9b865d' : '#d9ca97';
+    const stroke = ratio < 0.45 ? '#5b4728' : '#7b6437';
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(-thickness / 2, -length / 2, thickness, length, thickness / 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, -length / 2, thickness * 0.72, 0, Math.PI * 2);
+    ctx.arc(0, length / 2, thickness * 0.72, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawBloodPool(ctx: CanvasRenderingContext2D, obs: MapObstacle, time: number) {
+    const r = obs.radius;
+    const poolGrad = ctx.createRadialGradient(obs.x, obs.y, 0, obs.x, obs.y, r);
+    poolGrad.addColorStop(0, 'rgba(110,12,18,0.46)');
+    poolGrad.addColorStop(0.62, 'rgba(64,5,10,0.28)');
+    poolGrad.addColorStop(1, 'rgba(24,0,0,0)');
+    ctx.fillStyle = poolGrad;
+    ctx.beginPath();
+    ctx.ellipse(obs.x, obs.y, r, r * 0.65, obs.rotation * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(168,32,38,0.26)';
+    ctx.lineWidth = 1;
+    const ripplePhase = time * 1.5 + hashXY(obs.x, obs.y) * 0.1;
+    for (let i = 0; i < 3; i++) {
+      const rr = r * (0.3 + ((ripplePhase + i * 0.35) % 1) * 0.6);
+      ctx.beginPath();
+      ctx.ellipse(obs.x, obs.y, rr, rr * 0.65, obs.rotation * 0.18, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
+  private drawBloodRiftLandmark(ctx: CanvasRenderingContext2D, obs: MapObstacle, time: number) {
+    this.drawBloodPool(ctx, obs, time);
+    const r = obs.radius;
+    const pulse = 0.45 + Math.sin(time * 2.4 + obs.variant) * 0.12;
+    ctx.save();
+    ctx.translate(obs.x, obs.y);
+    ctx.rotate(obs.rotation * 0.32);
+    ctx.strokeStyle = `rgba(255,72,72,${pulse})`;
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + time * 0.08;
+      const inner = r * 0.25;
+      const outer = r * (0.72 + (i % 2) * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner * 0.65);
+      ctx.lineTo(Math.cos(a + 0.1) * outer, Math.sin(a + 0.1) * outer * 0.65);
+      ctx.stroke();
+    }
+    ctx.fillStyle = `rgba(255,52,52,${0.18 + pulse * 0.16})`;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 0.18);
+    ctx.lineTo(r * 0.2, 0);
+    ctx.lineTo(0, r * 0.2);
+    ctx.lineTo(-r * 0.2, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private drawMagicCircle(ctx: CanvasRenderingContext2D, obs: MapObstacle, time: number) {
+    const r = obs.radius;
+    const pulse = 0.15 + Math.sin(time * 2 + hashXY(obs.x, obs.y) * 0.05) * 0.05;
+    const auraGrad = ctx.createRadialGradient(obs.x, obs.y, r * 0.2, obs.x, obs.y, r * 1.3);
+    auraGrad.addColorStop(0, `rgba(100,0,150,${pulse})`);
+    auraGrad.addColorStop(0.6, `rgba(80,0,120,${pulse * 0.5})`);
+    auraGrad.addColorStop(1, 'rgba(60,0,100,0)');
+    ctx.fillStyle = auraGrad;
+    ctx.beginPath();
+    ctx.arc(obs.x, obs.y, r * 1.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(160,80,255,${pulse * 2})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(obs.x, obs.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    const rot = time * 0.3 + obs.rotation;
+    for (let i = 0; i < 5; i++) {
+      const a1 = rot + (i / 5) * Math.PI * 2 - Math.PI / 2;
+      const a2 = rot + (((i + 2) % 5) / 5) * Math.PI * 2 - Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(obs.x + Math.cos(a1) * r, obs.y + Math.sin(a1) * r);
+      ctx.lineTo(obs.x + Math.cos(a2) * r, obs.y + Math.sin(a2) * r);
+      ctx.stroke();
+    }
+  }
+
+  private drawRuneShrineLandmark(ctx: CanvasRenderingContext2D, obs: MapObstacle, time: number) {
+    this.drawMagicCircle(ctx, obs, time);
+    const r = obs.radius;
+    const accent = ZONE_COLORS[obs.zone].accent;
+    const rot = time * 0.22 + obs.rotation;
+    ctx.save();
+    ctx.translate(obs.x, obs.y);
+    ctx.strokeStyle = hexToRgba(accent, 0.72);
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.68, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 0.38, 0, Math.PI * 2);
+    ctx.stroke();
+    for (let i = 0; i < 8; i++) {
+      const a = rot + (i / 8) * Math.PI * 2;
+      const x = Math.cos(a) * r * 0.8;
+      const y = Math.sin(a) * r * 0.8;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(a + Math.PI / 4);
+      ctx.strokeRect(-3, -3, 6, 6);
+      ctx.restore();
+    }
+    const crystal = ctx.createLinearGradient(0, -r * 0.26, 0, r * 0.24);
+    crystal.addColorStop(0, '#ffffff');
+    crystal.addColorStop(0.42, accent);
+    crystal.addColorStop(1, '#251538');
+    ctx.fillStyle = crystal;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 0.32);
+    ctx.lineTo(r * 0.2, -r * 0.02);
+    ctx.lineTo(0, r * 0.3);
+    ctx.lineTo(-r * 0.2, -r * 0.02);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   // ──────────────────────────── Arena Bounds ────────────────────────────

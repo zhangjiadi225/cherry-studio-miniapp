@@ -1,9 +1,10 @@
 import type { RenderContext } from './WorldRenderer';
-import type { Player, Enemy, UpgradeOption, TouchJoystickState, WeaponType, PerformanceStats } from '../types';
+import type { Player, Enemy, UpgradeOption, TouchJoystickState, WeaponType, PerformanceStats, MapObstacle, MapZone } from '../types';
 import {
   COLORS, GAME_DURATION, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA,
-  GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA, getWeaponMetadataLabel
+  GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA, getWeaponMetadataLabel, ZONE_COLORS, MAP_ZONE_SIZE,
 } from '../constants';
+import { getZone } from '../utils/math';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   META_UPGRADES, CHARACTER_SKINS, hasMetaUpgrade, canBuyMetaUpgrade,
@@ -408,13 +409,18 @@ function drawLoadoutSlot(
 
 // ──────────────────────────── Minimap ────────────────────────────
 
-export function drawMinimap(rc: RenderContext, player: Player, enemies: Enemy[]) {
+export function drawMinimap(rc: RenderContext, player: Player, enemies: Enemy[], obstacles: MapObstacle[] = []) {
   const { ctx, w, h } = rc;
   const mobile = isMobileViewport(w, h);
   const mapSize = mobile ? Math.max(72, Math.min(88, w * 0.22)) : 110;
   const mapX = w - mapSize - 16;
   const mapY = mobile ? 116 : 85;
-  const scale = mapSize / 3000;
+  const worldHalf = 1500;
+  const scale = mapSize / (worldHalf * 2);
+  const worldL = player.x - worldHalf;
+  const worldR = player.x + worldHalf;
+  const worldT = player.y - worldHalf;
+  const worldB = player.y + worldHalf;
 
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.beginPath();
@@ -425,6 +431,40 @@ export function drawMinimap(rc: RenderContext, player: Player, enemies: Enemy[])
   ctx.beginPath();
   ctx.roundRect(mapX, mapY, mapSize, mapSize, 8);
   ctx.stroke();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(mapX, mapY, mapSize, mapSize, 8);
+  ctx.clip();
+
+  const drawZoneRect = (zone: MapZone, minX: number, minY: number, maxX: number, maxY: number) => {
+    const ox0 = Math.max(worldL, minX);
+    const oy0 = Math.max(worldT, minY);
+    const ox1 = Math.min(worldR, maxX);
+    const oy1 = Math.min(worldB, maxY);
+    if (ox0 >= ox1 || oy0 >= oy1) return;
+    ctx.fillStyle = `${ZONE_COLORS[zone].accent}22`;
+    ctx.fillRect(
+      mapX + (ox0 - worldL) * scale,
+      mapY + (oy0 - worldT) * scale,
+      (ox1 - ox0) * scale,
+      (oy1 - oy0) * scale
+    );
+  };
+
+  const firstBlockX = Math.floor((worldL + MAP_ZONE_SIZE / 2) / MAP_ZONE_SIZE);
+  const lastBlockX = Math.floor((worldR + MAP_ZONE_SIZE / 2) / MAP_ZONE_SIZE);
+  const firstBlockY = Math.floor((worldT + MAP_ZONE_SIZE / 2) / MAP_ZONE_SIZE);
+  const lastBlockY = Math.floor((worldB + MAP_ZONE_SIZE / 2) / MAP_ZONE_SIZE);
+  for (let bx = firstBlockX; bx <= lastBlockX; bx++) {
+    const minX = bx * MAP_ZONE_SIZE - MAP_ZONE_SIZE / 2;
+    const maxX = minX + MAP_ZONE_SIZE;
+    for (let by = firstBlockY; by <= lastBlockY; by++) {
+      const minY = by * MAP_ZONE_SIZE - MAP_ZONE_SIZE / 2;
+      const maxY = minY + MAP_ZONE_SIZE;
+      drawZoneRect(getZone(minX + MAP_ZONE_SIZE / 2, minY + MAP_ZONE_SIZE / 2), minX, minY, maxX, maxY);
+    }
+  }
 
   ctx.strokeStyle = 'rgba(100,100,150,0.1)';
   ctx.lineWidth = 0.5;
@@ -439,6 +479,46 @@ export function drawMinimap(rc: RenderContext, player: Player, enemies: Enemy[])
     ctx.moveTo(mapX, gy);
     ctx.lineTo(mapX + mapSize, gy);
     ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.beginPath();
+  for (let bx = firstBlockX; bx <= lastBlockX + 1; bx++) {
+    const worldX = bx * MAP_ZONE_SIZE - MAP_ZONE_SIZE / 2;
+    if (worldX <= worldL || worldX >= worldR) continue;
+    const zx = mapX + (worldX - worldL) * scale;
+    ctx.moveTo(zx, mapY);
+    ctx.lineTo(zx, mapY + mapSize);
+  }
+  for (let by = firstBlockY; by <= lastBlockY + 1; by++) {
+    const worldY = by * MAP_ZONE_SIZE - MAP_ZONE_SIZE / 2;
+    if (worldY <= worldT || worldY >= worldB) continue;
+    const zy = mapY + (worldY - worldT) * scale;
+    ctx.moveTo(mapX, zy);
+    ctx.lineTo(mapX + mapSize, zy);
+  }
+  ctx.stroke();
+
+  for (const obs of obstacles) {
+    const ox = mapX + mapSize / 2 + (obs.x - player.x) * scale;
+    const oy = mapY + mapSize / 2 + (obs.y - player.y) * scale;
+    if (ox < mapX || ox > mapX + mapSize || oy < mapY || oy > mapY + mapSize) continue;
+
+    if (obs.type === 'magic_circle') {
+      ctx.strokeStyle = 'rgba(190,120,255,0.75)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(ox, oy, 3.5, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (obs.type === 'blood_pool') {
+      ctx.fillStyle = 'rgba(170,38,42,0.55)';
+      ctx.beginPath();
+      ctx.ellipse(ox, oy, 3.5, 2.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = obs.type === 'bone_wall' ? 'rgba(234,219,134,0.55)' : 'rgba(165,170,190,0.48)';
+      ctx.fillRect(ox - 1.5, oy - 1.5, 3, 3);
+    }
   }
 
   const playerDotX = mapX + mapSize / 2;
@@ -478,6 +558,7 @@ export function drawMinimap(rc: RenderContext, player: Player, enemies: Enemy[])
       ctx.fill();
     }
   }
+  ctx.restore();
 
   ctx.font = '9px "Segoe UI", sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.4)';
