@@ -79,7 +79,7 @@ export function updateWeapon(
       for (const damage of castDamages) fired = fireLightning(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
       break;
     case WeaponType.WHIP:
-      fired = fireWhip(w, player, projectiles, effectiveDamage, effectiveArea);
+      fired = fireWhip(w, player, projectiles, effectiveDamage, effectiveArea, enemyQuery);
       break;
     case WeaponType.BIBLE:
       fired = fireBible(w, player, projectiles, effectiveDamage, effectiveArea);
@@ -338,17 +338,24 @@ function fireLightning(
 
 function fireWhip(
   w: Weapon, player: Player,
-  projectiles: Projectile[], damage: number, area: number
+  projectiles: Projectile[], damage: number, area: number,
+  enemyQuery: EnemyQuery
 ): boolean {
-  const dir = player.facingLeft ? -1 : 1;
+  const target = findNearestEnemies(player, enemyQuery, 1)[0];
+  const fallbackX = player.facingLeft ? -1 : 1;
+  const dir = target
+    ? normalize({ x: target.x - player.x, y: target.y - player.y })
+    : { x: fallbackX, y: 0 };
   const segments = w.level;
   const reachRadius = (44 + segments * 7) * area;
   const offset = 24 + reachRadius * 0.42;
+  const originX = player.x;
+  const originY = player.y - 4;
   const p = spawnWeaponProjectile(w, projectiles, {
-    x: player.x + dir * offset,
-    y: player.y - 2,
-    vx: dir,
-    vy: 0,
+    x: originX + dir.x * offset,
+    y: originY + dir.y * offset,
+    vx: dir.x,
+    vy: dir.y,
     damage,
     radius: reachRadius,
     life: w.duration,
@@ -360,6 +367,8 @@ function fireWhip(
   if (!p) return false;
   p.count = segments;
   p.segScale = area;
+  p.originX = originX;
+  p.originY = originY;
   return true;
 }
 
@@ -461,12 +470,14 @@ export function updateBiblePositions(projectiles: Projectile[], player: Player) 
       p.originY = player.y;
     }
     if (p.type === WeaponType.WHIP) {
-      const swingDir = p.vx >= 0 ? 1 : -1;
+      const dirLen = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+      const dirX = dirLen > 0.001 ? p.vx / dirLen : player.facingLeft ? -1 : 1;
+      const dirY = dirLen > 0.001 ? p.vy / dirLen : 0;
       const off = 24 + p.radius * 0.42;
       p.originX = player.x;
       p.originY = player.y - 4;
-      p.x = player.x + swingDir * off;
-      p.y = player.y - 2;
+      p.x = p.originX + dirX * off;
+      p.y = p.originY + dirY * off;
     }
   }
 }

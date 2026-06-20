@@ -852,7 +852,7 @@ export function drawEnemyProjectile(rc: RenderContext, p: EnemyProjectile) {
   ctx.globalCompositeOperation = 'lighter';
   ctx.fillStyle = p.glowColor;
   ctx.beginPath();
-  ctx.arc(p.x, p.y, p.radius * (2.1 + flicker * 0.35), 0, Math.PI * 2);
+  ctx.arc(p.x, p.y, p.radius * (1.75 + flicker * 0.25), 0, Math.PI * 2);
   ctx.fill();
 
   ctx.translate(p.x, p.y);
@@ -1174,13 +1174,17 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
     }
 
     case WeaponType.WHIP: {
-      const whipDir = p.vx >= 0 ? 1 : -1;
+      const dirLen = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+      const dirX = dirLen > 0.001 ? p.vx / dirLen : 1;
+      const dirY = dirLen > 0.001 ? p.vy / dirLen : 0;
+      const perpX = -dirY;
+      const perpY = dirX;
       const level = Math.max(1, p.count ?? 1);
       const scale = p.segScale ?? 1;
       const progress = 1 - lifeRatio;
       const attack = Math.sin(progress * Math.PI);
-      const anchorX = p.originX !== undefined ? p.originX + whipDir * 16 : p.x - whipDir * p.radius * 0.35;
-      const anchorY = p.originY ?? p.y;
+      const anchorX = p.originX !== undefined ? p.originX + dirX * 16 : p.x - dirX * p.radius * 0.35;
+      const anchorY = p.originY !== undefined ? p.originY + dirY * 16 : p.y - dirY * p.radius * 0.35;
       const length = Math.min(128, (62 + level * 7) * scale) * (0.7 + attack * 0.3);
       const amplitude = (8 + level * 0.9) * scale * (0.32 + attack * 0.72);
       const sweep = -Math.sin(progress * Math.PI * 1.12) * (17 + level * 0.8) * scale;
@@ -1196,9 +1200,11 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
           const envelope = Math.sin(t * Math.PI);
           const wave = Math.sin(t * Math.PI * 2.15 - phase);
           const snap = Math.sin((t * 0.9 + progress * 0.55) * Math.PI) * localAttack;
+          const forward = length * ease * (0.82 + localAttack * 0.18);
+          const lateral = wave * amplitude * envelope + sweep * t * (1 - t * 0.32) - snap * 5 * scale;
           pts.push({
-            x: anchorX + whipDir * length * ease * (0.82 + localAttack * 0.18),
-            y: anchorY + wave * amplitude * envelope + sweep * t * (1 - t * 0.32) - snap * 5 * scale,
+            x: anchorX + dirX * forward + perpX * lateral,
+            y: anchorY + dirY * forward + perpY * lateral,
           });
         }
         return pts;
@@ -1282,11 +1288,12 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       ctx.lineWidth = 1.5;
       for (let i = 0; i < 3; i++) {
         const t = (i + 1) / 4;
-        const x = anchorX + whipDir * length * t * 0.22;
-        const y = anchorY + Math.sin(progress * Math.PI * 4 + i) * 2.5;
+        const jitter = Math.sin(progress * Math.PI * 4 + i) * 2.5;
+        const x = anchorX + dirX * length * t * 0.22 + perpX * jitter;
+        const y = anchorY + dirY * length * t * 0.22 + perpY * jitter;
         ctx.beginPath();
-        ctx.moveTo(x - whipDir * 4, y - 2);
-        ctx.lineTo(x + whipDir * 7, y + 2);
+        ctx.moveTo(x - dirX * 4 - perpX * 2, y - dirY * 4 - perpY * 2);
+        ctx.lineTo(x + dirX * 7 + perpX * 2, y + dirY * 7 + perpY * 2);
         ctx.stroke();
       }
 

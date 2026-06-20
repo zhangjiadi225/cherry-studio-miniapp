@@ -23,3 +23,13 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Local generated notes and previews
+docs/
+output/
+
+# Local player sprite experiments
+public/sprites/units/.gitkeep
+public/sprites/units/player_ember_move.svg
+public/sprites/units/player_oracle_move.svg
+public/sprites/units/player_wanderer_move.svg

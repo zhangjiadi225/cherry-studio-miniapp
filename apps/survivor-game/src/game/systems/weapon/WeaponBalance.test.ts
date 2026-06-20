@@ -1,6 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { WeaponType, type Weapon } from '../../types';
-import { createWeapon, upgradeWeapon } from './Weapon';
+import { EnemyType, WeaponType, type Enemy, type Projectile, type Weapon } from '../../types';
+import type { EnemyQuery } from '../enemy/EnemyQuery';
+import { createPlayer } from '../player/Player';
+import { createWeapon, updateWeapon, upgradeWeapon } from './Weapon';
+
+function makeEnemy(x: number, y: number): Enemy {
+  return {
+    id: 1,
+    x,
+    y,
+    radius: 18,
+    hp: 10,
+    maxHp: 10,
+    speed: 0,
+    damage: 1,
+    type: EnemyType.ZOMBIE,
+    isElite: false,
+    isBoss: false,
+    knockbackX: 0,
+    knockbackY: 0,
+    hitFlash: 0,
+    animTimer: 0,
+    xpValue: 1,
+    contactCooldown: 0,
+    attackCooldown: 0,
+    attackWindup: 0,
+    attackPatternIndex: 0,
+    pendingAttackPattern: 0,
+  };
+}
+
+function enemyQuery(enemies: Enemy[]): EnemyQuery {
+  return {
+    forNearby(_x, _y, _radius, visit) {
+      for (const enemy of enemies) visit(enemy);
+    },
+  };
+}
 
 function weaponAtLevel(type: WeaponType, level: number): Weapon {
   const weapon = createWeapon(type);
@@ -41,5 +77,20 @@ describe('weapon output model', () => {
     const cappedOutput = projectedOutput(WeaponType.MAGIC_WAND, 8);
 
     expect(cappedOutput / levelOneOutput).toBeLessThan(40);
+  });
+
+  it('aims whip swings toward nearby enemies in any direction', () => {
+    const player = createPlayer();
+    player.facingLeft = false;
+    const weapon = createWeapon(WeaponType.WHIP);
+    weapon.timer = weapon.cooldown;
+    const projectiles: Projectile[] = [];
+
+    updateWeapon(weapon, player, projectiles, 0, enemyQuery([makeEnemy(0, -120)]));
+
+    expect(projectiles).toHaveLength(1);
+    expect(Math.abs(projectiles[0].vx)).toBeLessThan(0.01);
+    expect(projectiles[0].vy).toBeLessThan(-0.99);
+    expect(projectiles[0].y).toBeLessThan(player.y - 20);
   });
 });
