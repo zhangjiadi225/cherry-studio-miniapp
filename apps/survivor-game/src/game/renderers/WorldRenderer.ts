@@ -104,7 +104,6 @@ export class WorldRenderer {
     }
     ctx.restore();
 
-    this.drawFogRibbons(ctx, startX, startY, w, h, time);
   }
 
   private redrawGroundCache(cam: Camera, gridSize: number, w: number, h: number) {
@@ -126,7 +125,6 @@ export class WorldRenderer {
     const endX = startX + cacheW + gridSize * 2;
     const endY = startY + cacheH + gridSize * 2;
 
-    this.drawZoneWash(gctx, startX, startY, endX, endY, gridSize);
     this.drawFloorDepth(gctx, startX, startY, endX, endY, gridSize);
 
     // 主网格线

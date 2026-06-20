@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <defs>
+    <radialGradient id="cultist-aura" cx="50%" cy="42%" r="68%">
+      <stop offset="0" stop-color="#c7a4ff" stop-opacity=".3"/>
+      <stop offset=".5" stop-color="#6d3fb3" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#090412" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="cultist-robe" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#3a235c"/>
+      <stop offset=".55" stop-color="#1d1134"/>
+      <stop offset="1" stop-color="#0b0814"/>
+    </linearGradient>
+    <linearGradient id="cultist-trim" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#dcc6ff"/>
+      <stop offset=".5" stop-color="#b58cff"/>
+      <stop offset="1" stop-color="#5f35a0"/>
+    </linearGradient>
+    <filter id="cultist-eye-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1.9" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <g id="cultist">
+      <ellipse cx="0" cy="30" rx="25" ry="8" fill="#020106" opacity=".48"/>
+      <circle cx="0" cy="1" r="34" fill="url(#cultist-aura)"/>
+      <path d="M0-36 C25-22 32 7 22 35 L-22 35 C-32 7-25-22 0-36Z" fill="url(#cultist-robe)" stroke="#7a50ba" stroke-width="2.7"/>
+      <path d="M0-34 C-13-17-16 8-8 34 M0-34 C13-17 16 8 8 34" fill="none" stroke="url(#cultist-trim)" stroke-width="2" opacity=".72"/>
+      <path d="M-18-6 C-12-22 12-22 18-6 C14 2 8 8 0 8 C-8 8-14 2-18-6Z" fill="#10091d" stroke="#3a235c" stroke-width="2"/>
+      <circle cx="-6" cy="-5" r="3.2" fill="#d9c2ff" filter="url(#cultist-eye-glow)"/>
+      <circle cx="6" cy="-5" r="3.2" fill="#d9c2ff" filter="url(#cultist-eye-glow)"/>
+      <path d="M-11 11 C-4 15 4 15 11 11" fill="none" stroke="#b58cff" stroke-width="1.6" opacity=".46"/>
+      <path d="M24-27 L34 34" stroke="#b58cff" stroke-width="3.2" stroke-linecap="round"/>
+      <path d="M20-27 L28-36 L36-27 Z" fill="#dcc6ff" stroke="#7a50ba" stroke-width="1.6"/>
+      <circle cx="28" cy="-30" r="5.5" fill="#b58cff" filter="url(#cultist-eye-glow)"/>
+      <path d="M-20 10 C-29 16-34 25-37 34" fill="none" stroke="#2b1a48" stroke-width="5" stroke-linecap="round"/>
+      <path d="M17 11 C24 17 28 25 31 34" fill="none" stroke="#2b1a48" stroke-width="5" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <rect width="192" height="192" fill="none"/>
+  <g transform="translate(48 48)"><use href="#cultist"/></g>
+  <g transform="translate(144 48) rotate(-5)"><use href="#cultist" transform="translate(-3 1)"/></g>
+  <g transform="translate(48 144) scale(1.03 .98)"><use href="#cultist" transform="translate(0 3)"/></g>
+  <g transform="translate(144 144) rotate(5)"><use href="#cultist" transform="translate(3 1)"/></g>
+</svg>

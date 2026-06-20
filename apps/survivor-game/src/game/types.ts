@@ -104,6 +104,10 @@ export interface Enemy {
   animTimer: number;
   xpValue: number;
   contactCooldown: number;
+  attackCooldown: number;
+  attackWindup: number;
+  attackPatternIndex: number;
+  pendingAttackPattern: number;
 }
 
 export interface Projectile {
@@ -134,6 +138,25 @@ export interface Projectile {
   count?: number;
   segScale?: number;
   lightningSeed?: number;
+}
+
+export type EnemyProjectileKind = 'cultist_bolt' | 'demon_fire' | 'wraith_orb';
+
+export interface EnemyProjectile {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  damage: number;
+  radius: number;
+  life: number;
+  maxLife: number;
+  sourceType: EnemyType;
+  sourceId: number;
+  kind: EnemyProjectileKind;
+  color: string;
+  glowColor: string;
+  animTimer: number;
 }
 
 export interface Particle {
@@ -294,6 +317,7 @@ export const EnemyType = {
   ZOMBIE: 'zombie',
   BAT: 'bat',
   SKELETON: 'skeleton',
+  CULTIST: 'cultist',
   GHOST: 'ghost',
   MUMMY: 'mummy',
   DEMON: 'demon',

@@ -7,13 +7,14 @@ export function drawParticle(rc: RenderContext, p: Particle) {
   const { ctx } = rc;
   ctx.globalAlpha = p.alpha;
 
-  if (p.glow && p.glowRadius) {
-    const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.glowRadius);
+  const glowRadius = Math.min(p.glowRadius ?? 0, 24);
+  if (p.glow && glowRadius >= 8 && p.alpha > 0.22) {
+    const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, glowRadius);
     grad.addColorStop(0, p.glowColor || p.color);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.glowRadius, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, glowRadius, 0, Math.PI * 2);
     ctx.fill();
   }
 

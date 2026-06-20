@@ -1,4 +1,4 @@
-import { Particle, DamageNumber, Projectile, XPGem, Enemy, EnemyType } from '../types';
+import { Particle, DamageNumber, Projectile, XPGem, Enemy, EnemyType, EnemyProjectile } from '../types';
 import { ObjectPool } from './ObjectPool';
 
 function resetParticle(p: Particle) {
@@ -61,6 +61,23 @@ function resetProjectile(p: Projectile) {
   p.lightningSeed = undefined;
 }
 
+function resetEnemyProjectile(p: EnemyProjectile) {
+  p.x = 0;
+  p.y = 0;
+  p.vx = 0;
+  p.vy = 0;
+  p.damage = 0;
+  p.radius = 0;
+  p.life = 0;
+  p.maxLife = 0;
+  p.sourceType = EnemyType.ZOMBIE;
+  p.sourceId = 0;
+  p.kind = 'cultist_bolt';
+  p.color = '';
+  p.glowColor = '';
+  p.animTimer = 0;
+}
+
 function resetXPGem(g: XPGem) {
   g.x = 0;
   g.y = 0;
@@ -90,6 +107,10 @@ function resetEnemy(e: Enemy) {
   e.animTimer = 0;
   e.xpValue = 0;
   e.contactCooldown = 0;
+  e.attackCooldown = 0;
+  e.attackWindup = 0;
+  e.attackPatternIndex = 0;
+  e.pendingAttackPattern = -1;
 }
 
 export const pools = {
@@ -132,6 +153,22 @@ export const pools = {
     64, 512
   ),
 
+  enemyProjectiles: new ObjectPool<EnemyProjectile>(
+    () => ({
+      x: 0, y: 0, vx: 0, vy: 0,
+      damage: 0, radius: 0,
+      life: 0, maxLife: 0,
+      sourceType: EnemyType.ZOMBIE,
+      sourceId: 0,
+      kind: 'cultist_bolt',
+      color: '',
+      glowColor: '',
+      animTimer: 0,
+    }),
+    resetEnemyProjectile,
+    64, 512
+  ),
+
   xpGems: new ObjectPool<XPGem>(
     () => ({
       x: 0, y: 0, value: 0,
@@ -159,6 +196,10 @@ export const pools = {
       animTimer: 0,
       xpValue: 0,
       contactCooldown: 0,
+      attackCooldown: 0,
+      attackWindup: 0,
+      attackPatternIndex: 0,
+      pendingAttackPattern: -1,
     }),
     resetEnemy,
     256, 1024
@@ -169,6 +210,7 @@ export function clearAllPools() {
   pools.particles.clear();
   pools.damageNumbers.clear();
   pools.projectiles.clear();
+  pools.enemyProjectiles.clear();
   pools.xpGems.clear();
   pools.enemies.clear();
 }

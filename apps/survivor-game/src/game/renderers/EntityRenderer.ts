@@ -1,5 +1,5 @@
 import type { RenderContext } from './WorldRenderer';
-import type { Player, Enemy, Projectile, XPGem, GenericModifierVisual } from '../types';
+import type { Player, Enemy, Projectile, XPGem, GenericModifierVisual, EnemyProjectile } from '../types';
 import { WeaponType, EnemyType } from '../types';
 import { COLORS, ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from '../constants';
 import { getSkinById } from '../systems/meta/MetaProgression';
@@ -442,12 +442,34 @@ function drawBossAura(ctx: CanvasRenderingContext2D, e: Enemy, bob: number) {
   ctx.restore();
 }
 
+function drawEnemyAttackCharge(ctx: CanvasRenderingContext2D, e: Enemy, bob: number) {
+  const pulse = 0.55 + Math.sin(e.animTimer * 9) * 0.25;
+  const chargeColor = e.type === EnemyType.WRAITH ? 'rgba(214,108,255,' :
+                      e.type === EnemyType.DEMON ? 'rgba(255,92,32,' : 'rgba(181,140,255,';
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `${chargeColor}${0.32 + pulse * 0.2})`;
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([4, 4]);
+  ctx.lineDashOffset = -e.animTimer * 18;
+  ctx.beginPath();
+  ctx.arc(e.x, e.y + bob, e.radius * (1.7 + pulse * 0.25), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = `${chargeColor}${0.18 + pulse * 0.12})`;
+  ctx.beginPath();
+  ctx.arc(e.x, e.y + bob, e.radius * 0.45, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 export function drawEnemy(rc: RenderContext, e: Enemy) {
   const { ctx } = rc;
   const data = ENEMY_DATA[e.type];
   const color = e.hitFlash > 0 ? '#ffffff' : data.color;
-  const bob = Math.sin(e.animTimer) * 1.5;
-  const wobble = Math.sin(e.animTimer * 2) * 0.1;
+  const visualTimer = spriteRegistry.getEnemyAnimationTimer(e.type) ?? e.animTimer;
+  const bob = Math.sin(visualTimer) * 1.5;
+  const wobble = Math.sin(visualTimer * 2) * 0.1;
 
   if (e.isBoss) drawBossAura(ctx, e, bob);
 
@@ -455,6 +477,8 @@ export function drawEnemy(rc: RenderContext, e: Enemy) {
   ctx.beginPath();
   ctx.ellipse(e.x, e.y + e.radius + 3, e.radius * 0.9, e.radius * 0.3, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  if (e.attackWindup > 0) drawEnemyAttackCharge(ctx, e, bob);
 
   const drewSprite = spriteRegistry.drawEnemy(ctx, e, bob);
   if (!drewSprite) {
@@ -547,6 +571,43 @@ export function drawEnemy(rc: RenderContext, e: Enemy) {
       ctx.fill();
       ctx.fillStyle = color;
       for (let i = -3; i <= 3; i++) ctx.fillRect(i * 2 - 0.5, 3, 1.5, 3);
+      ctx.restore();
+      break;
+
+    case EnemyType.CULTIST:
+      ctx.save();
+      ctx.translate(e.x, e.y + bob);
+      ctx.rotate(wobble * 0.4);
+      ctx.fillStyle = 'rgba(32,18,52,0.92)';
+      ctx.beginPath();
+      ctx.moveTo(0, -e.radius * 1.35);
+      ctx.quadraticCurveTo(e.radius * 1.2, -e.radius * 0.45, e.radius * 0.82, e.radius * 1.15);
+      ctx.lineTo(-e.radius * 0.82, e.radius * 1.15);
+      ctx.quadraticCurveTo(-e.radius * 1.2, -e.radius * 0.45, 0, -e.radius * 1.35);
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#120b1f';
+      ctx.beginPath();
+      ctx.arc(0, -e.radius * 0.25, e.radius * 0.58, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#d9c2ff';
+      ctx.beginPath();
+      ctx.arc(-e.radius * 0.23, -e.radius * 0.32, 2, 0, Math.PI * 2);
+      ctx.arc(e.radius * 0.23, -e.radius * 0.32, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#b58cff';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(e.radius * 0.74, -e.radius * 0.95);
+      ctx.lineTo(e.radius * 1.18, e.radius * 1.1);
+      ctx.stroke();
+      ctx.fillStyle = e.attackWindup > 0 ? '#ffffff' : '#b58cff';
+      ctx.beginPath();
+      ctx.arc(e.radius * 0.74, -e.radius * 0.95, 3.2, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
       break;
 
@@ -749,6 +810,48 @@ export function drawEnemy(rc: RenderContext, e: Enemy) {
   }
 }
 
+// ──────────────────────────── Enemy Projectile ────────────────────────────
+
+export function drawEnemyProjectile(rc: RenderContext, p: EnemyProjectile) {
+  const { ctx } = rc;
+  if (p.radius <= 0 || p.maxLife <= 0 || p.life <= 0) return;
+  const lifeRatio = Math.max(0, Math.min(1, p.life / p.maxLife));
+  const alpha = Math.min(1, lifeRatio / 0.25);
+  const flicker = 0.85 + Math.sin(p.animTimer * 12) * 0.15;
+  const angle = Math.atan2(p.vy, p.vx);
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = p.glowColor;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.radius * (2.1 + flicker * 0.35), 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.translate(p.x, p.y);
+  ctx.rotate(angle);
+  ctx.fillStyle = p.color;
+  ctx.beginPath();
+  if (p.kind === 'cultist_bolt') {
+    ctx.ellipse(0, 0, p.radius * 1.35, p.radius * 0.82, 0, 0, Math.PI * 2);
+  } else if (p.kind === 'demon_fire') {
+    ctx.moveTo(p.radius * 1.7, 0);
+    ctx.lineTo(-p.radius * 0.8, -p.radius);
+    ctx.lineTo(-p.radius * 0.35, 0);
+    ctx.lineTo(-p.radius * 0.8, p.radius);
+    ctx.closePath();
+  } else {
+    ctx.arc(0, 0, p.radius * (0.92 + flicker * 0.12), 0, Math.PI * 2);
+  }
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  ctx.beginPath();
+  ctx.arc(p.radius * 0.18, -p.radius * 0.18, Math.max(1.4, p.radius * 0.28), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 // ──────────────────────────── Projectile ────────────────────────────
 
 /** 基于种子的伪随机（确定性） */
@@ -763,12 +866,11 @@ function getProjectileAngle(p: Projectile, fallback = 0): number {
   return speed > 0.1 ? Math.atan2(p.vy, p.vx) : fallback;
 }
 
-function getActiveModifierVisuals(mask: number): GenericModifierVisual[] {
-  if (mask === 0) return [];
-  return Object.values(GENERIC_MODIFIER_DATA)
-    .filter((modifier) => (mask & GENERIC_MODIFIER_MASK[modifier.id]) !== 0)
-    .map((modifier) => modifier.visual);
-}
+const MODIFIER_VISUALS: { mask: number; visual: GenericModifierVisual }[] = Object.values(GENERIC_MODIFIER_DATA)
+  .map((modifier) => ({
+    mask: GENERIC_MODIFIER_MASK[modifier.id],
+    visual: modifier.visual,
+  }));
 
 function drawModifierTrail(ctx: CanvasRenderingContext2D, p: Projectile, visual: GenericModifierVisual, alpha: number, index: number) {
   const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
@@ -872,13 +974,15 @@ function drawModifierKillSpikes(ctx: CanvasRenderingContext2D, p: Projectile, vi
 }
 
 function drawModifierIdentityLayer(rc: RenderContext, p: Projectile, alpha: number) {
-  const visuals = getActiveModifierVisuals(p.modifierMask);
-  if (visuals.length === 0) return;
+  if (p.modifierMask === 0) return;
 
   const { ctx } = rc;
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
-  visuals.forEach((visual, index) => {
+  let index = 0;
+  for (const entry of MODIFIER_VISUALS) {
+    if ((p.modifierMask & entry.mask) === 0) continue;
+    const visual = entry.visual;
     switch (visual.layer) {
       case 'trail':
         drawModifierTrail(ctx, p, visual, alpha, index);
@@ -896,7 +1000,8 @@ function drawModifierIdentityLayer(rc: RenderContext, p: Projectile, alpha: numb
         drawModifierRing(ctx, p, visual, alpha * 0.78, index);
         break;
     }
-  });
+    index++;
+  }
   ctx.restore();
 }
 
@@ -927,7 +1032,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       weaponSpriteRegistry.drawWeapon(ctx, WeaponType.MAGIC_WAND, p.x, p.y, p.radius * 3.1, {
         alpha,
         rotation: getProjectileAngle(p) + Math.PI / 4,
-        glow: true,
+        glow: false,
       });
       break;
 
@@ -959,7 +1064,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       weaponSpriteRegistry.drawWeapon(ctx, WeaponType.FIRE_WAND, p.x, p.y, p.radius * 3.2, {
         alpha,
         rotation: getProjectileAngle(p) + Math.PI / 4,
-        glow: true,
+        glow: false,
       });
       break;
 
@@ -967,7 +1072,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       if (weaponSpriteRegistry.drawWeapon(ctx, WeaponType.AXE, p.x, p.y, p.radius * 3.2, {
         alpha,
         rotation: p.animTimer * 3,
-        glow: true,
+        glow: false,
       })) {
         break;
       }
@@ -1036,7 +1141,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       weaponSpriteRegistry.drawWeapon(ctx, WeaponType.LIGHTNING, p.x, p.y, Math.min(76, p.radius * 1.9), {
         alpha,
         rotation: Math.sin(p.animTimer * 4) * 0.12,
-        glow: true,
+        glow: false,
       });
       break;
     }
@@ -1200,7 +1305,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       weaponSpriteRegistry.drawWeapon(ctx, WeaponType.WHIP, originX, originY, 34, {
         alpha: alpha * 0.88,
         rotation: swingDir > 0 ? -0.5 : Math.PI + 0.5,
-        glow: true,
+        glow: false,
       });
       break;
     }
@@ -1248,7 +1353,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       weaponSpriteRegistry.drawWeapon(ctx, WeaponType.BIBLE, p.x, p.y, p.radius * 2.4, {
         alpha,
         rotation: p.animTimer,
-        glow: true,
+        glow: false,
       });
       break;
 
@@ -1283,7 +1388,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       weaponSpriteRegistry.drawWeapon(ctx, WeaponType.HOLY_WATER, p.x, p.y, Math.min(58, Math.max(34, p.radius * 1.2)), {
         alpha,
         rotation: Math.sin(p.animTimer) * 0.12,
-        glow: true,
+        glow: false,
       });
       break;
     }
@@ -1336,17 +1441,19 @@ export function drawGarlicAura(rc: RenderContext, player: Player, radius: number
     weaponSpriteRegistry.drawWeapon(ctx, WeaponType.GARLIC, player.x + Math.cos(angle) * dist, player.y + Math.sin(angle) * dist, 28, {
       alpha: 0.42 + pulse,
       rotation: Math.sin(time + i) * 0.18,
-      glow: true,
+      glow: false,
     });
   }
 
-  const visuals = getActiveModifierVisuals(modifierMask);
-  if (visuals.length > 0) {
+  if (modifierMask !== 0) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    visuals.forEach((visual, index) => {
+    let index = 0;
+    for (const entry of MODIFIER_VISUALS) {
+      if ((modifierMask & entry.mask) === 0) continue;
+      const visual = entry.visual;
       const orbit = radius * (0.8 + index * 0.09);
       const count = visual.layer === 'control' ? 6 : 3;
       ctx.strokeStyle = `${visual.glow}${0.16 + pulse * 0.55})`;
@@ -1365,7 +1472,8 @@ export function drawGarlicAura(rc: RenderContext, player: Player, radius: number
           13
         );
       }
-    });
+      index++;
+    }
     ctx.restore();
   }
 }

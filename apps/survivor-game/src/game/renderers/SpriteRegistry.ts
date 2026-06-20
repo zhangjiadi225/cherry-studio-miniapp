@@ -6,6 +6,9 @@ type LoadState = 'idle' | 'loading' | 'loaded' | 'failed';
 interface SpriteEntry {
   image: HTMLImageElement;
   state: LoadState;
+  frames: HTMLCanvasElement[];
+  frameWidth: number;
+  frameHeight: number;
 }
 
 export interface SpriteSheetSpec {
@@ -24,7 +27,7 @@ export interface SpriteSheetSpec {
 
 const SPRITE_ROOT = '/sprites/units';
 
-export const ENEMY_SPRITES: Record<EnemyType, SpriteSheetSpec> = {
+export const ENEMY_SPRITES: Partial<Record<EnemyType, SpriteSheetSpec>> = {
   [EnemyTypeValues.ZOMBIE]: {
     id: 'enemy-zombie-move',
     url: `${SPRITE_ROOT}/enemy_zombie_move.svg`,
@@ -58,6 +61,17 @@ export const ENEMY_SPRITES: Record<EnemyType, SpriteSheetSpec> = {
     anchorX: 0.5,
     anchorY: 0.58,
     heightScale: 2.75,
+  },
+  [EnemyTypeValues.CULTIST]: {
+    id: 'enemy-cultist-move',
+    url: `${SPRITE_ROOT}/enemy_cultist_move.svg`,
+    cols: 2,
+    rows: 2,
+    frameCount: 4,
+    frameRate: 2.2,
+    anchorX: 0.5,
+    anchorY: 0.58,
+    heightScale: 2.9,
   },
   [EnemyTypeValues.GHOST]: {
     id: 'enemy-ghost-move',
@@ -109,12 +123,29 @@ export const ENEMY_SPRITES: Record<EnemyType, SpriteSheetSpec> = {
 
 class SpriteRegistry {
   private entries = new Map<string, SpriteEntry>();
+  private frameTimeSeconds = 0;
+
+  beginFrame(timeSeconds: number) {
+    if (Number.isFinite(timeSeconds)) {
+      this.frameTimeSeconds = timeSeconds;
+    }
+  }
+
+  preloadEnemies() {
+    for (const spec of Object.values(ENEMY_SPRITES)) {
+      if (spec) this.getEntry(spec);
+    }
+  }
+
+  getEnemyAnimationTimer(type: EnemyType): number | undefined {
+    return ENEMY_SPRITES[type] ? this.frameTimeSeconds * 3 : undefined;
+  }
 
   drawEnemy(ctx: CanvasRenderingContext2D, enemy: Enemy, bob: number): boolean {
     if (enemy.hitFlash > 0) return false;
     const spec = ENEMY_SPRITES[enemy.type];
     if (!spec) return false;
-    const frame = this.getFrame(enemy.animTimer, spec);
+    const frame = this.getFrame(this.frameTimeSeconds * 3, spec);
     return this.drawFrame(ctx, spec, frame, enemy.x, enemy.y + bob, enemy.radius);
   }
 
@@ -137,18 +168,19 @@ class SpriteRegistry {
     }
 
     const entry = this.getEntry(spec);
-    if (entry.state !== 'loaded' || entry.image.naturalWidth <= 0 || entry.image.naturalHeight <= 0) {
+    if (entry.state !== 'loaded' || !this.buildFrameCache(entry, spec)) {
       return false;
     }
 
-    const frameW = entry.image.naturalWidth / spec.cols;
-    const frameH = entry.image.naturalHeight / spec.rows;
+    const frameW = entry.frameWidth;
+    const frameH = entry.frameHeight;
     if (!Number.isFinite(frameW) || !Number.isFinite(frameH) || frameW <= 0 || frameH <= 0) {
       return false;
     }
 
-    const col = frameIndex % spec.cols;
-    const row = Math.floor(frameIndex / spec.cols);
+    const frame = entry.frames[frameIndex % entry.frames.length];
+    if (!frame) return false;
+
     const targetH = radius * spec.heightScale;
     const targetW = spec.widthScale ? radius * spec.widthScale : targetH * (frameW / frameH);
     if (!Number.isFinite(targetW) || !Number.isFinite(targetH) || targetW <= 0 || targetH <= 0) {
@@ -163,11 +195,7 @@ class SpriteRegistry {
       x = 0;
     }
     ctx.drawImage(
-      entry.image,
-      col * frameW,
-      row * frameH,
-      frameW,
-      frameH,
+      frame,
       x - targetW * spec.anchorX,
       y - targetH * spec.anchorY,
       targetW,
@@ -182,10 +210,11 @@ class SpriteRegistry {
     if (existing) return existing;
 
     const image = new Image();
-    const entry: SpriteEntry = { image, state: 'loading' };
+    const entry: SpriteEntry = { image, state: 'loading', frames: [], frameWidth: 0, frameHeight: 0 };
     image.decoding = 'async';
     image.onload = () => {
       entry.state = image.naturalWidth > 0 && image.naturalHeight > 0 ? 'loaded' : 'failed';
+      if (entry.state === 'loaded') this.buildFrameCache(entry, spec);
     };
     image.onerror = () => {
       entry.state = 'failed';
@@ -193,6 +222,55 @@ class SpriteRegistry {
     image.src = spec.url;
     this.entries.set(spec.id, entry);
     return entry;
+  }
+
+  private buildFrameCache(entry: SpriteEntry, spec: SpriteSheetSpec): boolean {
+    if (entry.frames.length === spec.frameCount && entry.frameWidth > 0 && entry.frameHeight > 0) {
+      return true;
+    }
+    if (entry.image.naturalWidth <= 0 || entry.image.naturalHeight <= 0) return false;
+
+    const sourceFrameW = entry.image.naturalWidth / spec.cols;
+    const sourceFrameH = entry.image.naturalHeight / spec.rows;
+    if (!Number.isFinite(sourceFrameW) || !Number.isFinite(sourceFrameH) || sourceFrameW <= 0 || sourceFrameH <= 0) {
+      entry.state = 'failed';
+      return false;
+    }
+
+    const targetFrameW = Math.max(1, Math.round(sourceFrameW));
+    const targetFrameH = Math.max(1, Math.round(sourceFrameH));
+    const frames: HTMLCanvasElement[] = [];
+
+    for (let i = 0; i < spec.frameCount; i++) {
+      const canvas = document.createElement('canvas');
+      canvas.width = targetFrameW;
+      canvas.height = targetFrameH;
+      const frameCtx = canvas.getContext('2d');
+      if (!frameCtx) {
+        entry.state = 'failed';
+        return false;
+      }
+
+      const col = i % spec.cols;
+      const row = Math.floor(i / spec.cols);
+      frameCtx.drawImage(
+        entry.image,
+        col * sourceFrameW,
+        row * sourceFrameH,
+        sourceFrameW,
+        sourceFrameH,
+        0,
+        0,
+        targetFrameW,
+        targetFrameH
+      );
+      frames.push(canvas);
+    }
+
+    entry.frames = frames;
+    entry.frameWidth = targetFrameW;
+    entry.frameHeight = targetFrameH;
+    return true;
   }
 }
 

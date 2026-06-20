@@ -1,11 +1,11 @@
-import type { Enemy, GameState, GenericModifierType, UpgradeOption, WeaponType } from '../types';
+import type { Enemy, EnemyProjectile, GameState, GenericModifierType, UpgradeOption, WeaponType } from '../types';
 import { GameEvent } from './GameEvents';
 
 export interface GameEventMap {
   [GameEvent.STATE_CHANGE]: [state: GameState, previous: GameState];
   [GameEvent.GAME_START]: [];
   [GameEvent.GAME_OVER]: [stats: { time: number; kills: number; level: number }];
-  [GameEvent.PLAYER_HIT]: [damage: number, enemy: Enemy];
+  [GameEvent.PLAYER_HIT]: [damage: number, source: Enemy | EnemyProjectile];
   [GameEvent.PLAYER_DEATH]: [];
   [GameEvent.PLAYER_LEVEL_UP]: [level: number];
   [GameEvent.ENEMY_DEATH]: [enemy: Enemy];

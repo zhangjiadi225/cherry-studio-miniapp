@@ -1,11 +1,12 @@
-import type { Player, Enemy, Projectile, XPGem, Particle, DamageNumber, Camera, UpgradeOption, MapObstacle, TouchJoystickState } from './types';
+import type { Player, Enemy, Projectile, XPGem, Particle, DamageNumber, Camera, UpgradeOption, MapObstacle, TouchJoystickState, EnemyProjectile } from './types';
 import type { CodexTab, DesktopTab, MetaState, MetaUpgradeNode } from './systems/meta/MetaProgression';
 import { COLORS } from './constants';
 import { WorldRenderer, type RenderContext } from './renderers/WorldRenderer';
 import {
-  drawPlayer, drawEnemy, drawProjectile, drawGarlicAura,
+  drawPlayer, drawEnemy, drawProjectile, drawEnemyProjectile, drawGarlicAura,
   drawPickupRange, drawXPGem,
 } from './renderers/EntityRenderer';
+import { spriteRegistry } from './renderers/SpriteRegistry';
 import { drawParticle, drawDamageNumber, drawDamageFlash, drawLevelUpFlash, drawBossWarning } from './renderers/EffectsRenderer';
 import {
   drawUI, drawMinimap, drawBossBar, drawVirtualJoystick,
@@ -38,6 +39,7 @@ export class Renderer {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
     this.rc = { ctx: this.ctx, w: 0, h: 0 };
     this.resize();
+    spriteRegistry.preloadEnemies();
     window.addEventListener('resize', this.handleResize);
   }
 
@@ -61,6 +63,10 @@ export class Renderer {
 
   getWidth() { return this.w; }
   getHeight() { return this.h; }
+
+  beginFrame(timeSeconds: number) {
+    spriteRegistry.beginFrame(timeSeconds);
+  }
 
   clear() {
     this.ctx.fillStyle = COLORS.bg;
@@ -103,6 +109,7 @@ export class Renderer {
   drawPlayer(p: Player) { drawPlayer(this.rc, p); }
   drawEnemy(e: Enemy) { drawEnemy(this.rc, e); }
   drawProjectile(p: Projectile) { drawProjectile(this.rc, p); }
+  drawEnemyProjectile(p: EnemyProjectile) { drawEnemyProjectile(this.rc, p); }
   drawXPGem(gem: XPGem) { drawXPGem(this.rc, gem); }
   drawGarlicAura(player: Player, radius: number, modifierMask: number = 0) {
     drawGarlicAura(this.rc, player, radius, modifierMask);

@@ -2,6 +2,12 @@ import { Particle } from '../types';
 import { randFloat } from '../utils/math';
 import { pools } from '../utils/PoolManager';
 
+const MAX_ACTIVE_PARTICLES = 1200;
+
+function hasParticleCapacity(particles: Particle[]): boolean {
+  return particles.length < MAX_ACTIVE_PARTICLES;
+}
+
 export function createParticle(
   x: number, y: number,
   color: string,
@@ -75,6 +81,7 @@ export function spawnHitParticles(
   const glow = options.glow ?? false;
 
   for (let i = 0; i < count; i++) {
+    if (!hasParticleCapacity(particles)) break;
     particles.push(createParticle(x, y, color, spd, lf, r + Math.random() * 2, {
       type,
       glow,
@@ -103,6 +110,7 @@ export function spawnDeathParticles(
   const glow = options.glow ?? true;
 
   for (let i = 0; i < count; i++) {
+    if (!hasParticleCapacity(particles)) break;
     particles.push(createParticle(x, y, color, spd, lf, r + Math.random() * 3, {
       type,
       glow,
@@ -131,6 +139,7 @@ export function spawnXPParticles(
   const glow = options.glow ?? true;
 
   for (let i = 0; i < count; i++) {
+    if (!hasParticleCapacity(particles)) break;
     particles.push(createParticle(x, y, color, spd, lf, r, {
       type: 'spark',
       glow,
@@ -163,6 +172,7 @@ export function spawnExplosionParticles(
   const ringCount = options.ringCount ?? 8;
 
   for (let i = 0; i < ringCount; i++) {
+    if (!hasParticleCapacity(particles)) break;
     const angle = (i / ringCount) * Math.PI * 2;
     particles.push(createParticle(x, y, innerColor, spd * 0.7, lf * 0.6, r * 1.5, {
       type: 'spark',
@@ -174,6 +184,7 @@ export function spawnExplosionParticles(
   }
 
   for (let i = 0; i < count - ringCount; i++) {
+    if (!hasParticleCapacity(particles)) break;
     particles.push(createParticle(x, y, color, spd, lf, r, {
       type,
       glow,
@@ -201,6 +212,7 @@ export function spawnTrailParticles(
   const glow = options.glow ?? true;
 
   for (let i = 0; i < count; i++) {
+    if (!hasParticleCapacity(particles)) break;
     const angle = Math.random() * Math.PI * 2;
     particles.push(createParticle(x, y, color, spd, lf, r, {
       type: 'circle',
@@ -220,6 +232,7 @@ export function spawnLevelUpParticles(
   count: number = 30
 ) {
   for (let i = 0; i < count; i++) {
+    if (!hasParticleCapacity(particles)) break;
     const angle = (i / count) * Math.PI * 2;
     const speed = randFloat(100, 200);
     const life = randFloat(0.6, 1.2);

@@ -1,5 +1,5 @@
 import {
-  GameState, Enemy, Projectile, XPGem, Particle, DamageNumber,
+  GameState, Enemy, Projectile, XPGem, Particle, DamageNumber, EnemyProjectile,
   Camera, WeaponType, PassiveType, Weapon, GenericModifierType
 } from './types';
 import {
@@ -12,6 +12,7 @@ import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
 import { createPlayer, updatePlayer, damagePlayer, collectShards, hasPassive, tryBloodZoneHeal } from './systems/player/Player';
 import { updateEnemy, isCollidingWithPlayer, resetEnemyIds } from './systems/enemy/Enemy';
+import { updateEnemyAttacks, updateEnemyProjectile } from './systems/enemy/EnemyAttack';
 import { Spawner } from './systems/enemy/Spawner';
 import {
   updateWeapon, updateBiblePositions, getGarlicRadius,
@@ -66,6 +67,7 @@ export class Game {
   private player = createPlayer();
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
+  private enemyProjectiles: EnemyProjectile[] = [];
   private xpGems: XPGem[] = [];
   private particles: Particle[] = [];
   private damageNumbers: DamageNumber[] = [];
@@ -344,6 +346,7 @@ export class Game {
     this.activeBoss = undefined;
     this.enemies = [];
     this.projectiles = [];
+    this.enemyProjectiles = [];
     this.xpGems = [];
     this.particles = [];
     this.damageNumbers = [];
@@ -385,7 +388,7 @@ export class Game {
     if (rawDt <= 1.0) {
       const dt = Math.min(0.05, rawDt);
       this.update(dt);
-      this.render();
+      this.render(time / 1000);
     }
     this.animationFrameId = requestAnimationFrame(this.handleAnimationFrame);
   }
@@ -416,6 +419,8 @@ export class Game {
     updateCamera(this.camera, this.player, dt);
     this.spawner.update(this.enemies, this.player, this.elapsed, this.difficulty, dt, this.player.curse);
     this.updateEnemies(dt);
+    this.updateEnemyProjectiles(dt);
+    updateEnemyAttacks(this.enemies, this.player, this.enemyProjectiles, dt);
 
     for (const w of this.player.weapons) {
       updateWeapon(w, this.player, this.enemies, this.projectiles, dt);
@@ -534,6 +539,20 @@ export class Game {
     this.damageNumbers.length = write;
   }
 
+  private releaseDeadEnemyProjectiles() {
+    let write = 0;
+    for (let read = 0; read < this.enemyProjectiles.length; read++) {
+      const p = this.enemyProjectiles[read];
+      if (p.life > 0) {
+        if (write !== read) this.enemyProjectiles[write] = p;
+        write++;
+      } else {
+        pools.enemyProjectiles.release(p);
+      }
+    }
+    this.enemyProjectiles.length = write;
+  }
+
   private releaseDeadXPGems() {
     let write = 0;
     for (let read = 0; read < this.xpGems.length; read++) {
@@ -585,6 +604,32 @@ export class Game {
         e.contactCooldown = CONTACT_COOLDOWN;
       }
     }
+  }
+
+  private updateEnemyProjectiles(dt: number) {
+    for (const p of this.enemyProjectiles) {
+      const result = updateEnemyProjectile(p, this.player, this.mapSystem, dt);
+      if (result === 'active') continue;
+      if (result === 'hitPlayer') {
+        const dmg = damagePlayer(this.player, p.damage);
+        if (dmg > 0) {
+          this.lastDamageSource = {
+            enemyName: ENEMY_DATA[p.sourceType].name,
+            damage: dmg,
+            time: this.elapsed,
+          };
+          eventBus.emit(GameEvent.PLAYER_HIT, dmg, p);
+          shakeCamera(this.camera, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY * 0.75);
+          this.damageFlashTimer = 0.28;
+          this.damageNumbers.push(createDamageNumber(this.player.x, this.player.y, dmg, COLORS.danger, 18));
+          spawnHitParticles(this.particles, this.player.x, this.player.y, p.color, 8, {
+            speed: 140, life: 0.42, radius: 3, type: 'spark', glow: true,
+          });
+        }
+      }
+      p.life = 0;
+    }
+    this.releaseDeadEnemyProjectiles();
   }
 
   private updateXPGems(dt: number) {
@@ -771,7 +816,8 @@ export class Game {
 
   // ──────────────────────────── Render ────────────────────────────
 
-  private render() {
+  private render(timeSeconds: number) {
+    this.renderer.beginFrame(timeSeconds);
     this.renderer.clear();
 
     if (gameState.is('menu')) {
@@ -807,6 +853,12 @@ export class Game {
       }
     }
 
+    for (const p of this.enemyProjectiles) {
+      if (this.renderer.isOnScreen(p.x, p.y, this.camera, p.radius + 18)) {
+        this.renderer.drawEnemyProjectile(p);
+      }
+    }
+
     if (this.garlicWeapon) {
       this.renderer.drawGarlicAura(this.player, getGarlicRadius(this.garlicWeapon, this.player), this.garlicWeapon.modifierMask);
     }
@@ -814,8 +866,16 @@ export class Game {
     this.renderer.drawPickupRange(this.player);
     this.renderer.drawPlayer(this.player);
 
-    for (const p of this.particles) this.renderer.drawParticle(p);
-    for (const d of this.damageNumbers) this.renderer.drawDamageNumber(d);
+    for (const p of this.particles) {
+      if (this.renderer.isOnScreen(p.x, p.y, this.camera, Math.max(p.radius, p.glowRadius ?? 0) + 16)) {
+        this.renderer.drawParticle(p);
+      }
+    }
+    for (const d of this.damageNumbers) {
+      if (this.renderer.isOnScreen(d.x, d.y, this.camera, d.size + 24)) {
+        this.renderer.drawDamageNumber(d);
+      }
+    }
 
     this.renderer.endWorld();
 

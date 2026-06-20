@@ -40,6 +40,16 @@ export const ENEMY_DATA: Record<EnemyType, {
     color: '#d4c5a9',
     spawnAfter: 30,
   },
+  [EnemyType.CULTIST]: {
+    name: '邪教徒',
+    baseHp: 28,
+    baseSpeed: 70,
+    baseDamage: 8,
+    radius: 11,
+    xpValue: 2,
+    color: '#6f4bb2',
+    spawnAfter: 90,
+  },
   [EnemyType.GHOST]: {
     name: '幽灵',
     baseHp: 25,

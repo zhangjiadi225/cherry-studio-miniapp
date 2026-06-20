@@ -15,6 +15,7 @@ import { circlesOverlap } from '../../utils/math';
 import { getBloodPoolSlowFactor } from '../../utils/collision';
 import { pools } from '../../utils/PoolManager';
 import type { MapSystem } from '../map/MapSystem';
+import { getEnemyEngagementProfile } from './EnemyAttack';
 
 let nextEnemyId = 1;
 
@@ -56,6 +57,10 @@ export function createEnemy(
   enemy.animTimer = Math.random() * Math.PI * 2;
   enemy.xpValue = data.xpValue * (isElite ? ELITE_XP_MULT : 1) * curseMult;
   enemy.contactCooldown = CONTACT_COOLDOWN;
+  enemy.attackCooldown = randInitialAttackCooldown(type, isBoss);
+  enemy.attackWindup = 0;
+  enemy.attackPatternIndex = 0;
+  enemy.pendingAttackPattern = -1;
   return enemy;
 }
 
@@ -79,8 +84,26 @@ export function updateEnemy(
   const dy = player.y - e.y;
   const len = Math.sqrt(dx * dx + dy * dy);
   if (len > 1) {
-    e.x += (dx / len) * e.speed * speedMult * dt;
-    e.y += (dy / len) * e.speed * speedMult * dt;
+    const engagement = getEnemyEngagementProfile(e);
+    let dirX = dx / len;
+    let dirY = dy / len;
+    let moveScale = 1;
+
+    if (engagement) {
+      if (len < engagement.retreatRange) {
+        dirX = -dirX;
+        dirY = -dirY;
+        moveScale = 0.78;
+      } else if (len <= engagement.preferredRange) {
+        const strafe = e.id % 2 === 0 ? 1 : -1;
+        dirX = (-dy / len) * strafe;
+        dirY = (dx / len) * strafe;
+        moveScale = e.attackWindup > 0 ? 0.15 : 0.36;
+      }
+    }
+
+    e.x += dirX * e.speed * speedMult * moveScale * dt;
+    e.y += dirY * e.speed * speedMult * moveScale * dt;
   }
 
   if (mapSystem) {
@@ -108,6 +131,12 @@ export function damageEnemy(
   e.knockbackX += knockbackX;
   e.knockbackY += knockbackY;
   return e.hp <= 0;
+}
+
+function randInitialAttackCooldown(type: EnemyType, isBoss: boolean): number {
+  if (type === EnemyType.CULTIST) return 0.6 + Math.random() * 0.8;
+  if (isBoss && (type === EnemyType.DEMON || type === EnemyType.WRAITH)) return 1.0;
+  return 0;
 }
 
 export function getAvailableEnemyTypes(

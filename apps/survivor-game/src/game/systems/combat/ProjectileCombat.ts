@@ -10,6 +10,9 @@ import { pools } from '../../utils/PoolManager';
 import { SpatialGrid } from '../../utils/SpatialGrid';
 import { circlesOverlap } from '../../utils/math';
 
+const MODIFIERS = Object.values(GENERIC_MODIFIER_DATA);
+const PROJECTILE_COLLISION_LOOKUP_PADDING = 64;
+
 export interface ProjectileCombatContext {
   projectiles: Projectile[];
   enemies: Enemy[];
@@ -39,10 +42,16 @@ export class ProjectileCombat {
         continue;
       }
 
-      for (const enemy of ctx.enemies) {
-        if (enemy.hp <= 0) continue;
-        if (projectile.hitEnemies.has(enemy.id)) continue;
-        if (circlesOverlap(projectile.x, projectile.y, projectile.radius, enemy.x, enemy.y, enemy.radius)) {
+      let projectileExpired = false;
+      this.enemyGrid.forNearby(
+        projectile.x,
+        projectile.y,
+        projectile.radius + PROJECTILE_COLLISION_LOOKUP_PADDING,
+        (enemy) => {
+          if (projectileExpired || enemy.hp <= 0) return;
+          if (projectile.hitEnemies.has(enemy.id)) return;
+          if (!circlesOverlap(projectile.x, projectile.y, projectile.radius, enemy.x, enemy.y, enemy.radius)) return;
+
           const isDead = this.applyProjectileHit(ctx, projectile, enemy);
           projectile.pierceCount++;
           if (projectile.pierceCount > projectile.pierce) {
@@ -53,10 +62,10 @@ export class ProjectileCombat {
               });
             }
             projectile.life = 0;
-            break;
+            projectileExpired = true;
           }
         }
-      }
+      );
     }
     this.releaseDeadProjectiles(ctx.projectiles);
   }
@@ -109,7 +118,7 @@ export class ProjectileCombat {
   }
 
   private triggerProjectileModifiers(ctx: ProjectileCombatContext, projectile: Projectile, enemy: Enemy, isDead: boolean) {
-    for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
+    for (const modifier of MODIFIERS) {
       if (!this.projectileHasModifier(projectile, modifier.id)) continue;
 
       if (modifier.trigger === 'onKill' && isDead) {
@@ -161,10 +170,12 @@ export class ProjectileCombat {
   }
 
   private getProjectileModifierByEffect(projectile: Projectile, effect: 'knockback') {
-    return Object.values(GENERIC_MODIFIER_DATA).find((modifier) =>
-      modifier.effect === effect &&
-      this.projectileHasModifier(projectile, modifier.id)
-    );
+    for (const modifier of MODIFIERS) {
+      if (modifier.effect === effect && this.projectileHasModifier(projectile, modifier.id)) {
+        return modifier;
+      }
+    }
+    return undefined;
   }
 
   private triggerModifierFeedback(
