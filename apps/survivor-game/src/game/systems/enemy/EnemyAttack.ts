@@ -2,10 +2,8 @@ import type { Enemy, EnemyProjectile, EnemyProjectileKind, Player } from '../../
 import { EnemyType } from '../../types';
 import { pools } from '../../utils/PoolManager';
 import { circlesOverlap } from '../../utils/math';
-import { circleRectOverlap } from '../../utils/collision';
+import { MAX_ACTIVE_ENEMY_PROJECTILES } from '../../constants';
 import type { MapSystem } from '../map/MapSystem';
-
-const MAX_ACTIVE_ENEMY_PROJECTILES = 360;
 
 type EnemyAttackPatternId =
   | 'single'
@@ -254,24 +252,7 @@ export function updateEnemyProjectile(
   projectile.y += projectile.vy * dt;
   projectile.life -= dt;
   if (projectile.life <= 0) return 'expired';
-  if (enemyProjectileHitsObstacle(projectile, mapSystem)) return 'expired';
+  if (mapSystem.projectileHitsSolidObstacle(projectile.x, projectile.y, projectile.radius, false)) return 'expired';
   if (circlesOverlap(projectile.x, projectile.y, projectile.radius, player.x, player.y, player.radius)) return 'hitPlayer';
   return 'active';
-}
-
-function enemyProjectileHitsObstacle(projectile: EnemyProjectile, mapSystem: MapSystem): boolean {
-  const nearby = mapSystem.getNearby(
-    projectile.x - 50,
-    projectile.y - 50,
-    projectile.x + 50,
-    projectile.y + 50
-  );
-  for (const obs of nearby) {
-    if (obs.type === 'blood_pool' || obs.type === 'magic_circle') continue;
-    if (obs.hp <= 0) continue;
-    if (circleRectOverlap(projectile.x, projectile.y, projectile.radius, obs.x, obs.y, obs.width, obs.height)) {
-      return true;
-    }
-  }
-  return false;
 }

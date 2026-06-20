@@ -26,6 +26,19 @@ export interface Camera {
   shakeIntensity: number;
 }
 
+export interface PerformanceStats {
+  fps: number;
+  updateMs: number;
+  renderMs: number;
+  frameMs: number;
+  enemies: number;
+  projectiles: number;
+  enemyProjectiles: number;
+  particles: number;
+  damageNumbers: number;
+  xpGems: number;
+}
+
 export interface PlayerMovement {
   x: number;
   y: number;

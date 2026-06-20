@@ -94,21 +94,50 @@ function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, spikes:
 
 // ──────────────────────────── XP Gem ────────────────────────────
 
+function drawSmallXPGemFast(ctx: CanvasRenderingContext2D, gem: XPGem) {
+  const pulse = 1 + Math.sin(gem.animTimer * 1.4) * 0.08;
+  const r = gem.radius * pulse;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(gem.x, gem.y + r * 1.2, r * 0.72, r * 0.22, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = COLORS.gemSmall;
+  ctx.beginPath();
+  ctx.moveTo(gem.x, gem.y - r * 1.22);
+  ctx.lineTo(gem.x + r * 0.78, gem.y - r * 0.12);
+  ctx.lineTo(gem.x + r * 0.45, gem.y + r * 1.02);
+  ctx.lineTo(gem.x, gem.y + r * 1.34);
+  ctx.lineTo(gem.x - r * 0.45, gem.y + r * 1.02);
+  ctx.lineTo(gem.x - r * 0.78, gem.y - r * 0.12);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = '#60efff';
+  ctx.lineWidth = Math.max(0.8, r * 0.1);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.65)';
+  ctx.beginPath();
+  ctx.ellipse(gem.x - r * 0.22, gem.y - r * 0.45, r * 0.13, r * 0.24, -0.65, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 export function drawXPGem(rc: RenderContext, gem: XPGem) {
   const { ctx } = rc;
+  if (gem.type === 'small') {
+    drawSmallXPGemFast(ctx, gem);
+    return;
+  }
+
   const pulse = 1 + Math.sin(gem.animTimer * 1.4) * 0.12;
   const r = gem.radius * pulse;
-  let color = COLORS.gemSmall;
-  let core = '#d7fbff';
-  let rim = '#60efff';
-  let glowColor = 'rgba(68,221,255,';
+  let color = COLORS.gemMedium;
+  let core = '#e4ffe9';
+  let rim = '#69ff9d';
+  let glowColor = 'rgba(68,255,136,';
   switch (gem.type) {
-    case 'small':
-      color = COLORS.gemSmall;
-      core = '#d9fbff';
-      rim = '#60efff';
-      glowColor = 'rgba(68,221,255,';
-      break;
     case 'medium':
       color = COLORS.gemMedium;
       core = '#e4ffe9';
@@ -145,18 +174,16 @@ export function drawXPGem(rc: RenderContext, gem: XPGem) {
   ctx.translate(gem.x, gem.y);
   ctx.rotate(tilt);
 
-  if (gem.type !== 'small') {
-    ctx.save();
-    ctx.globalAlpha = gem.type === 'large' ? 0.72 : 0.42;
-    ctx.strokeStyle = rim;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([2.5, 3.5]);
-    ctx.lineDashOffset = -gem.animTimer * 8;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * (gem.type === 'large' ? 2.05 : 1.72), 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
+  ctx.save();
+  ctx.globalAlpha = gem.type === 'large' ? 0.72 : 0.42;
+  ctx.strokeStyle = rim;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2.5, 3.5]);
+  ctx.lineDashOffset = -gem.animTimer * 8;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * (gem.type === 'large' ? 2.05 : 1.72), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 
   const gemGrad = ctx.createLinearGradient(-r, -r, r, r);
   gemGrad.addColorStop(0, core);
@@ -1170,7 +1197,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         controlPts.push({ x: originX + dirSign * reach, y: originY + arcHeight });
       }
       const knots: { x: number; y: number }[] = [{ x: originX, y: originY }];
-      const resolution = Math.max(6, Math.floor(200 / segCount));
+      const resolution = Math.max(4, Math.floor(72 / segCount));
       for (let s = 0; s < segCount; s++) {
         const p0 = controlPts[s];
         const p3 = controlPts[s + 1];
@@ -1492,13 +1519,4 @@ export function drawPickupRange(rc: RenderContext, player: Player) {
   ctx.arc(player.x, player.y, player.pickupRange, 0, Math.PI * 2);
   ctx.stroke();
   ctx.setLineDash([]);
-
-  const glowAlpha = 0.03 + Math.sin(time * 2) * 0.01;
-  const glowGrad = ctx.createRadialGradient(player.x, player.y, player.pickupRange * 0.8, player.x, player.y, player.pickupRange);
-  glowGrad.addColorStop(0, 'rgba(100,200,255,0)');
-  glowGrad.addColorStop(1, `rgba(100,200,255,${glowAlpha})`);
-  ctx.fillStyle = glowGrad;
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, player.pickupRange, 0, Math.PI * 2);
-  ctx.fill();
 }

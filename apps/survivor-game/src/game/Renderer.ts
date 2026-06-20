@@ -1,4 +1,4 @@
-import type { Player, Enemy, Projectile, XPGem, Particle, DamageNumber, Camera, UpgradeOption, MapObstacle, TouchJoystickState, EnemyProjectile } from './types';
+import type { Player, Enemy, Projectile, XPGem, Particle, DamageNumber, Camera, UpgradeOption, MapObstacle, TouchJoystickState, EnemyProjectile, PerformanceStats } from './types';
 import type { CodexTab, DesktopTab, MetaState, MetaUpgradeNode } from './systems/meta/MetaProgression';
 import { COLORS } from './constants';
 import { WorldRenderer, type RenderContext } from './renderers/WorldRenderer';
@@ -18,8 +18,8 @@ import {
 	  getCodexTabRects as getCodexRects,
 	  getDesktopTabRects as getTabRects,
 	  getPauseButtonRect as getPauseRect,
-	  drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver,
-	} from './renderers/UIRenderer';
+		  drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver, drawPerformanceOverlay,
+		} from './renderers/UIRenderer';
 
 /**
  * Renderer：总入口，持有 Canvas 上下文和子渲染器
@@ -146,7 +146,8 @@ export class Renderer {
     weaponNames: string[];
     soulFireEarned: number;
     totalSoulFire: number;
-    deathCause?: string;
-    advice?: string;
-  }) { drawGameOver(this.rc, stats); }
+	    deathCause?: string;
+	    advice?: string;
+	  }) { drawGameOver(this.rc, stats); }
+  drawPerformanceOverlay(stats: PerformanceStats) { drawPerformanceOverlay(this.rc, stats); }
 }

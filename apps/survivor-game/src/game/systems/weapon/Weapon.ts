@@ -1,8 +1,15 @@
 import { Weapon, WeaponType, Player, Enemy, Projectile, GenericModifierType } from '../../types';
-import { WEAPON_DATA, FIND_ENEMY_RANGE, LIGHTNING_RANGE, HOLY_WATER_RANGE, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from '../../constants';
+import {
+  WEAPON_DATA, FIND_ENEMY_RANGE, LIGHTNING_RANGE, HOLY_WATER_RANGE,
+  GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ACTIVE_PLAYER_PROJECTILES,
+} from '../../constants';
 import { normalize, randFloat } from '../../utils/math';
 import { pools } from '../../utils/PoolManager';
 import { eventBus, GameEvent } from '../../events';
+import type { EnemyQuery } from '../enemy/EnemyQuery';
+
+const nearestEnemiesScratch: Enemy[] = [];
+const nearestDistancesScratch: number[] = [];
 
 export function createWeapon(type: WeaponType): Weapon {
   const d = WEAPON_DATA[type];
@@ -43,9 +50,9 @@ export function upgradeWeapon(w: Weapon): boolean {
 export function updateWeapon(
   w: Weapon,
   player: Player,
-  enemies: Enemy[],
   projectiles: Projectile[],
-  dt: number
+  dt: number,
+  enemyQuery: EnemyQuery
 ) {
   if (w.type === WeaponType.GARLIC) return;
 
@@ -60,31 +67,25 @@ export function updateWeapon(
   let fired = false;
   switch (w.type) {
     case WeaponType.MAGIC_WAND:
-      for (const damage of castDamages) fireMagicWand(w, player, enemies, projectiles, damage, effectiveArea);
-      fired = true;
+      for (const damage of castDamages) fired = fireMagicWand(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
       break;
     case WeaponType.FIRE_WAND:
-      for (const damage of castDamages) fireFireWand(w, player, enemies, projectiles, damage, effectiveArea);
-      fired = true;
+      for (const damage of castDamages) fired = fireFireWand(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
       break;
     case WeaponType.AXE:
-      for (const damage of castDamages) fireAxe(w, player, projectiles, damage, effectiveArea);
-      fired = true;
+      for (const damage of castDamages) fired = fireAxe(w, player, projectiles, damage, effectiveArea) || fired;
       break;
     case WeaponType.LIGHTNING:
-      for (const damage of castDamages) fired = fireLightning(w, player, enemies, projectiles, damage, effectiveArea) || fired;
+      for (const damage of castDamages) fired = fireLightning(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
       break;
     case WeaponType.WHIP:
-      fireWhip(w, player, projectiles, effectiveDamage, effectiveArea);
-      fired = true;
+      fired = fireWhip(w, player, projectiles, effectiveDamage, effectiveArea);
       break;
     case WeaponType.BIBLE:
-      fireBible(w, player, projectiles, effectiveDamage, effectiveArea);
-      fired = true;
+      fired = fireBible(w, player, projectiles, effectiveDamage, effectiveArea);
       break;
     case WeaponType.HOLY_WATER:
-      for (const damage of castDamages) fireHolyWater(w, player, enemies, projectiles, damage, effectiveArea);
-      fired = true;
+      for (const damage of castDamages) fired = fireHolyWater(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
       break;
   }
   if (fired) {
@@ -96,35 +97,37 @@ export function updateWeapon(
 
 function findNearestEnemies(
   player: Player,
-  enemies: Enemy[],
+  enemyQuery: EnemyQuery,
   count: number,
   maxDist: number = FIND_ENEMY_RANGE
 ): Enemy[] {
   if (count <= 0) return [];
-  const bestEnemies: Enemy[] = [];
-  const bestDistSq: number[] = [];
+  nearestEnemiesScratch.length = 0;
+  nearestDistancesScratch.length = 0;
   const maxDistSq = maxDist * maxDist;
 
-  for (const enemy of enemies) {
-    if (enemy.hp <= 0) continue;
+  const considerEnemy = (enemy: Enemy) => {
+    if (enemy.hp <= 0) return;
     const dx = enemy.x - player.x;
     const dy = enemy.y - player.y;
     const dSq = dx * dx + dy * dy;
-    if (dSq >= maxDistSq) continue;
+    if (dSq >= maxDistSq) return;
 
-    let insertAt = bestDistSq.length;
-    while (insertAt > 0 && dSq < bestDistSq[insertAt - 1]) insertAt--;
-    if (insertAt >= count) continue;
+    let insertAt = nearestDistancesScratch.length;
+    while (insertAt > 0 && dSq < nearestDistancesScratch[insertAt - 1]) insertAt--;
+    if (insertAt >= count) return;
 
-    bestEnemies.splice(insertAt, 0, enemy);
-    bestDistSq.splice(insertAt, 0, dSq);
-    if (bestEnemies.length > count) {
-      bestEnemies.length = count;
-      bestDistSq.length = count;
+    nearestEnemiesScratch.splice(insertAt, 0, enemy);
+    nearestDistancesScratch.splice(insertAt, 0, dSq);
+    if (nearestEnemiesScratch.length > count) {
+      nearestEnemiesScratch.length = count;
+      nearestDistancesScratch.length = count;
     }
-  }
+  };
 
-  return bestEnemies;
+  enemyQuery.forNearby(player.x, player.y, maxDist, considerEnemy);
+
+  return nearestEnemiesScratch;
 }
 
 function acquireProjectile(): Projectile {
@@ -181,7 +184,8 @@ type ProjectileConfig = {
   gravY?: number;
 };
 
-function spawnWeaponProjectile(w: Weapon, projectiles: Projectile[], config: ProjectileConfig): Projectile {
+function spawnWeaponProjectile(w: Weapon, projectiles: Projectile[], config: ProjectileConfig): Projectile | undefined {
+  if (projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) return undefined;
   const p = acquireProjectile();
   p.x = config.x;
   p.y = config.y;
@@ -209,7 +213,7 @@ function fireTargetedProjectile(
   fallbackAngle: number,
   projectiles: Projectile[],
   config: Omit<ProjectileConfig, 'x' | 'y' | 'vx' | 'vy' | 'life' | 'pierce' | 'knockback'>
-) {
+): boolean {
   const speed = getProjectileSpeed(w);
   let vx: number;
   let vy: number;
@@ -221,7 +225,7 @@ function fireTargetedProjectile(
     vx = Math.cos(fallbackAngle) * speed;
     vy = Math.sin(fallbackAngle) * speed;
   }
-  spawnWeaponProjectile(w, projectiles, {
+  return spawnWeaponProjectile(w, projectiles, {
     ...config,
     x: player.x,
     y: player.y,
@@ -230,48 +234,55 @@ function fireTargetedProjectile(
     life: w.duration,
     pierce: w.pierce,
     knockback: w.knockback,
-  });
+  }) !== undefined;
 }
 
 function fireMagicWand(
-  w: Weapon, player: Player, enemies: Enemy[],
-  projectiles: Projectile[], damage: number, area: number
-) {
-  const targets = findNearestEnemies(player, enemies, w.count);
+  w: Weapon, player: Player,
+  projectiles: Projectile[], damage: number, area: number,
+  enemyQuery: EnemyQuery
+): boolean {
+  const targets = findNearestEnemies(player, enemyQuery, w.count, FIND_ENEMY_RANGE);
+  let fired = false;
   for (let i = 0; i < w.count; i++) {
-    const target = targets[i % targets.length];
+    const target = targets.length > 0 ? targets[i % targets.length] : undefined;
     const angle = (i / w.count) * Math.PI * 2 + player.animTimer * 0.1;
-    fireTargetedProjectile(w, player, target, angle, projectiles, {
+    fired = fireTargetedProjectile(w, player, target, angle, projectiles, {
       damage,
       radius: 8 * area,
       type: WeaponType.MAGIC_WAND,
-    });
+    }) || fired;
   }
+  return fired;
 }
 
 function fireFireWand(
-  w: Weapon, player: Player, enemies: Enemy[],
-  projectiles: Projectile[], damage: number, area: number
-) {
-  const targets = findNearestEnemies(player, enemies, w.count);
+  w: Weapon, player: Player,
+  projectiles: Projectile[], damage: number, area: number,
+  enemyQuery: EnemyQuery
+): boolean {
+  const targets = findNearestEnemies(player, enemyQuery, w.count, FIND_ENEMY_RANGE);
+  let fired = false;
   for (let i = 0; i < w.count; i++) {
-    const target = targets[i % targets.length];
-    fireTargetedProjectile(w, player, target, Math.random() * Math.PI * 2, projectiles, {
+    const target = targets.length > 0 ? targets[i % targets.length] : undefined;
+    fired = fireTargetedProjectile(w, player, target, Math.random() * Math.PI * 2, projectiles, {
       damage,
       radius: 12 * area,
       type: WeaponType.FIRE_WAND,
-    });
+    }) || fired;
   }
+  return fired;
 }
 
 function fireAxe(
   w: Weapon, player: Player,
   projectiles: Projectile[], damage: number, area: number
-) {
+): boolean {
+  let fired = false;
   for (let i = 0; i < w.count; i++) {
     const angle = randFloat(-Math.PI * 0.8, -Math.PI * 0.2) + (i * 0.3);
     const speed = getProjectileSpeed(w) * randFloat(0.8, 1.2);
-    spawnWeaponProjectile(w, projectiles, {
+    fired = spawnWeaponProjectile(w, projectiles, {
       x: player.x + randFloat(-20, 20),
       y: player.y,
       vx: Math.cos(angle) * speed * 0.5,
@@ -284,19 +295,23 @@ function fireAxe(
       knockback: w.knockback,
       animTimer: Math.random() * Math.PI * 2,
       gravY: 400,
-    });
+    }) !== undefined || fired;
   }
+  return fired;
 }
 
 function fireLightning(
-  w: Weapon, player: Player, enemies: Enemy[],
-  projectiles: Projectile[], damage: number, area: number
+  w: Weapon, player: Player,
+  projectiles: Projectile[], damage: number, area: number,
+  enemyQuery: EnemyQuery
 ): boolean {
-  const targets = findNearestEnemies(player, enemies, w.count, LIGHTNING_RANGE);
+  const targets = findNearestEnemies(player, enemyQuery, w.count, LIGHTNING_RANGE);
   if (targets.length === 0) return false;
+  let fired = false;
   for (let i = 0; i < w.count; i++) {
-    const target = targets[i % targets.length];
+    const target = targets.length > 0 ? targets[i % targets.length] : undefined;
     if (target) {
+      if (projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) break;
       const p = acquireProjectile();
       p.x = target.x; p.y = target.y;
       p.vx = 0; p.vy = 0;
@@ -310,72 +325,82 @@ function fireLightning(
       p.lightningSeed = Math.random() * 1000;
       attachWeaponModifiers(p, w);
       projectiles.push(p);
+      fired = true;
     }
   }
-  return true;
+  return fired;
 }
 
 function fireWhip(
   w: Weapon, player: Player,
   projectiles: Projectile[], damage: number, area: number
-) {
+): boolean {
   const dir = player.facingLeft ? -1 : 1;
   const segments = w.level;
   const reachRadius = (40 + segments * 30) * area;
   const offset = 30 + segments * 12;
-  const p = acquireProjectile();
-  p.x = player.x + dir * offset; p.y = player.y;
-  p.vx = dir; p.vy = 0;
-  p.damage = damage;
-  p.radius = reachRadius;
-  p.life = w.duration; p.maxLife = w.duration;
-  p.pierce = w.pierce; p.pierceCount = 0;
-  p.type = WeaponType.WHIP;
-  p.knockback = w.knockback;
-  p.animTimer = 0;
+  const p = spawnWeaponProjectile(w, projectiles, {
+    x: player.x + dir * offset,
+    y: player.y,
+    vx: dir,
+    vy: 0,
+    damage,
+    radius: reachRadius,
+    life: w.duration,
+    pierce: w.pierce,
+    type: WeaponType.WHIP,
+    knockback: w.knockback,
+    animTimer: 0,
+  });
+  if (!p) return false;
   p.count = segments;
   p.segScale = area;
-  attachWeaponModifiers(p, w);
-  projectiles.push(p);
+  return true;
 }
 
 function fireBible(
   w: Weapon, player: Player,
   projectiles: Projectile[], damage: number, area: number
-) {
+): boolean {
+  let fired = false;
   for (let i = 0; i < w.count; i++) {
     const angle = (i / w.count) * Math.PI * 2;
-    const p = acquireProjectile();
-    p.x = player.x + Math.cos(angle) * 80 * area;
-    p.y = player.y + Math.sin(angle) * 80 * area;
-    p.vx = 0; p.vy = 0;
-    p.damage = damage;
-    p.radius = 20 * area;
-    p.life = w.duration; p.maxLife = w.duration;
-    p.pierce = w.pierce; p.pierceCount = 0;
-    p.type = WeaponType.BIBLE;
-    p.knockback = w.knockback;
-    p.animTimer = 0;
+    const p = spawnWeaponProjectile(w, projectiles, {
+      x: player.x + Math.cos(angle) * 80 * area,
+      y: player.y + Math.sin(angle) * 80 * area,
+      vx: 0,
+      vy: 0,
+      damage,
+      radius: 20 * area,
+      life: w.duration,
+      pierce: w.pierce,
+      type: WeaponType.BIBLE,
+      knockback: w.knockback,
+      animTimer: 0,
+    });
+    if (!p) break;
     p.orbitAngle = angle;
     p.orbitRadius = 80 * area;
     p.orbitSpeed = 3;
     p.originX = player.x;
     p.originY = player.y;
-    attachWeaponModifiers(p, w);
-    projectiles.push(p);
+    fired = true;
   }
+  return fired;
 }
 
 function fireHolyWater(
-  w: Weapon, player: Player, enemies: Enemy[],
-  projectiles: Projectile[], damage: number, area: number
-) {
-  const targets = findNearestEnemies(player, enemies, w.count, HOLY_WATER_RANGE);
+  w: Weapon, player: Player,
+  projectiles: Projectile[], damage: number, area: number,
+  enemyQuery: EnemyQuery
+): boolean {
+  const targets = findNearestEnemies(player, enemyQuery, w.count, HOLY_WATER_RANGE);
+  let fired = false;
   for (let i = 0; i < w.count; i++) {
-    const target = targets[i % targets.length];
+    const target = targets.length > 0 ? targets[i % targets.length] : undefined;
     const tx = target ? target.x : player.x + randFloat(-200, 200);
     const ty = target ? target.y : player.y + randFloat(-200, 200);
-    spawnWeaponProjectile(w, projectiles, {
+    fired = spawnWeaponProjectile(w, projectiles, {
       x: tx,
       y: ty,
       vx: 0,
@@ -386,8 +411,9 @@ function fireHolyWater(
       pierce: w.pierce,
       type: WeaponType.HOLY_WATER,
       knockback: w.knockback,
-    });
+    }) !== undefined || fired;
   }
+  return fired;
 }
 
 export function getGarlicRadius(w: Weapon, player: Player): number {
@@ -446,9 +472,9 @@ export function updateBiblePositions(projectiles: Projectile[], player: Player) 
 export function updateGarlicAura(
   garlicWeapon: Weapon,
   player: Player,
-  enemies: Enemy[],
   dt: number,
-  tickTimer: { value: number }
+  tickTimer: { value: number },
+  enemyQuery: EnemyQuery
 ): { hits: Array<{ x: number; y: number; dmg: number }> } {
   const hits: Array<{ x: number; y: number; dmg: number }> = [];
   tickTimer.value += dt;
@@ -458,8 +484,8 @@ export function updateGarlicAura(
   const radius = getGarlicRadius(garlicWeapon, player);
   const dmg = garlicWeapon.damage * player.might;
   const hasRepulsion = hasModifier(garlicWeapon, GenericModifierType.REPULSION_FIELD);
-  for (const e of enemies) {
-    if (e.hp <= 0) continue;
+  const hitEnemy = (e: Enemy) => {
+    if (e.hp <= 0) return;
     const dx = e.x - player.x;
     const dy = e.y - player.y;
     const hitRadius = radius + e.radius;
@@ -473,6 +499,8 @@ export function updateGarlicAura(
       }
       hits.push({ x: e.x, y: e.y, dmg });
     }
-  }
+  };
+
+  enemyQuery.forNearby(player.x, player.y, radius, hitEnemy);
   return { hits };
 }

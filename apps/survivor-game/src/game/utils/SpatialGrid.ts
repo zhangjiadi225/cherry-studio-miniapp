@@ -1,5 +1,5 @@
 export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: number }> {
-  private buckets = new Map<string, T[]>();
+  private buckets = new Map<number, Map<number, T[]>>();
 
   constructor(private readonly cellSize: number) {}
 
@@ -7,11 +7,17 @@ export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: 
     this.buckets.clear();
     for (const item of items) {
       if ((item.hp ?? 1) <= 0) continue;
-      const key = this.getKey(item.x, item.y);
-      let bucket = this.buckets.get(key);
+      const gx = Math.floor(item.x / this.cellSize);
+      const gy = Math.floor(item.y / this.cellSize);
+      let row = this.buckets.get(gx);
+      if (!row) {
+        row = new Map();
+        this.buckets.set(gx, row);
+      }
+      let bucket = row.get(gy);
       if (!bucket) {
         bucket = [];
-        this.buckets.set(key, bucket);
+        row.set(gy, bucket);
       }
       bucket.push(item);
     }
@@ -24,8 +30,10 @@ export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: 
     const maxY = Math.floor((y + radius) / this.cellSize);
 
     for (let gx = minX; gx <= maxX; gx++) {
+      const row = this.buckets.get(gx);
+      if (!row) continue;
       for (let gy = minY; gy <= maxY; gy++) {
-        const bucket = this.buckets.get(`${gx}:${gy}`);
+        const bucket = row.get(gy);
         if (!bucket) continue;
         for (const item of bucket) {
           if ((item.hp ?? 1) <= 0) continue;
@@ -38,7 +46,11 @@ export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: 
     }
   }
 
-  private getKey(x: number, y: number): string {
-    return `${Math.floor(x / this.cellSize)}:${Math.floor(y / this.cellSize)}`;
+  collectNearby(x: number, y: number, radius: number, out: T[]): number {
+    out.length = 0;
+    this.forNearby(x, y, radius, (item) => {
+      out.push(item);
+    });
+    return out.length;
   }
 }

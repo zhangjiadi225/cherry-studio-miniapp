@@ -1,8 +1,7 @@
 import { Particle } from '../types';
 import { randFloat } from '../utils/math';
 import { pools } from '../utils/PoolManager';
-
-const MAX_ACTIVE_PARTICLES = 1200;
+import { MAX_ACTIVE_PARTICLES } from '../constants';
 
 function hasParticleCapacity(particles: Particle[]): boolean {
   return particles.length < MAX_ACTIVE_PARTICLES;

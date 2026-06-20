@@ -1,5 +1,5 @@
 import type { RenderContext } from './WorldRenderer';
-import type { Player, Enemy, UpgradeOption, TouchJoystickState, WeaponType } from '../types';
+import type { Player, Enemy, UpgradeOption, TouchJoystickState, WeaponType, PerformanceStats } from '../types';
 import { COLORS, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA, GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA } from '../constants';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
@@ -1760,4 +1760,40 @@ export function drawGameOver(rc: RenderContext, stats: {
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ffffff';
   ctx.fillText('返回桌面', w / 2, btnY + btnH / 2);
+}
+
+export function drawPerformanceOverlay(rc: RenderContext, stats: PerformanceStats) {
+  const { ctx } = rc;
+  const x = 12;
+  const y = 96;
+  const w = 176;
+  const h = 150;
+  const fpsColor = stats.fps >= 55 ? '#8fffa8' : stats.fps >= 45 ? '#ffd166' : '#ff6b6b';
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.62)';
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 6);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.font = '12px "Segoe UI", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = fpsColor;
+  ctx.fillText(`FPS ${stats.fps.toFixed(0)}`, x + 10, y + 8);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.82)';
+  ctx.fillText(`Frame ${stats.frameMs.toFixed(1)} ms`, x + 10, y + 28);
+  ctx.fillText(`Update ${stats.updateMs.toFixed(1)} ms`, x + 10, y + 46);
+  ctx.fillText(`Render ${stats.renderMs.toFixed(1)} ms`, x + 10, y + 64);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.68)';
+  ctx.fillText(`Enemies ${stats.enemies}`, x + 10, y + 88);
+  ctx.fillText(`Proj ${stats.projectiles} / EProj ${stats.enemyProjectiles}`, x + 10, y + 106);
+  ctx.fillText(`Particles ${stats.particles}`, x + 10, y + 124);
+  ctx.fillText(`DMG ${stats.damageNumbers} / Gems ${stats.xpGems}`, x + 10, y + 142);
+  ctx.restore();
 }

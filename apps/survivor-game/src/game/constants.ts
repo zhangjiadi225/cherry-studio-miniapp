@@ -17,6 +17,10 @@ export const SPAWN_INTERVAL_MIN = 0.25;
 export const SPAWN_DISTANCE = 600;
 export const BOSS_TIMES = [300, 600]; // 5min, 10min
 export const MAX_ENEMIES = 800;
+export const MAX_ACTIVE_PLAYER_PROJECTILES = 420;
+export const MAX_ACTIVE_ENEMY_PROJECTILES = 360;
+export const MAX_ACTIVE_PARTICLES = 800;
+export const MAX_ACTIVE_DAMAGE_NUMBERS = 220;
 
 // ===== Player =====
 export const PLAYER_RADIUS = 14;

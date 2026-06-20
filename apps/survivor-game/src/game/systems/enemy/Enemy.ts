@@ -12,7 +12,6 @@ import {
 } from '../../constants';
 import type { DifficultyParams } from '../../data/difficulty';
 import { circlesOverlap } from '../../utils/math';
-import { getBloodPoolSlowFactor } from '../../utils/collision';
 import { pools } from '../../utils/PoolManager';
 import type { MapSystem } from '../map/MapSystem';
 import { getEnemyEngagementProfile } from './EnemyAttack';
@@ -76,8 +75,7 @@ export function updateEnemy(
 
   let speedMult = 1;
   if (mapSystem) {
-    const nearbyObs = mapSystem.getNearby(e.x - 100, e.y - 100, e.x + 100, e.y + 100);
-    speedMult = getBloodPoolSlowFactor(nearbyObs, e.x, e.y, e.radius);
+    speedMult = mapSystem.getBloodPoolSlowFactor(e.x, e.y, e.radius);
   }
 
   const dx = player.x - e.x;

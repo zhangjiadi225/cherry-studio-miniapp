@@ -1,31 +1,28 @@
 import { Enemy, Projectile, Particle, DamageNumber, WeaponType, type GenericModifierType } from '../../types';
-import { ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from '../../constants';
+import { ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ACTIVE_PLAYER_PROJECTILES } from '../../constants';
 import { damageEnemy } from '../enemy/Enemy';
 import type { MapSystem } from '../map/MapSystem';
-import { createDamageNumber } from '../../effects/DamageNumber';
+import { pushDamageNumber } from '../../effects/DamageNumber';
 import { spawnExplosionParticles, spawnHitParticles } from '../../effects/Particle';
 import { eventBus, GameEvent } from '../../events';
 import { updateProjectile } from '../weapon/Weapon';
 import { pools } from '../../utils/PoolManager';
-import { SpatialGrid } from '../../utils/SpatialGrid';
 import { circlesOverlap } from '../../utils/math';
+import type { EnemyQuery } from '../enemy/EnemyQuery';
 
 const MODIFIERS = Object.values(GENERIC_MODIFIER_DATA);
 const PROJECTILE_COLLISION_LOOKUP_PADDING = 64;
 
 export interface ProjectileCombatContext {
   projectiles: Projectile[];
-  enemies: Enemy[];
+  enemyQuery: EnemyQuery;
   mapSystem: MapSystem;
   particles: Particle[];
   damageNumbers: DamageNumber[];
 }
 
 export class ProjectileCombat {
-  private readonly enemyGrid = new SpatialGrid<Enemy>(240);
-
   update(ctx: ProjectileCombatContext, dt: number) {
-    this.enemyGrid.rebuild(ctx.enemies);
     const projectileCount = ctx.projectiles.length;
     for (let i = 0; i < projectileCount; i++) {
       const projectile = ctx.projectiles[i];
@@ -43,7 +40,7 @@ export class ProjectileCombat {
       }
 
       let projectileExpired = false;
-      this.enemyGrid.forNearby(
+      ctx.enemyQuery.forNearby(
         projectile.x,
         projectile.y,
         projectile.radius + PROJECTILE_COLLISION_LOOKUP_PADDING,
@@ -109,7 +106,7 @@ export class ProjectileCombat {
 
     const dmgColor = this.getProjectileDamageColor(projectile);
     const dmgSize = projectile.damage >= 30 ? 18 : projectile.damage >= 20 ? 16 : 14;
-    ctx.damageNumbers.push(createDamageNumber(enemy.x, enemy.y, projectile.damage, dmgColor, dmgSize));
+    pushDamageNumber(ctx.damageNumbers, enemy.x, enemy.y, projectile.damage, dmgColor, dmgSize);
     if (knockbackModifier) {
       this.triggerModifierFeedback(ctx, knockbackModifier.id, enemy.x, enemy.y);
     }
@@ -214,11 +211,11 @@ export class ProjectileCombat {
       innerColor: '#f0ddff', ringCount: 5,
     });
 
-    this.enemyGrid.forNearby(projectile.x, projectile.y, radius, (target) => {
+    ctx.enemyQuery.forNearby(projectile.x, projectile.y, radius, (target) => {
       const dir = { x: target.x - projectile.x, y: target.y - projectile.y };
       const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
       damageEnemy(target, damage, (dir.x / len) * projectile.knockback * 0.4, (dir.y / len) * projectile.knockback * 0.4);
-      ctx.damageNumbers.push(createDamageNumber(target.x, target.y, damage, '#c49cff', 12));
+      pushDamageNumber(ctx.damageNumbers, target.x, target.y, damage, '#c49cff', 12);
     });
   }
 
@@ -236,7 +233,7 @@ export class ProjectileCombat {
       innerColor: '#ffffff', ringCount: 7,
     });
 
-    this.enemyGrid.forNearby(source.x, source.y, radius, (target) => {
+    ctx.enemyQuery.forNearby(source.x, source.y, radius, (target) => {
       if (target.hp <= 0 || target.id === source.id) return;
       const dx = target.x - source.x;
       const dy = target.y - source.y;
@@ -244,14 +241,14 @@ export class ProjectileCombat {
       if (dSq > radius * radius) return;
       const len = Math.sqrt(dSq) || 1;
       damageEnemy(target, damage, (dx / len) * projectile.knockback * 0.55, (dy / len) * projectile.knockback * 0.55);
-      ctx.damageNumbers.push(createDamageNumber(target.x, target.y, damage, color, 12));
+      pushDamageNumber(ctx.damageNumbers, target.x, target.y, damage, color, 12);
     });
   }
 
   private spawnChainExplosion(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy) {
     const chainRadius = 260;
     const targets: Enemy[] = [];
-    this.enemyGrid.forNearby(source.x, source.y, chainRadius, (target) => {
+    ctx.enemyQuery.forNearby(source.x, source.y, chainRadius, (target) => {
       if (target.hp <= 0 || target.id === source.id || targets.length >= 2) return;
       const dx = target.x - source.x;
       const dy = target.y - source.y;
@@ -265,7 +262,7 @@ export class ProjectileCombat {
       });
       const damage = projectile.damage * 0.32;
       damageEnemy(target, damage, 0, 0);
-      ctx.damageNumbers.push(createDamageNumber(target.x, target.y, damage, '#ffd166', 12));
+      pushDamageNumber(ctx.damageNumbers, target.x, target.y, damage, '#ffd166', 12);
     }
   }
 
@@ -273,7 +270,7 @@ export class ProjectileCombat {
     let best: Enemy | undefined;
     let bestDistSq = Infinity;
     const chainRadius = 240;
-    this.enemyGrid.forNearby(source.x, source.y, chainRadius, (target) => {
+    ctx.enemyQuery.forNearby(source.x, source.y, chainRadius, (target) => {
       if (target.hp <= 0 || target.id === source.id || projectile.hitEnemies.has(target.id)) return;
       const dx = target.x - source.x;
       const dy = target.y - source.y;
@@ -293,7 +290,7 @@ export class ProjectileCombat {
     spawnHitParticles(ctx.particles, best.x, best.y, '#bde7ff', 6, {
       speed: 130, life: 0.35, radius: 2.5, type: 'star', glow: true,
     });
-    ctx.damageNumbers.push(createDamageNumber(best.x, best.y, damage, '#bde7ff', 13));
+    pushDamageNumber(ctx.damageNumbers, best.x, best.y, damage, '#bde7ff', 13);
     return true;
   }
 
@@ -307,6 +304,7 @@ export class ProjectileCombat {
     const speed = Math.max(220, Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) || 320);
     const baseAngle = Math.atan2(projectile.vy, projectile.vx || 1);
     for (const offset of [-0.45, 0.45]) {
+      if (ctx.projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) break;
       const child = pools.projectiles.acquire();
       const angle = baseAngle + offset;
       child.x = projectile.x;

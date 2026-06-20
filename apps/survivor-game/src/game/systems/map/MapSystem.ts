@@ -1,11 +1,11 @@
 import { MapObstacle } from '../../types';
 import { hashXY } from '../../utils/math';
 import { circleRectOverlap, pushCircleFromRect } from '../../utils/collision';
-import { ARENA_SIZE, OBSTACLE_CELL_SIZE, OBSTACLE_HP, BLOOD_POOL_RADIUS, MAGIC_CIRCLE_HEAL_RATE, MAGIC_CIRCLE_RADIUS } from '../../constants';
+import { ARENA_SIZE, OBSTACLE_CELL_SIZE, OBSTACLE_HP, BLOOD_POOL_RADIUS, BLOOD_POOL_SLOW } from '../../constants';
 
 export class MapSystem {
   private obstacles: MapObstacle[] = [];
-  private grid = new Map<string, MapObstacle[]>();
+  private grid = new Map<number, Map<number, MapObstacle[]>>();
   private halfArena = ARENA_SIZE / 2;
 
   generate(): void {
@@ -58,11 +58,17 @@ export class MapSystem {
 
         this.obstacles.push(obstacle);
 
-        const cellKey = `${Math.floor(ox / (cellSize * 2))},${Math.floor(oy / (cellSize * 2))}`;
-        let bucket = this.grid.get(cellKey);
+        const cx = Math.floor(ox / (cellSize * 2));
+        const cy = Math.floor(oy / (cellSize * 2));
+        let row = this.grid.get(cx);
+        if (!row) {
+          row = new Map();
+          this.grid.set(cx, row);
+        }
+        let bucket = row.get(cy);
         if (!bucket) {
           bucket = [];
-          this.grid.set(cellKey, bucket);
+          row.set(cy, bucket);
         }
         bucket.push(obstacle);
       }
@@ -71,66 +77,96 @@ export class MapSystem {
 
   getNearby(minX: number, minY: number, maxX: number, maxY: number): MapObstacle[] {
     const result: MapObstacle[] = [];
+    this.forNearby(minX, minY, maxX, maxY, (obs) => result.push(obs));
+    return result;
+  }
+
+  forNearby(minX: number, minY: number, maxX: number, maxY: number, visit: (obs: MapObstacle) => void): void {
     const cellSize = OBSTACLE_CELL_SIZE * 2;
     const cx0 = Math.floor(minX / cellSize);
     const cy0 = Math.floor(minY / cellSize);
     const cx1 = Math.floor(maxX / cellSize);
     const cy1 = Math.floor(maxY / cellSize);
     for (let cx = cx0; cx <= cx1; cx++) {
+      const row = this.grid.get(cx);
+      if (!row) continue;
       for (let cy = cy0; cy <= cy1; cy++) {
-        const bucket = this.grid.get(`${cx},${cy}`);
+        const bucket = row.get(cy);
         if (!bucket) continue;
         for (let i = bucket.length - 1; i >= 0; i--) {
           if (bucket[i].hp <= 0) {
             bucket[i] = bucket[bucket.length - 1];
             bucket.pop();
           } else {
-            result.push(bucket[i]);
+            visit(bucket[i]);
           }
         }
       }
     }
-    return result;
   }
 
   getVisible(camX: number, camY: number, viewW: number, viewH: number): MapObstacle[] {
-    return this.getNearby(
+    return this.collectVisible(camX, camY, viewW, viewH, []);
+  }
+
+  collectVisible(camX: number, camY: number, viewW: number, viewH: number, out: MapObstacle[]): MapObstacle[] {
+    out.length = 0;
+    this.forNearby(
       camX - viewW / 2 - 100,
       camY - viewH / 2 - 100,
       camX + viewW / 2 + 100,
-      camY + viewH / 2 + 100
+      camY + viewH / 2 + 100,
+      (obs) => out.push(obs)
     );
+    return out;
   }
 
   handleCircleCollision(x: number, y: number, radius: number): { x: number; y: number } {
-    const nearby = this.getNearby(x - 100, y - 100, x + 100, y + 100);
     let pushX = 0;
     let pushY = 0;
-    for (const obs of nearby) {
-      if (obs.type === 'blood_pool' || obs.type === 'magic_circle') continue;
-      if (obs.hp <= 0) continue;
+    this.forNearby(x - 100, y - 100, x + 100, y + 100, (obs) => {
+      if (obs.type === 'blood_pool' || obs.type === 'magic_circle') return;
+      if (obs.hp <= 0) return;
       const push = pushCircleFromRect(x + pushX, y + pushY, radius, obs.x, obs.y, obs.width, obs.height);
       if (push) {
         pushX += push.x;
         pushY += push.y;
       }
-    }
+    });
     return { x: pushX, y: pushY };
   }
 
   handleProjectileCollision(px: number, py: number, radius: number): boolean {
-    const nearby = this.getNearby(px - 50, py - 50, px + 50, py + 50);
-    for (const obs of nearby) {
-      if (obs.type === 'blood_pool' || obs.type === 'magic_circle') continue;
-      if (obs.hp <= 0) continue;
+    return this.projectileHitsSolidObstacle(px, py, radius, true);
+  }
+
+  projectileHitsSolidObstacle(px: number, py: number, radius: number, damageBoneWall = false): boolean {
+    let hit = false;
+    this.forNearby(px - 50, py - 50, px + 50, py + 50, (obs) => {
+      if (hit) return;
+      if (obs.type === 'blood_pool' || obs.type === 'magic_circle') return;
+      if (obs.hp <= 0) return;
       if (circleRectOverlap(px, py, radius, obs.x, obs.y, obs.width, obs.height)) {
-        if (obs.type === 'bone_wall') {
+        if (damageBoneWall && obs.type === 'bone_wall') {
           obs.hp -= 1;
         }
-        return true;
+        hit = true;
       }
-    }
-    return false;
+    });
+    return hit;
+  }
+
+  getBloodPoolSlowFactor(x: number, y: number, radius: number): number {
+    let slowest = 1;
+    this.forNearby(x - 100, y - 100, x + 100, y + 100, (obs) => {
+      if (obs.type !== 'blood_pool') return;
+      const dx = x - obs.x;
+      const dy = y - obs.y;
+      if (dx * dx + dy * dy < (radius + obs.radius) * (radius + obs.radius) && BLOOD_POOL_SLOW < slowest) {
+        slowest = BLOOD_POOL_SLOW;
+      }
+    });
+    return slowest;
   }
 
   getObstacles(): MapObstacle[] {

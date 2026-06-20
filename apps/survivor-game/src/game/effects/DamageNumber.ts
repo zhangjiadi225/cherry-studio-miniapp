@@ -1,4 +1,5 @@
 import { DamageNumber } from '../types';
+import { MAX_ACTIVE_DAMAGE_NUMBERS } from '../constants';
 import { pools } from '../utils/PoolManager';
 
 export function createDamageNumber(
@@ -17,6 +18,18 @@ export function createDamageNumber(
   d.color = color;
   d.size = size;
   return d;
+}
+
+export function pushDamageNumber(
+  numbers: DamageNumber[],
+  x: number, y: number,
+  value: number,
+  color: string = '#ffffff',
+  size: number = 16
+): boolean {
+  if (numbers.length >= MAX_ACTIVE_DAMAGE_NUMBERS) return false;
+  numbers.push(createDamageNumber(x, y, value, color, size));
+  return true;
 }
 
 export function updateDamageNumber(d: DamageNumber, dt: number): boolean {

@@ -1,6 +1,6 @@
 import {
   GameState, Enemy, Projectile, XPGem, Particle, DamageNumber, EnemyProjectile,
-  Camera, WeaponType, PassiveType, Weapon, GenericModifierType
+  Camera, WeaponType, PassiveType, Weapon, GenericModifierType, PerformanceStats, MapObstacle
 } from './types';
 import {
   GAME_DURATION, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
@@ -27,14 +27,16 @@ import {
   updateParticle, spawnHitParticles, spawnDeathParticles, spawnXPParticles,
   spawnExplosionParticles, spawnLevelUpParticles
 } from './effects/Particle';
-import { createDamageNumber, updateDamageNumber } from './effects/DamageNumber';
+import { pushDamageNumber, updateDamageNumber } from './effects/DamageNumber';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   loadMetaState, applyRunReward, getInitialShards,
   buyMetaUpgrade, selectSkin, CHARACTER_SKINS,
 } from './systems/meta/MetaProgression';
 import { MapSystem } from './systems/map/MapSystem';
+import { SpatialEnemyQuery } from './systems/enemy/EnemyQuery';
 import { pools, clearAllPools } from './utils/PoolManager';
+import { SpatialGrid } from './utils/SpatialGrid';
 import { eventBus, gameState, GameEvent } from './events';
 
 type ObjectiveBeat = {
@@ -50,6 +52,10 @@ const OBJECTIVE_BEATS: ObjectiveBeat[] = [
   { time: 260, message: 'Boss即将到来，保留魂晶购买补给' },
 ];
 
+const MINIMAP_REFRESH_INTERVAL = 0.15;
+const MINIMAP_WORLD_HALF_SIZE = 1500;
+const MINIMAP_QUERY_RADIUS = MINIMAP_WORLD_HALF_SIZE * Math.SQRT2;
+
 export class Game {
   private canvas: HTMLCanvasElement;
   private input: Input;
@@ -59,6 +65,8 @@ export class Game {
   private projectileCombat = new ProjectileCombat();
   private shop = new ShopSystem();
   private mapSystem = new MapSystem();
+  private enemyGrid = new SpatialGrid<Enemy>(240);
+  private enemyQuery = new SpatialEnemyQuery(this.enemyGrid);
   private camera: Camera;
   private meta: MetaState = loadMetaState();
   private desktopTab: DesktopTab = 'start';
@@ -68,6 +76,8 @@ export class Game {
   private enemies: Enemy[] = [];
   private projectiles: Projectile[] = [];
   private enemyProjectiles: EnemyProjectile[] = [];
+  private minimapEnemies: Enemy[] = [];
+  private visibleObstacles: MapObstacle[] = [];
   private xpGems: XPGem[] = [];
   private particles: Particle[] = [];
   private damageNumbers: DamageNumber[] = [];
@@ -87,6 +97,20 @@ export class Game {
   private objectiveTimer = 0;
   private damageFlashTimer = 0;
   private levelUpFlashTimer = 0;
+  private minimapRefreshTimer = 0;
+  private perfEnabled = false;
+  private perfStats: PerformanceStats = {
+    fps: 0,
+    updateMs: 0,
+    renderMs: 0,
+    frameMs: 0,
+    enemies: 0,
+    projectiles: 0,
+    enemyProjectiles: 0,
+    particles: 0,
+    damageNumbers: 0,
+    xpGems: 0,
+  };
   private garlicWeapon?: Weapon;
   private activeBoss?: Enemy;
   private lastDamageSource?: { enemyName: string; damage: number; time: number };
@@ -116,6 +140,7 @@ export class Game {
     this.input = new Input(canvas);
     this.renderer = new Renderer(canvas);
     this.camera = createCamera();
+    this.perfEnabled = this.shouldShowPerfOverlay();
 
     window.addEventListener('keydown', this.handleKeyDown);
     canvas.addEventListener('click', this.handleCanvasClick);
@@ -347,6 +372,7 @@ export class Game {
     this.enemies = [];
     this.projectiles = [];
     this.enemyProjectiles = [];
+    this.minimapEnemies.length = 0;
     this.xpGems = [];
     this.particles = [];
     this.damageNumbers = [];
@@ -364,6 +390,7 @@ export class Game {
     this.objectiveTimer = 4;
     this.damageFlashTimer = 0;
     this.levelUpFlashTimer = 0;
+    this.minimapRefreshTimer = 0;
     this.lastDamageSource = undefined;
     this.gameOverStats = undefined;
     this.spawner.reset();
@@ -386,11 +413,37 @@ export class Game {
     const rawDt = (time - this.lastTime) / 1000;
     this.lastTime = time;
     if (rawDt <= 1.0) {
+      const frameStart = performance.now();
       const dt = Math.min(0.05, rawDt);
+      const updateStart = performance.now();
       this.update(dt);
+      const updateMs = performance.now() - updateStart;
+      const renderStart = performance.now();
       this.render(time / 1000);
+      const renderMs = performance.now() - renderStart;
+      this.recordPerformanceStats(rawDt, updateMs, renderMs, performance.now() - frameStart);
     }
     this.animationFrameId = requestAnimationFrame(this.handleAnimationFrame);
+  }
+
+  private shouldShowPerfOverlay(): boolean {
+    const params = new URLSearchParams(window.location.search);
+    return params.has('perf') || window.localStorage.getItem('survivor_perf') === '1';
+  }
+
+  private recordPerformanceStats(rawDt: number, updateMs: number, renderMs: number, frameMs: number) {
+    const alpha = 0.12;
+    const smooth = (previous: number, next: number) => previous === 0 ? next : previous * (1 - alpha) + next * alpha;
+    this.perfStats.fps = smooth(this.perfStats.fps, rawDt > 0 ? 1 / rawDt : 0);
+    this.perfStats.updateMs = smooth(this.perfStats.updateMs, updateMs);
+    this.perfStats.renderMs = smooth(this.perfStats.renderMs, renderMs);
+    this.perfStats.frameMs = smooth(this.perfStats.frameMs, frameMs);
+    this.perfStats.enemies = this.enemies.length;
+    this.perfStats.projectiles = this.projectiles.length;
+    this.perfStats.enemyProjectiles = this.enemyProjectiles.length;
+    this.perfStats.particles = this.particles.length;
+    this.perfStats.damageNumbers = this.damageNumbers.length;
+    this.perfStats.xpGems = this.xpGems.length;
   }
 
   private update(dt: number) {
@@ -421,18 +474,20 @@ export class Game {
     this.updateEnemies(dt);
     this.updateEnemyProjectiles(dt);
     updateEnemyAttacks(this.enemies, this.player, this.enemyProjectiles, dt);
+    this.enemyGrid.rebuild(this.enemies);
+    this.updateMinimapEnemyCache(dt);
 
     for (const w of this.player.weapons) {
-      updateWeapon(w, this.player, this.enemies, this.projectiles, dt);
+      updateWeapon(w, this.player, this.projectiles, dt, this.enemyQuery);
     }
 
     if (this.garlicWeapon) {
-      const { hits } = updateGarlicAura(this.garlicWeapon, this.player, this.enemies, dt, this.garlicTickTimer);
+      const { hits } = updateGarlicAura(this.garlicWeapon, this.player, dt, this.garlicTickTimer, this.enemyQuery);
       const hasRepulsion = (this.garlicWeapon.modifierMask & GENERIC_MODIFIER_MASK[GenericModifierType.REPULSION_FIELD]) !== 0;
       const repulsionVisual = GENERIC_MODIFIER_DATA[GenericModifierType.REPULSION_FIELD].visual;
       for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
-        this.damageNumbers.push(createDamageNumber(hit.x, hit.y, hit.dmg, '#cccc66', 14));
+        pushDamageNumber(this.damageNumbers, hit.x, hit.y, hit.dmg, '#cccc66', 14);
         spawnHitParticles(this.particles, hit.x, hit.y, '#cccc66', 3, {
           speed: 60, life: 0.3, radius: 2, type: 'circle', glow: true,
         });
@@ -448,7 +503,7 @@ export class Game {
     updateBiblePositions(this.projectiles, this.player);
     this.projectileCombat.update({
       projectiles: this.projectiles,
-      enemies: this.enemies,
+      enemyQuery: this.enemyQuery,
       mapSystem: this.mapSystem,
       particles: this.particles,
       damageNumbers: this.damageNumbers,
@@ -539,6 +594,13 @@ export class Game {
     this.damageNumbers.length = write;
   }
 
+  private updateMinimapEnemyCache(dt: number) {
+    this.minimapRefreshTimer -= dt;
+    if (this.minimapRefreshTimer > 0) return;
+    this.minimapRefreshTimer = MINIMAP_REFRESH_INTERVAL;
+    this.enemyGrid.collectNearby(this.player.x, this.player.y, MINIMAP_QUERY_RADIUS, this.minimapEnemies);
+  }
+
   private releaseDeadEnemyProjectiles() {
     let write = 0;
     for (let read = 0; read < this.enemyProjectiles.length; read++) {
@@ -568,18 +630,18 @@ export class Game {
   }
 
   private updateMagicCircleHealing(dt: number) {
-    const nearbyObs = this.mapSystem.getNearby(
+    this.mapSystem.forNearby(
       this.player.x - MAGIC_CIRCLE_RADIUS, this.player.y - MAGIC_CIRCLE_RADIUS,
-      this.player.x + MAGIC_CIRCLE_RADIUS, this.player.y + MAGIC_CIRCLE_RADIUS
-    );
-    for (const obs of nearbyObs) {
-      if (obs.type !== 'magic_circle') continue;
-      const dx = this.player.x - obs.x;
-      const dy = this.player.y - obs.y;
-      if (dx * dx + dy * dy < obs.radius * obs.radius && this.player.hp < this.player.maxHp) {
-        this.player.hp = Math.min(this.player.maxHp, this.player.hp + MAGIC_CIRCLE_HEAL_RATE * dt);
+      this.player.x + MAGIC_CIRCLE_RADIUS, this.player.y + MAGIC_CIRCLE_RADIUS,
+      (obs) => {
+        if (obs.type !== 'magic_circle') return;
+        const dx = this.player.x - obs.x;
+        const dy = this.player.y - obs.y;
+        if (dx * dx + dy * dy < obs.radius * obs.radius && this.player.hp < this.player.maxHp) {
+          this.player.hp = Math.min(this.player.maxHp, this.player.hp + MAGIC_CIRCLE_HEAL_RATE * dt);
+        }
       }
-    }
+    );
   }
 
   private updateEnemies(dt: number) {
@@ -596,7 +658,7 @@ export class Game {
           eventBus.emit(GameEvent.PLAYER_HIT, dmg, e);
           shakeCamera(this.camera, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY);
           this.damageFlashTimer = 0.35;
-          this.damageNumbers.push(createDamageNumber(this.player.x, this.player.y, dmg, COLORS.danger, 20));
+          pushDamageNumber(this.damageNumbers, this.player.x, this.player.y, dmg, COLORS.danger, 20);
           spawnHitParticles(this.particles, this.player.x, this.player.y, COLORS.danger, 10, {
             speed: 180, life: 0.5, radius: 4, type: 'spark', glow: true,
           });
@@ -621,7 +683,7 @@ export class Game {
           eventBus.emit(GameEvent.PLAYER_HIT, dmg, p);
           shakeCamera(this.camera, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY * 0.75);
           this.damageFlashTimer = 0.28;
-          this.damageNumbers.push(createDamageNumber(this.player.x, this.player.y, dmg, COLORS.danger, 18));
+          pushDamageNumber(this.damageNumbers, this.player.x, this.player.y, dmg, COLORS.danger, 18);
           spawnHitParticles(this.particles, this.player.x, this.player.y, p.color, 8, {
             speed: 140, life: 0.42, radius: 3, type: 'spark', glow: true,
           });
@@ -677,7 +739,7 @@ export class Game {
 
     const heal = tryBloodZoneHeal(this.player);
     if (heal > 0) {
-      this.damageNumbers.push(createDamageNumber(this.player.x, this.player.y, heal, '#ff6666', 14));
+      pushDamageNumber(this.damageNumbers, this.player.x, this.player.y, heal, '#ff6666', 14);
     }
 
   }
@@ -828,9 +890,10 @@ export class Game {
     this.renderer.beginWorld(this.camera);
     this.renderer.drawGround(this.camera);
 
-    const visibleObstacles = this.mapSystem.getVisible(
+    const visibleObstacles = this.mapSystem.collectVisible(
       this.camera.x, this.camera.y,
-      this.renderer.getWidth(), this.renderer.getHeight()
+      this.renderer.getWidth(), this.renderer.getHeight(),
+      this.visibleObstacles
     );
     this.renderer.drawObstacles(visibleObstacles);
     this.renderer.drawArenaBounds(this.camera);
@@ -885,7 +948,7 @@ export class Game {
       this.killCount,
       this.objectiveTimer > 0 ? this.objectiveMessage : undefined
     );
-    this.renderer.drawMinimap(this.player, this.enemies);
+    this.renderer.drawMinimap(this.player, this.minimapEnemies);
     this.renderer.drawAudioButton(this.audio.isMuted());
     this.renderer.drawPauseButton();
     if (gameState.is('playing')) {
@@ -898,6 +961,7 @@ export class Game {
     if (this.bossWarningTimer > 0) this.renderer.drawBossWarning(this.bossWarningName, this.bossWarningTimer);
     if (this.damageFlashTimer > 0) this.renderer.drawDamageFlash(this.damageFlashTimer);
     if (this.levelUpFlashTimer > 0) this.renderer.drawLevelUpFlash(this.levelUpFlashTimer);
+    if (this.perfEnabled) this.renderer.drawPerformanceOverlay(this.perfStats);
 
     if (gameState.is('paused')) {
       this.renderer.drawPaused();

@@ -6,7 +6,6 @@ import {
   XP_BASE, XP_GROWTH, ARENA_HALF,
 } from '../../constants';
 import type { MapSystem } from '../map/MapSystem';
-import { getBloodPoolSlowFactor } from '../../utils/collision';
 import { getZone } from '../../utils/math';
 
 export function createPlayer(skinId: string = 'wanderer'): Player {
@@ -46,8 +45,7 @@ export function createPlayer(skinId: string = 'wanderer'): Player {
 export function updatePlayer(p: Player, dx: number, dy: number, dt: number, mapSystem?: MapSystem) {
   let speedMult = 1;
   if (mapSystem) {
-    const nearbyObs = mapSystem.getNearby(p.x - 100, p.y - 100, p.x + 100, p.y + 100);
-    speedMult = getBloodPoolSlowFactor(nearbyObs, p.x, p.y, p.radius);
+    speedMult = mapSystem.getBloodPoolSlowFactor(p.x, p.y, p.radius);
   }
 
   p.x += dx * p.speed * speedMult * dt;
