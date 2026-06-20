@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GenericModifierType } from '../../types';
+import { RUN_DIFFICULTY_PRESETS } from '../../data/runDifficulties';
 import {
   areModifierCardsUnlocked,
   canBuyMetaUpgrade,
@@ -22,10 +23,19 @@ describe('calculateSoulFireReward', () => {
 
   it('uses run completion percentage instead of in-run shard balance', () => {
     const threeMinuteReward = calculateSoulFireReward({ time: 180, kills: 200, level: 8 });
-    const victoryReward = calculateSoulFireReward({ time: 900, kills: 1200, level: 28 });
+    const victoryReward = calculateSoulFireReward({ time: 540, kills: 1200, level: 28 });
 
-    expect(threeMinuteReward).toBe(15);
+    expect(threeMinuteReward).toBe(19);
     expect(victoryReward).toBe(70);
+  });
+
+  it('scales final soul fire payout by run difficulty', () => {
+    const easyVictory = calculateSoulFireReward({ time: 420, kills: 1200, level: 28 }, RUN_DIFFICULTY_PRESETS.easy);
+    const hardVictory = calculateSoulFireReward({ time: 540, kills: 1200, level: 28 }, RUN_DIFFICULTY_PRESETS.hard);
+    const nightmareVictory = calculateSoulFireReward({ time: 720, kills: 1200, level: 28 }, RUN_DIFFICULTY_PRESETS.nightmare);
+
+    expect(easyVictory).toBeLessThan(hardVictory);
+    expect(nightmareVictory).toBeGreaterThan(hardVictory);
   });
 });
 
@@ -64,6 +74,7 @@ describe('meta star chart', () => {
     const meta = loadMetaState();
 
     expect(meta.unlockedUpgrades).toEqual([]);
+    expect(meta.selectedDifficulty).toBe('hard');
     expect(areModifierCardsUnlocked(meta)).toBe(false);
   });
 });

@@ -1,12 +1,13 @@
 import { Enemy, EnemyType, Player } from '../../types';
 import {
   ENEMY_DATA, SPAWN_DISTANCE,
-  BOSS_TIMES, MAX_ENEMIES,
+  MAX_ENEMIES,
   BOSS_HP_MULT, BOSS_DMG_MULT, BOSS_XP_MULT, BOSS_MINION_COUNT,
 } from '../../constants';
 import { createEnemy, getAvailableEnemyTypes } from './Enemy';
 import { randFloat, randInt, weightedRandom } from '../../utils/math';
 import { getDifficultyParams, type DifficultyParams } from '../../data/difficulty';
+import { getRunDifficultyPreset, type RunDifficultyPreset } from '../../data/runDifficulties';
 
 export class Spawner {
   private spawnTimer = 0;
@@ -29,15 +30,16 @@ export class Spawner {
     elapsed: number,
     difficulty: number,
     curseMult: number = 1,
-    count: number = 1
+    count: number = 1,
+    runDifficulty: RunDifficultyPreset = getRunDifficultyPreset()
   ) {
-    const difficultyParams = getDifficultyParams(elapsed);
-    const available = getAvailableEnemyTypes(elapsed, difficulty);
+    const difficultyParams = getDifficultyParams(elapsed, runDifficulty);
+    const available = getAvailableEnemyTypes(elapsed, difficulty, runDifficulty);
     if (available.length === 0) return;
 
     for (let i = 0; i < count; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
-      const type = this.pickEnemyType(available, elapsed, difficulty);
+      const type = this.pickEnemyType(available, elapsed, difficulty, runDifficulty);
       const pos = this.getSpawnPosition(player);
       enemies.push(createEnemy(type, pos.x, pos.y, difficulty, curseMult, true, false, difficultyParams));
     }
@@ -49,13 +51,14 @@ export class Spawner {
     elapsed: number,
     difficulty: number,
     dt: number,
-    curseMult: number = 1
+    curseMult: number = 1,
+    runDifficulty: RunDifficultyPreset = getRunDifficultyPreset()
   ) {
-    const difficultyParams = getDifficultyParams(elapsed);
-    for (const bossTime of BOSS_TIMES) {
+    const difficultyParams = getDifficultyParams(elapsed, runDifficulty);
+    for (const bossTime of runDifficulty.bossTimes) {
       if (elapsed >= bossTime && !this.bossSpawned.has(bossTime)) {
         this.bossSpawned.add(bossTime);
-        this.spawnBoss(enemies, player, difficulty, bossTime, curseMult, difficultyParams);
+        this.spawnBoss(enemies, player, difficulty, bossTime, curseMult, difficultyParams, runDifficulty);
       }
     }
 
@@ -63,7 +66,7 @@ export class Spawner {
     this.spawnTimer += dt;
     if (this.spawnTimer >= interval) {
       this.spawnTimer -= interval;
-      this.spawnWave(enemies, player, elapsed, difficulty, curseMult, difficultyParams);
+      this.spawnWave(enemies, player, elapsed, difficulty, curseMult, difficultyParams, runDifficulty);
     }
 
     this.markOverflowEnemies(enemies, player);
@@ -75,9 +78,10 @@ export class Spawner {
     elapsed: number,
     difficulty: number,
     curseMult: number,
-    difficultyParams: DifficultyParams
+    difficultyParams: DifficultyParams,
+    runDifficulty: RunDifficultyPreset
   ) {
-    const available = getAvailableEnemyTypes(elapsed, difficulty);
+    const available = getAvailableEnemyTypes(elapsed, difficulty, runDifficulty);
     if (available.length === 0) return;
 
     const availableSlots = difficultyParams.activeEnemyCap - enemies.length;
@@ -88,7 +92,7 @@ export class Spawner {
     for (let i = 0; i < count; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
 
-      const type = this.pickEnemyType(available, elapsed, difficulty);
+      const type = this.pickEnemyType(available, elapsed, difficulty, runDifficulty);
       const pos = this.getSpawnPosition(player);
       const isElite = Math.random() < difficultyParams.eliteChance;
       enemies.push(createEnemy(type, pos.x, pos.y, difficulty, curseMult, isElite, false, difficultyParams));
@@ -101,9 +105,11 @@ export class Spawner {
     difficulty: number,
     bossTime: number,
     curseMult: number,
-    difficultyParams: DifficultyParams
+    difficultyParams: DifficultyParams,
+    runDifficulty: RunDifficultyPreset
   ) {
-    const bossType = bossTime >= 600 ? EnemyType.WRAITH : EnemyType.DEMON;
+    const isLateBoss = runDifficulty.bossTimes.indexOf(bossTime) > 0;
+    const bossType = isLateBoss ? EnemyType.WRAITH : EnemyType.DEMON;
     const pos = this.getSpawnPosition(player);
 
     const boss = createEnemy(bossType, pos.x, pos.y, difficulty, curseMult, true, true, difficultyParams);
@@ -114,10 +120,11 @@ export class Spawner {
     boss.xpValue *= BOSS_XP_MULT;
     enemies.push(boss);
 
-    for (let i = 0; i < BOSS_MINION_COUNT; i++) {
-      const angle = (i / BOSS_MINION_COUNT) * Math.PI * 2;
+    const minionCount = Math.max(8, Math.round(BOSS_MINION_COUNT * runDifficulty.waveCountMult));
+    for (let i = 0; i < minionCount; i++) {
+      const angle = (i / minionCount) * Math.PI * 2;
       const d = 100 + Math.random() * 100;
-      const minionType = bossTime >= 600 ? EnemyType.GHOST : EnemyType.SKELETON;
+      const minionType = isLateBoss ? EnemyType.GHOST : EnemyType.SKELETON;
       enemies.push(createEnemy(
         minionType,
         pos.x + Math.cos(angle) * d,
@@ -157,7 +164,12 @@ export class Spawner {
     }
   }
 
-  private pickEnemyType(available: EnemyType[], elapsed: number, difficulty: number): EnemyType {
+  private pickEnemyType(
+    available: EnemyType[],
+    elapsed: number,
+    difficulty: number,
+    runDifficulty: RunDifficultyPreset
+  ): EnemyType {
     const weights = available.map(type => {
       const data = ENEMY_DATA[type];
       const timeSinceUnlock = elapsed - data.spawnAfter;
@@ -168,6 +180,9 @@ export class Spawner {
       }
       if (type === EnemyType.DEMON || type === EnemyType.WRAITH) {
         w *= Math.min(3, elapsed / 300);
+      }
+      if (type === EnemyType.CULTIST || type === EnemyType.DEMON || type === EnemyType.WRAITH) {
+        w *= runDifficulty.complexEnemyWeightMult;
       }
 
       return w;

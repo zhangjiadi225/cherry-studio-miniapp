@@ -1,7 +1,10 @@
+import { DEFAULT_RUN_DIFFICULTY_ID, getRunDifficultyPreset, type RunDifficultyPreset } from './runDifficulties';
+
 export interface DifficultyParams {
   difficulty: number;
   enemyHpMultiplier: number;
   enemySpeedMultiplier: number;
+  enemyDamageMultiplier: number;
   spawnInterval: number;
   waveBaseCount: number;
   activeEnemyCap: number;
@@ -60,17 +63,21 @@ function getInterpolatedRow(elapsed: number): DifficultyRow {
   return DIFFICULTY_TABLE[DIFFICULTY_TABLE.length - 1];
 }
 
-export function getDifficultyParams(elapsed: number): DifficultyParams {
+export function getDifficultyParams(
+  elapsed: number,
+  runDifficulty: RunDifficultyPreset = getRunDifficultyPreset(DEFAULT_RUN_DIFFICULTY_ID)
+): DifficultyParams {
   const clampedElapsed = Math.max(0, elapsed);
   const current = getInterpolatedRow(clampedElapsed);
 
   return {
     difficulty: Math.floor(clampedElapsed / 30),
-    enemyHpMultiplier: current.hp,
-    enemySpeedMultiplier: current.speed,
-    spawnInterval: current.interval,
-    waveBaseCount: current.wave,
-    activeEnemyCap: current.activeCap,
-    eliteChance: current.elite,
+    enemyHpMultiplier: current.hp * runDifficulty.hpMult,
+    enemySpeedMultiplier: current.speed * runDifficulty.speedMult,
+    enemyDamageMultiplier: runDifficulty.damageMult,
+    spawnInterval: current.interval * runDifficulty.spawnIntervalMult,
+    waveBaseCount: Math.max(1, Math.round(current.wave * runDifficulty.waveCountMult)),
+    activeEnemyCap: Math.max(12, Math.min(360, Math.round(current.activeCap * runDifficulty.activeCapMult))),
+    eliteChance: Math.min(0.45, current.elite * runDifficulty.eliteChanceMult),
   };
 }

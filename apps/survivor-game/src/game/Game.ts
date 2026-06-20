@@ -3,7 +3,7 @@ import {
   Camera, WeaponType, PassiveType, Weapon, GenericModifierType, PerformanceStats, MapObstacle
 } from './types';
 import {
-  GAME_DURATION, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
+  SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
   CONTACT_COOLDOWN,
   MAGIC_CIRCLE_HEAL_RATE, MAGIC_CIRCLE_RADIUS,
   GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK,
@@ -31,8 +31,9 @@ import { pushDamageNumber, updateDamageNumber } from './effects/DamageNumber';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   loadMetaState, applyRunReward, getInitialShards,
-  buyMetaUpgrade, selectSkin, CHARACTER_SKINS,
+  buyMetaUpgrade, selectSkin, selectRunDifficulty, CHARACTER_SKINS,
 } from './systems/meta/MetaProgression';
+import { getRunDifficultyPreset, type RunDifficultyPreset } from './data/runDifficulties';
 import { MapSystem } from './systems/map/MapSystem';
 import { SpatialEnemyQuery } from './systems/enemy/EnemyQuery';
 import { pools, clearAllPools } from './utils/PoolManager';
@@ -45,12 +46,23 @@ type ObjectiveBeat = {
   eliteAmbush?: number;
 };
 
-const OBJECTIVE_BEATS: ObjectiveBeat[] = [
-  { time: 12, message: '目标：收集魂晶，升级并购买构筑牌' },
-  { time: 90, message: '目标：准备补给，夜潮精英将在3:00出现' },
-  { time: 180, message: '夜潮精英出现，击败它获取大量魂晶', eliteAmbush: 2 },
-  { time: 260, message: 'Boss即将到来，保留魂晶购买补给' },
-];
+function formatClock(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(whole / 60);
+  const secs = whole % 60;
+  return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+function getObjectiveBeats(runDifficulty: RunDifficultyPreset): ObjectiveBeat[] {
+  const firstBossTime = runDifficulty.bossTimes[0] ?? Math.min(180, runDifficulty.duration * 0.42);
+  const firstEliteTime = Math.max(75, Math.min(120, firstBossTime - 60));
+  return [
+    { time: 12, message: '目标：收集魂晶，升级并购买构筑牌' },
+    { time: Math.max(45, firstEliteTime - 50), message: `目标：准备补给，夜潮精英将在${formatClock(firstEliteTime)}出现` },
+    { time: firstEliteTime, message: '夜潮精英出现，击败它获取大量魂晶', eliteAmbush: 2 },
+    { time: Math.max(firstEliteTime + 20, firstBossTime - 30), message: 'Boss即将到来，保留魂晶购买补给' },
+  ];
+}
 
 const MINIMAP_REFRESH_INTERVAL = 0.15;
 const MINIMAP_WORLD_HALF_SIZE = 1500;
@@ -69,6 +81,8 @@ export class Game {
   private enemyQuery = new SpatialEnemyQuery(this.enemyGrid);
   private camera: Camera;
   private meta: MetaState = loadMetaState();
+  private runDifficulty: RunDifficultyPreset = getRunDifficultyPreset(this.meta.selectedDifficulty);
+  private objectiveBeats: ObjectiveBeat[] = getObjectiveBeats(this.runDifficulty);
   private desktopTab: DesktopTab = 'start';
   private codexTab: CodexTab = 'weapons';
   private hoveredStarId?: MetaUpgradeNode['id'];
@@ -121,6 +135,7 @@ export class Game {
     weaponNames: string[];
     soulFireEarned: number;
     totalSoulFire: number;
+    runDuration: number;
     deathCause?: string;
     advice?: string;
   };
@@ -297,16 +312,21 @@ export class Game {
     const tabs = this.renderer.getDesktopTabRects();
     for (const tab of tabs) {
       if (x >= tab.x && x <= tab.x + tab.w && y >= tab.y && y <= tab.y + tab.h) {
-        if (tab.id === 'start') {
-          this.startGame();
-          return;
-        }
         this.setDesktopTab(tab.id);
         return;
       }
     }
 
     if (this.desktopTab === 'start') {
+      const difficultyCards = this.renderer.getRunDifficultyCardRects();
+      for (const card of difficultyCards) {
+        if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
+          this.meta = selectRunDifficulty(this.meta, card.id);
+          this.runDifficulty = getRunDifficultyPreset(this.meta.selectedDifficulty);
+          this.objectiveBeats = getObjectiveBeats(this.runDifficulty);
+          return;
+        }
+      }
       const button = this.renderer.getDesktopStartButtonRect();
       if (x >= button.x && x <= button.x + button.w && y >= button.y && y <= button.y + button.h) {
         this.startGame();
@@ -362,6 +382,8 @@ export class Game {
 
   private startGame() {
     gameState.transition('start');
+    this.runDifficulty = getRunDifficultyPreset(this.meta.selectedDifficulty);
+    this.objectiveBeats = getObjectiveBeats(this.runDifficulty);
     resetEnemyIds();
     clearAllPools();
     this.player = createPlayer(this.meta.selectedSkin);
@@ -386,7 +408,7 @@ export class Game {
     this.bossWarningName = '';
     this.bossWarningShown.clear();
     this.objectiveShown.clear();
-    this.objectiveMessage = '目标：活到3:00，完成第一轮构筑';
+    this.objectiveMessage = `目标：在${this.runDifficulty.name}难度活到${formatClock(this.runDifficulty.duration)}`;
     this.objectiveTimer = 4;
     this.damageFlashTimer = 0;
     this.levelUpFlashTimer = 0;
@@ -452,10 +474,11 @@ export class Game {
     this.elapsed += dt;
     this.difficulty = Math.floor(this.elapsed / 30);
 
-    for (const bossTime of [300, 600]) {
+    for (let i = 0; i < this.runDifficulty.bossTimes.length; i++) {
+      const bossTime = this.runDifficulty.bossTimes[i];
       if (this.elapsed >= bossTime - 10 && this.elapsed < bossTime && !this.bossWarningShown.has(bossTime)) {
         this.bossWarningTimer = 2;
-        this.bossWarningName = bossTime >= 600 ? '亡灵领主' : '恶魔领主';
+        this.bossWarningName = i > 0 ? '亡灵领主' : '恶魔领主';
         this.bossWarningShown.add(bossTime);
         eventBus.emit(GameEvent.BOSS_WARNING, this.bossWarningName, bossTime);
       }
@@ -470,10 +493,10 @@ export class Game {
 
     this.updateMagicCircleHealing(dt);
     updateCamera(this.camera, this.player, dt);
-    this.spawner.update(this.enemies, this.player, this.elapsed, this.difficulty, dt, this.player.curse);
+    this.spawner.update(this.enemies, this.player, this.elapsed, this.difficulty, dt, this.player.curse, this.runDifficulty);
     this.updateEnemies(dt);
     this.updateEnemyProjectiles(dt);
-    updateEnemyAttacks(this.enemies, this.player, this.enemyProjectiles, dt);
+    updateEnemyAttacks(this.enemies, this.player, this.enemyProjectiles, dt, this.runDifficulty);
     this.enemyGrid.rebuild(this.enemies);
     this.updateMinimapEnemyCache(dt);
 
@@ -529,7 +552,7 @@ export class Game {
 
     this.checkPlayerDeath();
 
-    if (this.elapsed >= GAME_DURATION && gameState.is('playing')) {
+    if (this.elapsed >= this.runDifficulty.duration && gameState.is('playing')) {
       gameState.transition('timeout');
       this.recordRunEnd();
       eventBus.emit(GameEvent.GAME_OVER, {
@@ -775,7 +798,7 @@ export class Game {
       time: this.elapsed,
       kills: this.killCount,
       level: this.player.level,
-    });
+    }, this.runDifficulty);
     this.gameOverStats = {
       time: this.elapsed,
       kills: this.killCount,
@@ -783,6 +806,7 @@ export class Game {
       weaponNames: this.player.weapons.map(w => WEAPON_DATA[w.type].name),
       soulFireEarned: this.meta.soulFire - previousSoulFire,
       totalSoulFire: this.meta.soulFire,
+      runDuration: this.runDifficulty.duration,
       deathCause: this.getDeathCause(),
       advice: this.getRunAdvice(),
     };
@@ -791,7 +815,7 @@ export class Game {
   private updateObjectiveBeats(dt: number) {
     if (this.objectiveTimer > 0) this.objectiveTimer -= dt;
 
-    for (const beat of OBJECTIVE_BEATS) {
+    for (const beat of this.objectiveBeats) {
       if (this.elapsed < beat.time || this.objectiveShown.has(beat.time)) continue;
 
       this.objectiveShown.add(beat.time);
@@ -805,7 +829,8 @@ export class Game {
           this.elapsed,
           this.difficulty,
           this.player.curse,
-          beat.eliteAmbush
+          beat.eliteAmbush,
+          this.runDifficulty
         );
         shakeCamera(this.camera, 0.18, 5);
       }
@@ -813,14 +838,14 @@ export class Game {
   }
 
   private getDeathCause(): string | undefined {
-    if (this.elapsed >= GAME_DURATION) return undefined;
+    if (this.elapsed >= this.runDifficulty.duration) return undefined;
     if (!this.lastDamageSource) return '被夜潮包围';
     const secondsAgo = Math.max(0, Math.floor(this.elapsed - this.lastDamageSource.time));
     return `${this.lastDamageSource.enemyName}造成${this.lastDamageSource.damage}伤害 (${secondsAgo}s前)`;
   }
 
   private getRunAdvice(): string {
-    if (this.elapsed >= GAME_DURATION) return '胜利完成，下一局尝试更高诅咒或模块构筑。';
+    if (this.elapsed >= this.runDifficulty.duration) return '胜利完成，下一局尝试更高难度或模块构筑。';
     if (this.elapsed < 180) return '前3分钟优先买低成本武器升级，保留魂晶给战地口粮。';
     if (this.player.shards < 10) return '魂晶见底时少刷新商店，优先买能立即提升清怪的牌。';
     if (this.player.hp < this.player.maxHp * 0.35) return '低血量时购买战术补给，不要硬贪永久升级。';
@@ -946,7 +971,8 @@ export class Game {
       this.player,
       this.elapsed,
       this.killCount,
-      this.objectiveTimer > 0 ? this.objectiveMessage : undefined
+      this.objectiveTimer > 0 ? this.objectiveMessage : undefined,
+      this.runDifficulty.duration
     );
     this.renderer.drawMinimap(this.player, this.minimapEnemies);
     this.renderer.drawAudioButton(this.audio.isMuted());
@@ -964,7 +990,7 @@ export class Game {
     if (this.perfEnabled) this.renderer.drawPerformanceOverlay(this.perfStats);
 
     if (gameState.is('paused')) {
-      this.renderer.drawPaused();
+      this.renderer.drawPaused(this.player, this.elapsed, this.killCount, this.runDifficulty.name);
     } else if (gameState.is('upgrading')) {
       this.renderer.drawUpgradeScreen(
         this.shop.options,
@@ -982,9 +1008,10 @@ export class Game {
         weaponNames: this.player.weapons.map(w => WEAPON_DATA[w.type].name),
         soulFireEarned: 0,
         totalSoulFire: this.meta.soulFire,
+        runDuration: this.runDifficulty.duration,
         deathCause: this.getDeathCause(),
         advice: this.getRunAdvice(),
-      });
+      }, this.player);
     }
   }
 }

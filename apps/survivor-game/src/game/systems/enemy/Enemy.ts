@@ -11,6 +11,7 @@ import {
   ENEMY_KNOCKBACK_DECAY,
 } from '../../constants';
 import type { DifficultyParams } from '../../data/difficulty';
+import type { RunDifficultyPreset } from '../../data/runDifficulties';
 import { circlesOverlap } from '../../utils/math';
 import { pools } from '../../utils/PoolManager';
 import type { MapSystem } from '../map/MapSystem';
@@ -35,7 +36,7 @@ export function createEnemy(
   const data = ENEMY_DATA[type];
   const hpMult = (difficultyParams?.enemyHpMultiplier ?? (1 + difficulty * ENEMY_FALLBACK_HP_DIFFICULTY_STEP)) * curseMult;
   const spdMult = difficultyParams?.enemySpeedMultiplier ?? (1 + difficulty * ENEMY_FALLBACK_SPEED_DIFFICULTY_STEP);
-  const dmgMult = curseMult;
+  const dmgMult = curseMult * (difficultyParams?.enemyDamageMultiplier ?? 1);
   const eliteMult = isElite ? ELITE_STAT_MULT : 1;
   const enemy = pools.enemies.acquire();
 
@@ -139,11 +140,13 @@ function randInitialAttackCooldown(type: EnemyType, isBoss: boolean): number {
 
 export function getAvailableEnemyTypes(
   elapsed: number,
-  _difficulty: number
+  _difficulty: number,
+  runDifficulty?: RunDifficultyPreset
 ): EnemyType[] {
   const types: EnemyType[] = [];
+  const unlockTimeMult = runDifficulty?.enemyUnlockTimeMult ?? 1;
   for (const [type, data] of Object.entries(ENEMY_DATA)) {
-    if (data.spawnAfter <= elapsed) {
+    if (data.spawnAfter * unlockTimeMult <= elapsed) {
       types.push(type as EnemyType);
     }
   }

@@ -1,10 +1,15 @@
 import type { RenderContext } from './WorldRenderer';
 import type { Player, Enemy, UpgradeOption, TouchJoystickState, WeaponType, PerformanceStats } from '../types';
-import { COLORS, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA, GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA } from '../constants';
+import { COLORS, GAME_DURATION, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA, GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA } from '../constants';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   META_UPGRADES, CHARACTER_SKINS, hasMetaUpgrade, canBuyMetaUpgrade,
 } from '../systems/meta/MetaProgression';
+import {
+  RUN_DIFFICULTY_ORDER,
+  RUN_DIFFICULTY_PRESETS,
+  type RunDifficultyId,
+} from '../data/runDifficulties';
 import { getShopLayout, isMobileViewport } from '../systems/upgrade/ShopLayout';
 import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
 
@@ -101,7 +106,14 @@ function drawHudChip(
 
 // ──────────────────────────── HUD ────────────────────────────
 
-export function drawUI(rc: RenderContext, player: Player, elapsed: number, killCount: number, objective?: string) {
+export function drawUI(
+  rc: RenderContext,
+  player: Player,
+  elapsed: number,
+  killCount: number,
+  objective?: string,
+  runDuration: number = GAME_DURATION
+) {
   const { ctx, w, h } = rc;
   const mobile = isMobileViewport(w, h);
   const padding = mobile ? 10 : 16;
@@ -196,8 +208,9 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   ctx.fillText(`魂晶 ${Math.floor(player.shards)}`, shardX + shardW / 2, rowY + rowH / 2);
 
   // Phase indicator
-  const phase = elapsed < 60 ? '初期' : elapsed < 180 ? '前期' : elapsed < 300 ? '中期' : elapsed < 600 ? '后期' : '终局';
-  const phaseColor = elapsed < 60 ? '#88ff88' : elapsed < 180 ? '#ffff88' : elapsed < 300 ? '#ffaa44' : elapsed < 600 ? '#ff6644' : '#ff4444';
+  const finalPhaseStart = Math.max(300, runDuration - 120);
+  const phase = elapsed < 60 ? '初期' : elapsed < 180 ? '前期' : elapsed < 300 ? '中期' : elapsed < finalPhaseStart ? '后期' : '终局';
+  const phaseColor = elapsed < 60 ? '#88ff88' : elapsed < 180 ? '#ffff88' : elapsed < 300 ? '#ffaa44' : elapsed < finalPhaseStart ? '#ff6644' : '#ff4444';
   const timerW = mobile ? 86 : 100;
   const timerH = mobile ? 28 : 32;
   const timerY = mobile ? 58 : 8;
@@ -669,10 +682,43 @@ export function getDesktopStartButtonRect(w: number, h: number): Rect {
   const btnH = 64;
   return {
     x: w / 2 - btnW / 2,
-    y: h * 0.7,
+    y: h * 0.76,
     w: btnW,
     h: btnH,
   };
+}
+
+export function getRunDifficultyCardRects(w: number, h: number): Array<Rect & { id: RunDifficultyId }> {
+  const { content } = getMenuLayout(w, h);
+  const mobile = isMobileViewport(w, h);
+  if (mobile) {
+    const cardW = Math.min(420, content.w - 28);
+    const cardH = Math.min(92, Math.max(78, content.h * 0.16));
+    const gap = 10;
+    const totalH = cardH * RUN_DIFFICULTY_ORDER.length + gap * (RUN_DIFFICULTY_ORDER.length - 1);
+    const startY = content.y + Math.max(24, (content.h - totalH) * 0.38);
+    return RUN_DIFFICULTY_ORDER.map((id, index) => ({
+      id,
+      x: content.x + content.w / 2 - cardW / 2,
+      y: startY + index * (cardH + gap),
+      w: cardW,
+      h: cardH,
+    }));
+  }
+
+  const gap = 18;
+  const cardW = Math.min(260, Math.max(210, (content.w - gap * 2) / 3));
+  const cardH = Math.min(178, Math.max(148, content.h * 0.28));
+  const totalW = cardW * RUN_DIFFICULTY_ORDER.length + gap * (RUN_DIFFICULTY_ORDER.length - 1);
+  const startX = content.x + content.w / 2 - totalW / 2;
+  const y = content.y + content.h * 0.32;
+  return RUN_DIFFICULTY_ORDER.map((id, index) => ({
+    id,
+    x: startX + index * (cardW + gap),
+    y,
+    w: cardW,
+    h: cardH,
+  }));
 }
 
 function getMenuLayout(w: number, h: number): MenuLayout {
@@ -711,7 +757,7 @@ export function drawDesktop(
   drawDesktopBackdrop(rc);
 
   if (activeTab === 'start') {
-    drawStartButton(rc);
+    drawStartButton(rc, meta.selectedDifficulty);
   } else if (activeTab === 'skins') {
     drawSkinPanel(rc, meta);
   } else if (activeTab === 'growth') {
@@ -852,8 +898,68 @@ function drawDesktopBackdrop(rc: RenderContext) {
   }
 }
 
-function drawStartButton(rc: RenderContext) {
+function drawStartButton(rc: RenderContext, selectedDifficulty: RunDifficultyId) {
   const { ctx, w, h } = rc;
+  const mobile = isMobileViewport(w, h);
+  const cards = getRunDifficultyCardRects(w, h);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.font = `900 ${mobile ? 26 : 34}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('选择夜潮难度', w / 2, mobile ? h * 0.18 : h * 0.24);
+
+  for (const card of cards) {
+    const preset = RUN_DIFFICULTY_PRESETS[card.id];
+    const selected = preset.id === selectedDifficulty;
+    const accent = selected ? '#ffd166' : preset.id === 'nightmare' ? '#ff7a76' : preset.id === 'easy' ? '#9dffba' : '#8fe8ff';
+    ctx.save();
+    if (selected) {
+      ctx.shadowColor = colorWithAlpha(accent, 0.55);
+      ctx.shadowBlur = 20;
+    }
+    uiPanel(ctx, card.x, card.y, card.w, card.h, selected ? accent : colorWithAlpha(accent, 0.35), 12);
+    ctx.restore();
+
+    ctx.fillStyle = selected ? colorWithAlpha(accent, 0.18) : 'rgba(255,255,255,0.035)';
+    ctx.beginPath();
+    ctx.roundRect(card.x + 8, card.y + 8, card.w - 16, card.h - 16, 9);
+    ctx.fill();
+
+    ctx.textAlign = mobile ? 'left' : 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = `${mobile ? 22 : 28}px serif`;
+    ctx.fillStyle = accent;
+    const iconX = mobile ? card.x + 22 : card.x + card.w / 2;
+    ctx.fillText(preset.icon, iconX, card.y + (mobile ? 16 : 20));
+
+    ctx.font = `900 ${mobile ? 18 : 21}px ${DESKTOP_FONT}`;
+    ctx.fillStyle = selected ? '#fff4cf' : '#ffffff';
+    const titleX = mobile ? card.x + 58 : card.x + card.w / 2;
+    ctx.fillText(preset.name, titleX, card.y + (mobile ? 18 : 58));
+
+    ctx.font = `800 ${mobile ? 12 : 13}px ${DESKTOP_FONT}`;
+    ctx.fillStyle = accent;
+    ctx.fillText(preset.shortName, titleX, card.y + (mobile ? 43 : 88));
+
+    ctx.font = `${mobile ? 11 : 12}px ${DESKTOP_FONT}`;
+    ctx.fillStyle = 'rgba(225,232,250,0.72)';
+    if (mobile) {
+      drawWrappedText(ctx, preset.desc, card.x + 58, card.y + 62, card.w - 78, 14, 1);
+    } else {
+      ctx.textAlign = 'left';
+      drawWrappedText(ctx, preset.desc, card.x + 22, card.y + 118, card.w - 44, 17, 2);
+    }
+
+    if (selected) {
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      ctx.font = `800 12px ${DESKTOP_FONT}`;
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('已选择', card.x + card.w - 16, card.y + card.h - 14);
+    }
+  }
+
   const b = getDesktopStartButtonRect(w, h);
   ctx.save();
   ctx.shadowColor = 'rgba(255,140,60,0.5)';
@@ -1388,7 +1494,246 @@ function getWrappedLines(
   return lines;
 }
 
-export function drawPaused(rc: RenderContext) {
+function formatRunTime(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(whole / 60);
+  const secs = whole % 60;
+  return `${minutes}分${secs.toString().padStart(2, '0')}秒`;
+}
+
+function formatSignedPercent(value: number): string {
+  const pct = Math.round((value - 1) * 100);
+  return pct >= 0 ? `+${pct}%` : `${pct}%`;
+}
+
+function formatCooldownReduction(value: number): string {
+  return `-${Math.round(value * 100)}%`;
+}
+
+type RunSummaryRow = {
+  icon: string;
+  title: string;
+  detail: string;
+  accent?: string;
+};
+
+type RunStatItem = {
+  label: string;
+  value: string;
+  accent?: string;
+};
+
+function getModifierSummary(modifiers: readonly string[]): string {
+  if (modifiers.length === 0) return '暂无模块';
+  const counts = new Map<string, number>();
+  for (const modifier of modifiers) counts.set(modifier, (counts.get(modifier) ?? 0) + 1);
+  return [...counts.entries()]
+    .map(([modifier, count]) => {
+      const data = GENERIC_MODIFIER_DATA[modifier as keyof typeof GENERIC_MODIFIER_DATA];
+      return `${data?.name ?? modifier}${count > 1 ? ` x${count}` : ''}`;
+    })
+    .join('、');
+}
+
+function getRunWeaponRows(player: Player): RunSummaryRow[] {
+  if (player.weapons.length === 0) return [{ icon: '—', title: '暂无武器', detail: '本局还没有获得武器' }];
+  return player.weapons.map((weapon) => {
+    const data = WEAPON_DATA[weapon.type];
+    return {
+      icon: data.icon,
+      title: `${data.name} Lv${weapon.level}`,
+      detail: `伤害 ${Math.round(weapon.damage)} · 数量 ${weapon.count} · 冷却 ${weapon.cooldown.toFixed(1)}s`,
+      accent: '#ffb36b',
+    };
+  });
+}
+
+function getRunPassiveRows(player: Player): RunSummaryRow[] {
+  if (player.passives.length === 0) return [{ icon: '—', title: '暂无被动', detail: '本局还没有获得被动能力' }];
+  return player.passives.map((passive) => {
+    const data = PASSIVE_DATA[passive.type];
+    return {
+      icon: data.icon,
+      title: `${data.name} Lv${passive.level}`,
+      detail: data.desc,
+      accent: '#9dffba',
+    };
+  });
+}
+
+function getRunAbilityRows(player: Player): RunSummaryRow[] {
+  const rows = player.weapons
+    .filter((weapon) => weapon.modifiers.length > 0)
+    .map((weapon) => ({
+      icon: WEAPON_DATA[weapon.type].icon,
+      title: WEAPON_DATA[weapon.type].name,
+      detail: getModifierSummary(weapon.modifiers),
+      accent: '#d3a8ff',
+    }));
+  return rows.length > 0 ? rows : [{ icon: '—', title: '暂无通用能力', detail: '星图解锁后可在商店获得模块' }];
+}
+
+function getRunStatItems(player: Player): RunStatItem[] {
+  return [
+    { label: '生命', value: `${Math.ceil(Math.max(0, player.hp))}/${player.maxHp}`, accent: '#ff7a76' },
+    { label: '魂晶', value: `${Math.floor(player.shards)}`, accent: '#ffd166' },
+    { label: '伤害', value: formatSignedPercent(player.might), accent: '#ffb36b' },
+    { label: '范围', value: formatSignedPercent(player.area), accent: '#9dffba' },
+    { label: '冷却', value: formatCooldownReduction(player.cooldownReduction), accent: '#8fe8ff' },
+    { label: '护甲', value: `${player.armor}`, accent: '#d3a8ff' },
+    { label: '移速', value: `${Math.round(player.speed)}`, accent: '#8fe8ff' },
+    { label: '幸运', value: `${player.luck.toFixed(1)}`, accent: '#ffd166' },
+  ];
+}
+
+function drawRunStatGrid(ctx: CanvasRenderingContext2D, items: RunStatItem[], rect: Rect) {
+  const cols = rect.w < 560 ? 2 : 4;
+  const gap = 8;
+  const rows = Math.ceil(items.length / cols);
+  const cellW = (rect.w - gap * (cols - 1)) / cols;
+  const availableCellH = Math.max(20, (rect.h - gap * (rows - 1)) / rows);
+  const cellH = Math.min(46, availableCellH);
+
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const x = rect.x + (i % cols) * (cellW + gap);
+    const y = rect.y + Math.floor(i / cols) * (cellH + gap);
+    const accent = item.accent ?? '#8fe8ff';
+    ctx.fillStyle = 'rgba(12,16,28,0.82)';
+    ctx.beginPath();
+    ctx.roundRect(x, y, cellW, cellH, 8);
+    ctx.fill();
+    ctx.strokeStyle = colorWithAlpha(accent, 0.35);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x, y, cellW, cellH, 8);
+    ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 ${cellH < 28 ? 9 : rect.w < 560 ? 10 : 11}px ${DESKTOP_FONT}`;
+    ctx.fillStyle = 'rgba(220,230,250,0.66)';
+    ctx.fillText(item.label, x + 10, y + cellH / 2);
+    ctx.textAlign = 'right';
+    ctx.font = `900 ${cellH < 28 ? 11 : rect.w < 560 ? 13 : 15}px ${DESKTOP_FONT}`;
+    ctx.fillStyle = accent;
+    ctx.fillText(item.value, x + cellW - 10, y + cellH / 2);
+  }
+}
+
+function drawRunSection(
+  ctx: CanvasRenderingContext2D,
+  title: string,
+  rows: RunSummaryRow[],
+  rect: Rect,
+  accent: string
+) {
+  uiPanel(ctx, rect.x, rect.y, rect.w, rect.h, colorWithAlpha(accent, 0.38), 10);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  const tight = rect.h < 88;
+  ctx.font = `900 ${tight ? 12 : rect.w < 230 ? 13 : 15}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(title, rect.x + 14, rect.y + (tight ? 8 : 12));
+
+  const rowTop = rect.y + (tight ? 30 : 40);
+  const rowH = tight ? 24 : rect.h < 150 ? 30 : 36;
+  const maxRows = Math.max(1, Math.floor((rect.h - (rowTop - rect.y) - 8) / rowH));
+  const visible = rows.slice(0, maxRows);
+  for (let i = 0; i < visible.length; i++) {
+    const row = visible[i];
+    const y = rowTop + i * rowH;
+    ctx.font = `${tight ? 14 : rect.w < 230 ? 16 : 18}px serif`;
+    ctx.fillStyle = row.accent ?? accent;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(row.icon, rect.x + 24, y + rowH * 0.45);
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.font = `800 ${tight ? 11 : rect.w < 230 ? 12 : 13}px ${DESKTOP_FONT}`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(row.title, rect.x + 44, y);
+    ctx.font = `${tight ? 9 : rect.w < 230 ? 10 : 11}px ${DESKTOP_FONT}`;
+    ctx.fillStyle = 'rgba(218,228,250,0.66)';
+    drawWrappedText(ctx, row.detail, rect.x + 44, y + (tight ? 15 : 17), rect.w - 56, tight ? 11 : 13, 1);
+  }
+
+  const hidden = rows.length - visible.length;
+  if (hidden > 0) {
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'bottom';
+    ctx.font = `800 11px ${DESKTOP_FONT}`;
+    ctx.fillStyle = colorWithAlpha(accent, 0.9);
+    ctx.fillText(`+${hidden}`, rect.x + rect.w - 14, rect.y + rect.h - 10);
+  }
+}
+
+function drawRunBuildSummary(ctx: CanvasRenderingContext2D, player: Player, rect: Rect) {
+  const compact = rect.w < 720;
+  const statH = compact ? Math.min(150, Math.max(118, rect.h * 0.3)) : 92;
+  drawRunStatGrid(ctx, getRunStatItems(player), {
+    x: rect.x,
+    y: rect.y,
+    w: rect.w,
+    h: statH,
+  });
+
+  const sectionY = rect.y + statH + 12;
+  const sectionH = Math.max(96, rect.h - statH - 12);
+  const sections = [
+    { title: '武器', rows: getRunWeaponRows(player), accent: '#ffb36b' },
+    { title: '被动', rows: getRunPassiveRows(player), accent: '#9dffba' },
+    { title: '能力', rows: getRunAbilityRows(player), accent: '#d3a8ff' },
+  ];
+
+  if (compact) {
+    const gap = 8;
+    const eachH = (sectionH - gap * (sections.length - 1)) / sections.length;
+    for (let i = 0; i < sections.length; i++) {
+      drawRunSection(ctx, sections[i].title, sections[i].rows, {
+        x: rect.x,
+        y: sectionY + i * (eachH + gap),
+        w: rect.w,
+        h: eachH,
+      }, sections[i].accent);
+    }
+    return;
+  }
+
+  const gap = 12;
+  const colW = (rect.w - gap * 2) / 3;
+  for (let i = 0; i < sections.length; i++) {
+    drawRunSection(ctx, sections[i].title, sections[i].rows, {
+      x: rect.x + i * (colW + gap),
+      y: sectionY,
+      w: colW,
+      h: sectionH,
+    }, sections[i].accent);
+  }
+}
+
+function drawRunResultStats(ctx: CanvasRenderingContext2D, stats: {
+  time: number;
+  kills: number;
+  level: number;
+  soulFireEarned: number;
+  totalSoulFire: number;
+}, rect: Rect) {
+  drawRunStatGrid(ctx, [
+    { label: '时间', value: formatRunTime(stats.time), accent: '#8fe8ff' },
+    { label: '击杀', value: `${stats.kills}`, accent: '#ff7a76' },
+    { label: '等级', value: `${stats.level}`, accent: '#ffd166' },
+    { label: '魂火', value: `+${stats.soulFireEarned}/${stats.totalSoulFire}`, accent: '#ffd166' },
+  ], rect);
+}
+
+export function drawPaused(
+  rc: RenderContext,
+  player: Player,
+  elapsed: number,
+  killCount: number,
+  difficultyName: string
+) {
   const { ctx, w, h } = rc;
   const mobile = isMobileViewport(w, h);
 
@@ -1398,19 +1743,38 @@ export function drawPaused(rc: RenderContext) {
   ]);
   ctx.fillRect(0, 0, w, h);
 
-  ctx.fillStyle = 'rgba(100,100,150,0.8)';
-  ctx.fillRect(w / 2 - 25, h / 2 - 50, 15, 60);
-  ctx.fillRect(w / 2 + 10, h / 2 - 50, 15, 60);
+  const panelW = Math.min(w - 24, mobile ? w - 20 : 940);
+  const panelH = Math.min(h - 32, mobile ? h - 28 : 620);
+  const panelX = w / 2 - panelW / 2;
+  const panelY = h / 2 - panelH / 2;
+  uiPanel(ctx, panelX, panelY, panelW, panelH, 'rgba(143,232,255,0.26)', 16);
 
-  ctx.font = 'bold 44px "Segoe UI", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = `900 ${mobile ? 26 : 32}px ${DESKTOP_FONT}`;
   ctx.fillStyle = COLORS.uiText;
+  ctx.fillText('暂停', panelX + 22, panelY + 18);
+
+  ctx.textAlign = mobile ? 'left' : 'right';
+  ctx.font = `800 ${mobile ? 12 : 14}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#8fe8ff';
+  const metaText = `${difficultyName} · ${formatRunTime(elapsed)} · 击杀 ${killCount}`;
+  ctx.fillText(metaText, mobile ? panelX + 22 : panelX + panelW - 22, panelY + (mobile ? 52 : 28));
+
+  const summaryTop = panelY + (mobile ? 82 : 72);
+  const footerH = 42;
+  drawRunBuildSummary(ctx, player, {
+    x: panelX + 18,
+    y: summaryTop,
+    w: panelW - 36,
+    h: Math.max(260, panelY + panelH - summaryTop - footerH),
+  });
+
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('暂停', w / 2, h / 2 + 30);
-
-  ctx.font = '16px "Segoe UI", sans-serif';
+  ctx.font = `700 ${mobile ? 13 : 15}px ${DESKTOP_FONT}`;
   ctx.fillStyle = COLORS.uiDim;
-  ctx.fillText(mobile ? '点按屏幕继续' : '按 ESC 或 P 继续', w / 2, h / 2 + 70);
+  ctx.fillText(mobile ? '点按屏幕继续' : '按 ESC 或 P 继续', w / 2, panelY + panelH - 22);
 }
 
 export function drawUpgradeScreen(
@@ -1652,12 +2016,14 @@ export function drawGameOver(rc: RenderContext, stats: {
   weaponNames: string[];
   soulFireEarned: number;
   totalSoulFire: number;
+  runDuration?: number;
   deathCause?: string;
   advice?: string;
-}) {
+}, player?: Player) {
   const { ctx, w, h } = rc;
-  const isVictory = stats.time >= 900;
-  const time = Date.now() * 0.001;
+  const mobile = isMobileViewport(w, h);
+  const runDuration = stats.runDuration ?? GAME_DURATION;
+  const isVictory = stats.time >= runDuration;
 
   ctx.fillStyle = cachedRadialGradient(ctx, `gameover-bg-${w}-${h}`, w / 2, h / 2, 0, w / 2, h / 2, w * 0.7, [
     [0, 'rgba(0,0,20,0.9)'],
@@ -1666,85 +2032,73 @@ export function drawGameOver(rc: RenderContext, stats: {
   ctx.fillRect(0, 0, w, h);
 
   ctx.shadowColor = isVictory ? '#ffd700' : '#ff4444';
-  ctx.shadowBlur = 20;
-  ctx.font = 'bold 52px "Segoe UI", sans-serif';
+  ctx.shadowBlur = mobile ? 12 : 20;
+  ctx.font = `900 ${mobile ? 32 : 48}px ${DESKTOP_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = isVictory ? '#ffd700' : COLORS.danger;
-  ctx.fillText(isVictory ? '🏆 胜利! 🏆' : '💀 游戏结束 💀', w / 2, h / 2 - 130);
+  ctx.fillText(isVictory ? '胜利完成' : '本局结束', w / 2, mobile ? 38 : 56);
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
 
-  if (isVictory) {
-    ctx.font = '18px "Segoe UI", sans-serif';
-    ctx.fillStyle = '#88ff88';
-    ctx.fillText('你成功存活了15分钟!', w / 2, h / 2 - 75);
+  ctx.font = `800 ${mobile ? 13 : 16}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = isVictory ? '#88ff88' : COLORS.uiDim;
+  ctx.fillText(
+    isVictory ? `成功存活 ${formatRunTime(runDuration)}` : '本局成长记录',
+    w / 2,
+    mobile ? 68 : 86
+  );
+
+  const panelW = Math.min(w - 24, mobile ? w - 20 : 980);
+  const panelX = w / 2 - panelW / 2;
+  const panelY = mobile ? 88 : 104;
+  const panelH = Math.min(h - panelY - 16, mobile ? 548 : 620);
+  uiPanel(ctx, panelX, panelY, panelW, panelH, isVictory ? 'rgba(255,209,102,0.3)' : 'rgba(255,90,90,0.26)', 16);
+
+  const pad = mobile ? 14 : 18;
+  const resultH = panelW < 560 ? 86 : 48;
+  drawRunResultStats(ctx, stats, {
+    x: panelX + pad,
+    y: panelY + pad,
+    w: panelW - pad * 2,
+    h: resultH,
+  });
+
+  const summaryTop = panelY + pad + resultH + (mobile ? 10 : 14);
+  const bottomReserved = mobile ? 116 : 108;
+  const summaryH = Math.max(190, panelY + panelH - summaryTop - bottomReserved);
+  const summaryRect = {
+    x: panelX + pad,
+    y: summaryTop,
+    w: panelW - pad * 2,
+    h: summaryH,
+  };
+  if (player) {
+    drawRunBuildSummary(ctx, player, summaryRect);
+  } else {
+    const weaponRows = stats.weaponNames.length > 0
+      ? stats.weaponNames.map((name) => ({ icon: '⚔️', title: name, detail: '本局装备武器', accent: '#ffb36b' }))
+      : [{ icon: '—', title: '暂无武器', detail: '本局还没有获得武器' }];
+    drawRunSection(ctx, '武器', weaponRows, summaryRect, '#ffb36b');
   }
 
-  const containerW = 300;
-  const containerH = 270;
-  const containerX = w / 2 - containerW / 2;
-  const containerY = h / 2 - 40;
-
-  ctx.fillStyle = 'rgba(30,30,60,0.8)';
-  ctx.beginPath();
-  ctx.roundRect(containerX, containerY, containerW, containerH, 12);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(100,100,150,0.5)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.roundRect(containerX, containerY, containerW, containerH, 12);
-  ctx.stroke();
-
-  ctx.font = '22px "Segoe UI", sans-serif';
-  ctx.fillStyle = COLORS.uiText;
-  const minutes = Math.floor(stats.time / 60);
-  const seconds = Math.floor(stats.time % 60);
-  const statsY = containerY + 30;
-
+  const footerY = Math.min(panelY + panelH - 82, summaryTop + summaryH + 12);
   ctx.textAlign = 'left';
-  ctx.fillText('⏱️ 存活时间:', containerX + 20, statsY);
-  ctx.textAlign = 'right';
-  ctx.fillText(`${minutes}分${seconds}秒`, containerX + containerW - 20, statsY);
-  ctx.textAlign = 'left';
-  ctx.fillText('💀 击杀数:', containerX + 20, statsY + 40);
-  ctx.textAlign = 'right';
-  ctx.fillText(`${stats.kills}`, containerX + containerW - 20, statsY + 40);
-  ctx.textAlign = 'left';
-  ctx.fillText('⭐ 等级:', containerX + 20, statsY + 80);
-  ctx.textAlign = 'right';
-  ctx.fillText(`${stats.level}`, containerX + containerW - 20, statsY + 80);
-  ctx.textAlign = 'left';
-  ctx.fillText('🔥 魂火:', containerX + 20, statsY + 120);
-  ctx.textAlign = 'right';
-  ctx.fillStyle = '#ffd166';
-  ctx.fillText(`+${stats.soulFireEarned} / ${stats.totalSoulFire}`, containerX + containerW - 20, statsY + 120);
-  ctx.fillStyle = COLORS.uiText;
-  ctx.textAlign = 'left';
-  ctx.fillText('⚔️ 武器:', containerX + 20, statsY + 160);
-  ctx.textAlign = 'right';
-  ctx.font = '16px "Segoe UI", sans-serif';
-  ctx.fillText(stats.weaponNames.join(', ') || '无', containerX + containerW - 20, statsY + 160);
-
-  ctx.font = '14px "Segoe UI", sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.font = `800 ${mobile ? 12 : 13}px ${DESKTOP_FONT}`;
   if (stats.deathCause) {
-    ctx.textAlign = 'left';
-    ctx.fillStyle = COLORS.uiDim;
-    ctx.fillText('死因:', containerX + 20, statsY + 194);
-    ctx.textAlign = 'right';
     ctx.fillStyle = '#ff9a76';
-    ctx.fillText(stats.deathCause, containerX + containerW - 20, statsY + 194);
+    drawWrappedText(ctx, `死因：${stats.deathCause}`, panelX + pad, footerY, panelW - pad * 2, 17, 1);
   }
   if (stats.advice) {
-    ctx.textAlign = 'left';
     ctx.fillStyle = '#8fe8ff';
-    drawWrappedText(ctx, stats.advice, containerX + 20, statsY + 218, containerW - 40, 17, 2);
+    drawWrappedText(ctx, stats.advice, panelX + pad, footerY + (stats.deathCause ? 20 : 0), panelW - pad * 2, 17, 2);
   }
 
-  const btnW = 200;
-  const btnH = 45;
+  const btnW = mobile ? Math.min(210, panelW - 48) : 220;
+  const btnH = mobile ? 40 : 44;
   const btnX = w / 2 - btnW / 2;
-  const btnY = Math.min(h - 70, containerY + containerH + 24);
+  const btnY = panelY + panelH - btnH - 16;
 
   ctx.fillStyle = 'rgba(60,60,160,0.8)';
   ctx.beginPath();
@@ -1756,10 +2110,11 @@ export function drawGameOver(rc: RenderContext, stats: {
   ctx.roundRect(btnX, btnY, btnW, btnH, 8);
   ctx.stroke();
 
-  ctx.font = 'bold 18px "Segoe UI", sans-serif';
+  ctx.font = `900 ${mobile ? 15 : 17}px ${DESKTOP_FONT}`;
   ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('返回桌面', w / 2, btnY + btnH / 2);
+  ctx.fillText('点击返回桌面', w / 2, btnY + btnH / 2);
 }
 
 export function drawPerformanceOverlay(rc: RenderContext, stats: PerformanceStats) {

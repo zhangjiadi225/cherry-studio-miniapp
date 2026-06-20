@@ -8,14 +8,14 @@ export { SUPPLY_DATA } from './data/supplies';
 export { WEAPON_DATA } from './data/weapons';
 
 // ===== Game =====
-export const GAME_DURATION = 15 * 60; // 15 minutes
+export const GAME_DURATION = 9 * 60; // 9 minutes
 export const ARENA_SIZE = 6000;
 export const DIFFICULTY_INTERVAL = 30; // seconds
 export const DIFFICULTY_STEP = 0.03;
 export const SPAWN_INTERVAL_BASE = 1.5; // seconds
 export const SPAWN_INTERVAL_MIN = 0.25;
 export const SPAWN_DISTANCE = 600;
-export const BOSS_TIMES = [300, 600]; // 5min, 10min
+export const BOSS_TIMES = [180, 360]; // 3min, 6min
 export const MAX_ENEMIES = 800;
 export const MAX_ACTIVE_PLAYER_PROJECTILES = 420;
 export const MAX_ACTIVE_ENEMY_PROJECTILES = 360;

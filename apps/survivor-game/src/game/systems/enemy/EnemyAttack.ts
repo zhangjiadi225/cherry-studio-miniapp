@@ -4,6 +4,7 @@ import { pools } from '../../utils/PoolManager';
 import { circlesOverlap } from '../../utils/math';
 import { MAX_ACTIVE_ENEMY_PROJECTILES } from '../../constants';
 import type { MapSystem } from '../map/MapSystem';
+import { getRunDifficultyPreset, type RunDifficultyPreset } from '../../data/runDifficulties';
 
 type EnemyAttackPatternId =
   | 'single'
@@ -38,6 +39,7 @@ interface EnemyAttackPattern {
 interface EnemyAttackContext {
   player: Player;
   projectiles: EnemyProjectile[];
+  maxProjectiles: number;
 }
 
 export interface EnemyEngagementProfile {
@@ -58,7 +60,7 @@ function spawnEnemyProjectile(
   radiusScale = 1,
   damageScale = 1
 ) {
-  if (ctx.projectiles.length >= MAX_ACTIVE_ENEMY_PROJECTILES) return;
+  if (ctx.projectiles.length >= ctx.maxProjectiles) return;
 
   const p = pools.enemyProjectiles.acquire();
   const speed = profile.bulletSpeed * speedScale;
@@ -209,9 +211,14 @@ export function updateEnemyAttacks(
   enemies: Enemy[],
   player: Player,
   projectiles: EnemyProjectile[],
-  dt: number
+  dt: number,
+  runDifficulty: RunDifficultyPreset = getRunDifficultyPreset()
 ) {
-  const ctx: EnemyAttackContext = { player, projectiles };
+  const ctx: EnemyAttackContext = {
+    player,
+    projectiles,
+    maxProjectiles: Math.max(48, Math.round(MAX_ACTIVE_ENEMY_PROJECTILES * runDifficulty.enemyProjectileCapMult)),
+  };
   for (const enemy of enemies) {
     if (enemy.hp <= 0) continue;
     const profile = getEnemyAttackProfile(enemy);
@@ -223,7 +230,7 @@ export function updateEnemyAttacks(
       if (enemy.attackWindup === 0 && enemy.pendingAttackPattern >= 0) {
         const pattern = profile.patterns[enemy.pendingAttackPattern] ?? profile.patterns[0];
         pattern.fire(ctx, enemy, profile);
-        enemy.attackCooldown = pattern.cooldown ?? profile.cooldown;
+        enemy.attackCooldown = (pattern.cooldown ?? profile.cooldown) * runDifficulty.enemyAttackCooldownMult;
         enemy.pendingAttackPattern = -1;
       }
       continue;
@@ -235,7 +242,10 @@ export function updateEnemyAttacks(
     const dy = player.y - enemy.y;
     if (dx * dx + dy * dy > profile.range * profile.range) continue;
 
-    enemy.pendingAttackPattern = enemy.attackPatternIndex % profile.patterns.length;
+    const patternCount = enemy.isBoss
+      ? Math.max(1, Math.min(profile.patterns.length, runDifficulty.bossPatternLimit))
+      : profile.patterns.length;
+    enemy.pendingAttackPattern = enemy.attackPatternIndex % patternCount;
     enemy.attackPatternIndex++;
     enemy.attackWindup = profile.windup;
   }

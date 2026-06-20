@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getDifficultyParams } from './difficulty';
+import { RUN_DIFFICULTY_PRESETS } from './runDifficulties';
 
 describe('getDifficultyParams', () => {
   it('clamps negative elapsed time to the opening curve', () => {
@@ -35,5 +36,18 @@ describe('getDifficultyParams', () => {
       waveBaseCount: 13,
       activeEnemyCap: 300,
     });
+  });
+
+  it('scales enemy pressure by run difficulty preset', () => {
+    const hard = getDifficultyParams(300, RUN_DIFFICULTY_PRESETS.hard);
+    const easy = getDifficultyParams(300, RUN_DIFFICULTY_PRESETS.easy);
+    const nightmare = getDifficultyParams(300, RUN_DIFFICULTY_PRESETS.nightmare);
+
+    expect(easy.spawnInterval).toBeGreaterThan(hard.spawnInterval);
+    expect(easy.waveBaseCount).toBeLessThan(hard.waveBaseCount);
+    expect(easy.activeEnemyCap).toBeLessThan(hard.activeEnemyCap);
+    expect(nightmare.spawnInterval).toBeLessThan(hard.spawnInterval);
+    expect(nightmare.waveBaseCount).toBeGreaterThan(hard.waveBaseCount);
+    expect(nightmare.activeEnemyCap).toBeGreaterThan(hard.activeEnemyCap);
   });
 });

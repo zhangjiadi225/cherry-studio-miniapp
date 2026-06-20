@@ -1,5 +1,6 @@
 import type { Player, Enemy, Projectile, XPGem, Particle, DamageNumber, Camera, UpgradeOption, MapObstacle, TouchJoystickState, EnemyProjectile, PerformanceStats } from './types';
 import type { CodexTab, DesktopTab, MetaState, MetaUpgradeNode } from './systems/meta/MetaProgression';
+import type { RunDifficultyId } from './data/runDifficulties';
 import { COLORS } from './constants';
 import { WorldRenderer, type RenderContext } from './renderers/WorldRenderer';
 import {
@@ -16,6 +17,7 @@ import {
 	  getMetaStarNodeRects as getStarNodeRects,
 	  getSkinCardRects as getSkinRects,
 	  getCodexTabRects as getCodexRects,
+	  getRunDifficultyCardRects as getDifficultyRects,
 	  getDesktopTabRects as getTabRects,
 	  getPauseButtonRect as getPauseRect,
 		  drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver, drawPerformanceOverlay,
@@ -99,6 +101,9 @@ export class Renderer {
   getMetaStarNodeRects() { return getStarNodeRects(this.w, this.h); }
   getSkinCardRects() { return getSkinRects(this.w, this.h); }
   getCodexTabRects() { return getCodexRects(this.w, this.h); }
+  getRunDifficultyCardRects(): Array<{ x: number; y: number; w: number; h: number; id: RunDifficultyId }> {
+    return getDifficultyRects(this.w, this.h);
+  }
 
   // ─── World ───
   drawGround(cam: Camera) { this.worldRenderer.drawGround(this.rc, cam); }
@@ -124,8 +129,8 @@ export class Renderer {
   drawBossWarning(name: string, timer: number) { drawBossWarning(this.rc, name, timer); }
 
   // ─── UI ───
-  drawUI(player: Player, elapsed: number, killCount: number, objective?: string) {
-    drawUI(this.rc, player, elapsed, killCount, objective);
+  drawUI(player: Player, elapsed: number, killCount: number, objective?: string, runDuration?: number) {
+    drawUI(this.rc, player, elapsed, killCount, objective, runDuration);
   }
   drawMinimap(player: Player, enemies: Enemy[]) { drawMinimap(this.rc, player, enemies); }
   drawVirtualJoystick(joystick: TouchJoystickState) { drawVirtualJoystick(this.rc, joystick); }
@@ -135,7 +140,9 @@ export class Renderer {
   drawDesktop(meta: MetaState, tab: DesktopTab, codexTab: CodexTab, hoveredStarId?: MetaUpgradeNode['id']) {
     drawDesktop(this.rc, meta, tab, codexTab, hoveredStarId);
   }
-  drawPaused() { drawPaused(this.rc); }
+  drawPaused(player: Player, elapsed: number, killCount: number, difficultyName: string) {
+    drawPaused(this.rc, player, elapsed, killCount, difficultyName);
+  }
   drawUpgradeScreen(options: UpgradeOption[], selectedIndex: number, shards: number, canFreeReroll: boolean, rerollCost: number, canPaidReroll: boolean) {
     drawUpgradeScreen(this.rc, options, selectedIndex, shards, canFreeReroll, rerollCost, canPaidReroll);
   }
@@ -146,8 +153,9 @@ export class Renderer {
     weaponNames: string[];
     soulFireEarned: number;
     totalSoulFire: number;
-	    deathCause?: string;
-	    advice?: string;
-	  }) { drawGameOver(this.rc, stats); }
+    runDuration?: number;
+    deathCause?: string;
+    advice?: string;
+  }, player?: Player) { drawGameOver(this.rc, stats, player); }
   drawPerformanceOverlay(stats: PerformanceStats) { drawPerformanceOverlay(this.rc, stats); }
 }

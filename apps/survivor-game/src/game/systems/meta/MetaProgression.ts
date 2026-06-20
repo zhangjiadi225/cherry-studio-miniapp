@@ -1,4 +1,10 @@
 import { GenericModifierType } from '../../types';
+import {
+  DEFAULT_RUN_DIFFICULTY_ID,
+  getRunDifficultyPreset,
+  type RunDifficultyId,
+  type RunDifficultyPreset,
+} from '../../data/runDifficulties';
 
 export type MetaUpgradeId =
   | 'star_core'
@@ -59,12 +65,14 @@ export interface RunSummary {
   level: number;
   victory: boolean;
   soulFireEarned: number;
+  difficultyId: RunDifficultyId;
 }
 
 export interface MetaState {
   soulFire: number;
   unlockedUpgrades: MetaUpgradeId[];
   selectedSkin: SkinId;
+  selectedDifficulty: RunDifficultyId;
   runs: number;
   bestTime: number;
   bestKills: number;
@@ -384,6 +392,7 @@ export function createDefaultMetaState(): MetaState {
     soulFire: 0,
     unlockedUpgrades: [],
     selectedSkin: 'wanderer',
+    selectedDifficulty: DEFAULT_RUN_DIFFICULTY_ID,
     runs: 0,
     bestTime: 0,
     bestKills: 0,
@@ -403,6 +412,7 @@ export function loadMetaState(): MetaState {
       soulFire: Math.max(0, Math.floor(parsed.soulFire ?? base.soulFire)),
       unlockedUpgrades: filterValidUpgrades(parsed.unlockedUpgrades),
       selectedSkin: getSkinById(parsed.selectedSkin) ? parsed.selectedSkin! : base.selectedSkin,
+      selectedDifficulty: getRunDifficultyPreset(parsed.selectedDifficulty).id,
       runs: Math.max(0, Math.floor(parsed.runs ?? 0)),
       bestTime: Math.max(0, parsed.bestTime ?? 0),
       bestKills: Math.max(0, Math.floor(parsed.bestKills ?? 0)),
@@ -460,6 +470,12 @@ export function selectSkin(meta: MetaState, id: SkinId): MetaState {
   return next;
 }
 
+export function selectRunDifficulty(meta: MetaState, id: RunDifficultyId): MetaState {
+  const next = { ...meta, selectedDifficulty: getRunDifficultyPreset(id).id };
+  saveMetaState(next);
+  return next;
+}
+
 export function getInitialShards(meta: MetaState): number {
   return hasMetaUpgrade(meta, 'opening_gold') ? 10 : 0;
 }
@@ -487,7 +503,6 @@ export function areModifierCardsUnlocked(meta: MetaState): boolean {
 const SOUL_FIRE_BASE_REWARD = 4;
 const SOUL_FIRE_PERFORMANCE_POOL = 56;
 const SOUL_FIRE_VICTORY_BONUS = 10;
-const SOUL_FIRE_TARGET_TIME = 15 * 60;
 const SOUL_FIRE_TARGET_KILLS = 1200;
 const SOUL_FIRE_TARGET_LEVEL = 28;
 
@@ -495,20 +510,27 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-export function calculateSoulFireReward(stats: { time: number; kills: number; level: number }): number {
-  const timePct = clamp01(stats.time / SOUL_FIRE_TARGET_TIME);
+export function calculateSoulFireReward(
+  stats: { time: number; kills: number; level: number },
+  runDifficulty: RunDifficultyPreset = getRunDifficultyPreset(DEFAULT_RUN_DIFFICULTY_ID)
+): number {
+  const timePct = clamp01(stats.time / runDifficulty.duration);
   const killPct = clamp01(stats.kills / SOUL_FIRE_TARGET_KILLS);
   const levelPct = clamp01((stats.level - 1) / (SOUL_FIRE_TARGET_LEVEL - 1));
   const completionPct = timePct * 0.55 + killPct * 0.3 + levelPct * 0.15;
-  const victoryBonus = stats.time >= SOUL_FIRE_TARGET_TIME ? SOUL_FIRE_VICTORY_BONUS : 0;
-  return SOUL_FIRE_BASE_REWARD + Math.floor(SOUL_FIRE_PERFORMANCE_POOL * completionPct) + victoryBonus;
+  const victoryBonus = stats.time >= runDifficulty.duration ? SOUL_FIRE_VICTORY_BONUS : 0;
+  return Math.max(1, Math.round(
+    (SOUL_FIRE_BASE_REWARD + Math.floor(SOUL_FIRE_PERFORMANCE_POOL * completionPct) + victoryBonus) *
+    runDifficulty.soulFireRewardMult
+  ));
 }
 
 export function applyRunReward(
   meta: MetaState,
-  stats: { time: number; kills: number; level: number }
+  stats: { time: number; kills: number; level: number },
+  runDifficulty: RunDifficultyPreset = getRunDifficultyPreset(meta.selectedDifficulty)
 ): MetaState {
-  const soulFireEarned = calculateSoulFireReward(stats);
+  const soulFireEarned = calculateSoulFireReward(stats, runDifficulty);
   const next: MetaState = {
     ...meta,
     soulFire: meta.soulFire + soulFireEarned,
@@ -518,8 +540,9 @@ export function applyRunReward(
     bestLevel: Math.max(meta.bestLevel, stats.level),
     lastRun: {
       ...stats,
-      victory: stats.time >= SOUL_FIRE_TARGET_TIME,
+      victory: stats.time >= runDifficulty.duration,
       soulFireEarned,
+      difficultyId: runDifficulty.id,
     },
   };
   saveMetaState(next);
