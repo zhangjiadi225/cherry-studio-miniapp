@@ -109,7 +109,6 @@ export function updateWeapon(
   }
   if (fired) {
     w.timer = 0;
-    emitTriggeredModifiers(w, 'onFire');
     eventBus.emit(GameEvent.WEAPON_FIRE, w.type);
   }
 }
@@ -169,16 +168,13 @@ function hasModifierEffect(w: Weapon, trigger: 'onFire', effect: ModifierEffect)
   );
 }
 
-function emitTriggeredModifiers(w: Weapon, trigger: 'onFire') {
-  for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
-    if (modifier.trigger === trigger && hasModifier(w, modifier.id)) {
-      eventBus.emit(GameEvent.MODIFIER_TRIGGER, modifier.id);
-    }
-  }
+function getCastDamages(w: Weapon, damage: number): number[] {
+  return hasModifierEffect(w, 'onFire', 'extraCast') ? [damage, damage] : [damage];
 }
 
-function getCastDamages(w: Weapon, damage: number): number[] {
-  return hasModifierEffect(w, 'onFire', 'extraCast') ? [damage, damage * 0.65] : [damage];
+function getAttackCount(w: Weapon): number {
+  const baseCount = Math.max(1, w.count);
+  return hasModifierEffect(w, 'onFire', 'split') ? baseCount * 2 : baseCount;
 }
 
 function getProjectileSpeed(w: Weapon): number {
@@ -356,13 +352,14 @@ function fireMagicWand(
   projectiles: Projectile[], damage: number, area: number,
   enemyQuery: EnemyQuery
 ): boolean {
-  const targets = findNearestEnemies(player, enemyQuery, w.count, FIND_ENEMY_RANGE);
+  const count = getAttackCount(w);
+  const targets = findNearestEnemies(player, enemyQuery, count, FIND_ENEMY_RANGE);
   let fired = false;
-  for (let i = 0; i < w.count; i++) {
+  for (let i = 0; i < count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
-    const angle = (i / w.count) * Math.PI * 2 + player.animTimer * 0.1;
+    const angle = (i / count) * Math.PI * 2 + player.animTimer * 0.1;
     fired = fireTargetedProjectile(w, player, target, angle, projectiles, {
-      origin: getWeaponCastOrigin(player, w, i, w.count),
+      origin: getWeaponCastOrigin(player, w, i, count),
       damage,
       radius: 8 * area,
       type: WeaponType.MAGIC_WAND,
@@ -376,11 +373,12 @@ function fireFireWand(
   projectiles: Projectile[], damage: number, area: number,
   enemyQuery: EnemyQuery
 ): boolean {
-  const targets = findNearestEnemies(player, enemyQuery, w.count, FIND_ENEMY_RANGE);
+  const count = getAttackCount(w);
+  const targets = findNearestEnemies(player, enemyQuery, count, FIND_ENEMY_RANGE);
   let fired = false;
-  for (let i = 0; i < w.count; i++) {
+  for (let i = 0; i < count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
-    const origin = getWeaponCastOrigin(player, w, i, w.count);
+    const origin = getWeaponCastOrigin(player, w, i, count);
     const fallbackAngle = Math.random() * Math.PI * 2;
     const aimAngle = target ? Math.atan2(target.y - origin.y, target.x - origin.x) : fallbackAngle;
     const splashOffset = target ? (i === 0 ? 0 : 18 + i * 5) * area : 180 + i * 26;
@@ -448,9 +446,9 @@ function fireRuneLance(
   projectiles: Projectile[], damage: number, area: number,
   enemyQuery: EnemyQuery
 ): boolean {
-  const targets = findNearestEnemies(player, enemyQuery, Math.max(1, w.count), FIND_ENEMY_RANGE);
+  const count = getAttackCount(w);
+  const targets = findNearestEnemies(player, enemyQuery, count, FIND_ENEMY_RANGE);
   let fired = false;
-  const count = Math.max(1, w.count);
   const spread = Math.min(0.42, 0.1 * (count - 1));
   for (let i = 0; i < count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
@@ -494,7 +492,7 @@ function fireMoonBlade(
 ): boolean {
   const target = findNearestEnemies(player, enemyQuery, 1, FIND_ENEMY_RANGE)[0];
   const baseAngle = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.random() * Math.PI * 2;
-  const count = Math.max(1, w.count);
+  const count = getAttackCount(w);
   const spread = Math.min(1.1, 0.18 * (count - 1));
   const orbitRadius = (68 + Math.min(36, w.level * 4)) * area;
   const orbitSpeed = MOON_BLADE_ORBIT_SPEED + Math.min(1.4, w.level * 0.12);

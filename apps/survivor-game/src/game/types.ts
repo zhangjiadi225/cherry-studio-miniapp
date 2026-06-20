@@ -186,6 +186,8 @@ export interface EnemyProjectile {
 export interface Particle {
   x: number;
   y: number;
+  endX?: number;
+  endY?: number;
   vx: number;
   vy: number;
   life: number;
@@ -195,7 +197,7 @@ export interface Particle {
   alpha: number;
   rotation?: number;
   rotSpeed?: number;
-  type?: 'circle' | 'square' | 'star' | 'spark';
+  type?: 'circle' | 'square' | 'star' | 'spark' | 'beam' | 'crescent';
   trail?: boolean;
   glow?: boolean;
   glowRadius?: number;
@@ -293,8 +295,6 @@ export const GenericModifierType = {
   VELOCITY_RUNE: 'velocity_rune',
   ORBITAL_CORE: 'orbital_core',
   DEATH_BURST: 'death_burst',
-  LIGHTNING_BURST: 'lightning_burst',
-  CHAIN_BURST: 'chain_burst',
 } as const;
 export type GenericModifierType = typeof GenericModifierType[keyof typeof GenericModifierType];
 
@@ -308,9 +308,7 @@ export type ModifierEffect =
   | 'knockback'
   | 'projectileSpeed'
   | 'projectileOrbit'
-  | 'deathExplosion'
-  | 'lightningExplosion'
-  | 'chainExplosion';
+  | 'deathExplosion';
 
 export const SupplyType = {
   FIELD_RATION: 'field_ration',
@@ -334,7 +332,7 @@ export interface GenericModifierData {
 }
 
 export type ModifierVisualLayer = 'cast' | 'trail' | 'hit' | 'control' | 'kill';
-export type ModifierAudioCue = 'rush' | 'echo' | 'crack' | 'chain' | 'pulse' | 'push' | 'burst' | 'thunder' | 'cascade';
+export type ModifierAudioCue = 'rush' | 'echo' | 'crack' | 'chain' | 'pulse' | 'push' | 'burst';
 
 export interface GenericModifierVisual {
   glyph: string;
@@ -342,7 +340,7 @@ export interface GenericModifierVisual {
   accent: string;
   glow: string;
   layer: ModifierVisualLayer;
-  particle: 'circle' | 'square' | 'star' | 'spark';
+  particle: 'circle' | 'square' | 'star' | 'spark' | 'beam' | 'crescent';
   audio: ModifierAudioCue;
 }
 

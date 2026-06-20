@@ -1,12 +1,12 @@
 import {
   GameState, Enemy, Projectile, XPGem, Particle, DamageNumber, EnemyProjectile,
-  Camera, WeaponType, PassiveType, Weapon, GenericModifierType, PerformanceStats, MapObstacle, EnemyType
+  Camera, WeaponType, PassiveType, Weapon, PerformanceStats, MapObstacle, EnemyType
 } from './types';
 import {
   SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
   CONTACT_COOLDOWN,
   MAGIC_CIRCLE_HEAL_RATE, MAGIC_CIRCLE_RADIUS,
-  GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ENEMIES,
+  MAX_ENEMIES,
 } from './constants';
 import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
@@ -550,20 +550,12 @@ export class Game {
 
     if (this.garlicWeapon) {
       const { hits } = updateGarlicAura(this.garlicWeapon, this.player, dt, this.garlicTickTimer, this.enemyQuery);
-      const hasRepulsion = (this.garlicWeapon.modifierMask & GENERIC_MODIFIER_MASK[GenericModifierType.REPULSION_FIELD]) !== 0;
-      const repulsionVisual = GENERIC_MODIFIER_DATA[GenericModifierType.REPULSION_FIELD].visual;
       for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
         pushDamageNumber(this.damageNumbers, hit.x, hit.y, hit.dmg, '#cccc66', 14);
         spawnHitParticles(this.particles, hit.x, hit.y, '#cccc66', 3, {
           speed: 60, life: 0.3, radius: 2, type: 'circle', glow: true,
         });
-        if (hasRepulsion && i < 4) {
-          spawnHitParticles(this.particles, hit.x, hit.y, repulsionVisual.accent, 4, {
-            speed: 95, life: 0.28, radius: 2.4, type: repulsionVisual.particle, glow: true,
-          });
-          if (i === 0) eventBus.emit(GameEvent.MODIFIER_TRIGGER, GenericModifierType.REPULSION_FIELD);
-        }
       }
     }
 

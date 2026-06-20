@@ -1,7 +1,7 @@
 import type { RenderContext } from './WorldRenderer';
-import type { Player, Enemy, Projectile, XPGem, GenericModifierVisual, EnemyProjectile, WeaponDisplayMode } from '../types';
+import type { Player, Enemy, Projectile, XPGem, EnemyProjectile, WeaponDisplayMode } from '../types';
 import { WeaponType, EnemyType } from '../types';
-import { COLORS, ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, WEAPON_DATA } from '../constants';
+import { COLORS, ENEMY_DATA, WEAPON_DATA } from '../constants';
 import { getSkinById } from '../systems/meta/MetaProgression';
 import { spriteRegistry } from './SpriteRegistry';
 import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
@@ -1199,145 +1199,6 @@ function getProjectileAngle(p: Projectile, fallback = 0): number {
   return speed > 0.1 ? Math.atan2(p.vy, p.vx) : fallback;
 }
 
-const MODIFIER_VISUALS: { mask: number; visual: GenericModifierVisual }[] = Object.values(GENERIC_MODIFIER_DATA)
-  .map((modifier) => ({
-    mask: GENERIC_MODIFIER_MASK[modifier.id],
-    visual: modifier.visual,
-  }));
-
-function drawModifierTrail(ctx: CanvasRenderingContext2D, p: Projectile, visual: GenericModifierVisual, alpha: number, index: number) {
-  const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-  const ux = speed > 1 ? p.vx / speed : Math.cos(p.animTimer + index);
-  const uy = speed > 1 ? p.vy / speed : Math.sin(p.animTimer + index);
-  const len = Math.max(18, p.radius * 2.2) + index * 5;
-
-  ctx.strokeStyle = `${visual.glow}${alpha * 0.38})`;
-  ctx.lineWidth = Math.max(2, p.radius * 0.22);
-  ctx.lineCap = 'round';
-  for (let i = 1; i <= 3; i++) {
-    const spread = (i - 2) * 0.35;
-    const px = -uy * spread * p.radius;
-    const py = ux * spread * p.radius;
-    ctx.beginPath();
-    ctx.moveTo(p.x - ux * len * 0.25 + px, p.y - uy * len * 0.25 + py);
-    ctx.lineTo(p.x - ux * len * i * 0.42 + px, p.y - uy * len * i * 0.42 + py);
-    ctx.stroke();
-  }
-}
-
-function drawModifierGlyph(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  visual: GenericModifierVisual,
-  alpha: number,
-  size: number
-) {
-  ctx.fillStyle = `${visual.glow}${alpha * 0.18})`;
-  ctx.beginPath();
-  ctx.arc(x, y, size * 0.95, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.save();
-  ctx.globalAlpha = alpha * 0.85;
-  ctx.strokeStyle = visual.color;
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.arc(x, y, size * 0.62, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.globalAlpha = alpha;
-  ctx.fillStyle = visual.color;
-  ctx.font = `bold ${Math.max(8, size * 0.62)}px sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(visual.glyph, x, y + 0.5);
-  ctx.restore();
-}
-
-function drawModifierRing(ctx: CanvasRenderingContext2D, p: Projectile, visual: GenericModifierVisual, alpha: number, index: number) {
-  const radius = Math.max(12, p.radius * (1.35 + index * 0.24));
-  const phase = p.animTimer * (1.2 + index * 0.12);
-  ctx.strokeStyle = `${visual.glow}${alpha * 0.36})`;
-  ctx.lineWidth = 1.5;
-  for (let i = 0; i < 3; i++) {
-    const start = phase + i * 2.09;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, radius, start, start + 0.7);
-    ctx.stroke();
-  }
-  const gx = p.x + Math.cos(phase) * radius;
-  const gy = p.y + Math.sin(phase) * radius;
-  drawModifierGlyph(ctx, gx, gy, visual, alpha * 0.85, 12);
-}
-
-function drawModifierPushMarkers(ctx: CanvasRenderingContext2D, p: Projectile, visual: GenericModifierVisual, alpha: number, index: number) {
-  const radius = Math.max(13, p.radius * (1.45 + index * 0.2));
-  ctx.save();
-  ctx.globalAlpha = alpha * 0.58;
-  ctx.strokeStyle = visual.color;
-  ctx.lineWidth = 1.7;
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 4; i++) {
-    const angle = p.animTimer * 1.6 + i * Math.PI * 0.5;
-    const x = p.x + Math.cos(angle) * radius;
-    const y = p.y + Math.sin(angle) * radius;
-    const tx = Math.cos(angle) * 7;
-    const ty = Math.sin(angle) * 7;
-    ctx.beginPath();
-    ctx.moveTo(x - tx * 0.45, y - ty * 0.45);
-    ctx.lineTo(x + tx, y + ty);
-    ctx.stroke();
-  }
-  ctx.restore();
-}
-
-function drawModifierKillSpikes(ctx: CanvasRenderingContext2D, p: Projectile, visual: GenericModifierVisual, alpha: number, index: number) {
-  const radius = Math.max(14, p.radius * (1.55 + index * 0.26));
-  ctx.strokeStyle = `${visual.glow}${alpha * 0.42})`;
-  ctx.lineWidth = 1.4;
-  for (let i = 0; i < 6; i++) {
-    const angle = p.animTimer * 0.9 + i * Math.PI / 3;
-    const inner = radius * 0.78;
-    const outer = radius + 4;
-    ctx.beginPath();
-    ctx.moveTo(p.x + Math.cos(angle) * inner, p.y + Math.sin(angle) * inner);
-    ctx.lineTo(p.x + Math.cos(angle) * outer, p.y + Math.sin(angle) * outer);
-    ctx.stroke();
-  }
-  drawModifierGlyph(ctx, p.x, p.y - radius, visual, alpha * 0.78, 12);
-}
-
-function drawModifierIdentityLayer(rc: RenderContext, p: Projectile, alpha: number) {
-  if (p.modifierMask === 0) return;
-
-  const { ctx } = rc;
-  ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
-  let index = 0;
-  for (const entry of MODIFIER_VISUALS) {
-    if ((p.modifierMask & entry.mask) === 0) continue;
-    const visual = entry.visual;
-    switch (visual.layer) {
-      case 'trail':
-        drawModifierTrail(ctx, p, visual, alpha, index);
-        break;
-      case 'cast':
-        drawModifierRing(ctx, p, visual, alpha * 0.9, index);
-        break;
-      case 'control':
-        drawModifierPushMarkers(ctx, p, visual, alpha, index);
-        break;
-      case 'kill':
-        drawModifierKillSpikes(ctx, p, visual, alpha * 0.82, index);
-        break;
-      case 'hit':
-        drawModifierRing(ctx, p, visual, alpha * 0.78, index);
-        break;
-    }
-    index++;
-  }
-  ctx.restore();
-}
-
 export function drawProjectile(rc: RenderContext, p: Projectile) {
   const { ctx } = rc;
   if (p.radius <= 0 || p.maxLife <= 0 || p.life <= 0) return;
@@ -1370,45 +1231,60 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       break;
 
     case WeaponType.FIRE_WAND:
-      if (p.originX !== undefined && p.originY !== undefined) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.strokeStyle = `rgba(255,145,70,${alpha * 0.2})`;
-        ctx.lineWidth = Math.max(1.2, p.radius * 0.08);
-        ctx.setLineDash([4, 8]);
-        ctx.beginPath();
-        ctx.moveTo(p.originX, p.originY);
-        ctx.lineTo(p.x, p.y);
-        ctx.stroke();
-        ctx.restore();
-      }
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = `rgba(255,75,20,${alpha * 0.18})`;
+      const fireRadius = Math.max(10, p.radius);
+      const firePulse = 0.92 + Math.sin(p.animTimer * 2.1) * 0.08;
+      const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, fireRadius * 2.55 * firePulse);
+      glow.addColorStop(0, `rgba(255,235,130,${alpha * 0.28})`);
+      glow.addColorStop(0.34, `rgba(255,105,22,${alpha * 0.34})`);
+      glow.addColorStop(0.72, `rgba(180,30,12,${alpha * 0.16})`);
+      glow.addColorStop(1, 'rgba(120,18,8,0)');
+      ctx.fillStyle = glow;
       ctx.beginPath();
-      ctx.ellipse(p.x, p.y, p.radius * 1.35, p.radius * 0.78, 0, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, fireRadius * 2.55 * firePulse, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = `rgba(255,170,65,${alpha * 0.72})`;
-      ctx.lineWidth = Math.max(2, p.radius * 0.12);
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y, p.radius * 1.08, p.radius * 0.58, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      for (let i = 0; i < 7; i++) {
-        const angle = p.animTimer * 1.8 + i * 0.9;
-        const dist = p.radius * (0.22 + (i % 3) * 0.18);
-        const flameHeight = p.radius * (0.56 + (i % 2) * 0.26) * alpha;
-        const x = p.x + Math.cos(angle) * dist;
-        const y = p.y + Math.sin(angle) * dist * 0.46;
-        ctx.fillStyle = `rgba(255,${120 + i * 12},35,${alpha * 0.74})`;
+
+      for (let i = 0; i < 10; i++) {
+        const angle = p.animTimer * 0.55 + i * 0.628;
+        const dist = fireRadius * (0.18 + (i % 4) * 0.11);
+        const lobeX = p.x + Math.cos(angle) * dist;
+        const lobeY = p.y + Math.sin(angle) * dist * 0.72 - fireRadius * (i % 3 === 0 ? 0.16 : 0.02);
+        const lobeW = fireRadius * (0.95 + (i % 3) * 0.18);
+        const lobeH = fireRadius * (0.82 + (i % 4) * 0.16);
+        const lobe = ctx.createRadialGradient(lobeX - lobeW * 0.18, lobeY - lobeH * 0.22, 0, lobeX, lobeY, lobeW);
+        lobe.addColorStop(0, `rgba(255,208,72,${alpha * 0.78})`);
+        lobe.addColorStop(0.46, `rgba(255,102,18,${alpha * 0.74})`);
+        lobe.addColorStop(1, `rgba(132,20,10,${alpha * 0.18})`);
+        ctx.fillStyle = lobe;
         ctx.beginPath();
-        ctx.moveTo(x, y - flameHeight);
-        ctx.quadraticCurveTo(x + p.radius * 0.22, y - flameHeight * 0.38, x, y + p.radius * 0.26);
-        ctx.quadraticCurveTo(x - p.radius * 0.2, y - flameHeight * 0.32, x, y - flameHeight);
+        ctx.ellipse(lobeX, lobeY, lobeW, lobeH, angle * 0.45, 0, Math.PI * 2);
         ctx.fill();
       }
-      ctx.fillStyle = `rgba(255,235,160,${alpha * 0.76})`;
+
+      for (let i = 0; i < 5; i++) {
+        const angle = -Math.PI * 0.5 + (i - 2) * 0.42 + Math.sin(p.animTimer + i) * 0.08;
+        const tipX = p.x + Math.cos(angle) * fireRadius * 0.56;
+        const tipY = p.y + Math.sin(angle) * fireRadius * 0.42 - fireRadius * 0.28;
+        const tipH = fireRadius * (1.12 + i * 0.08);
+        ctx.fillStyle = `rgba(255,${155 + i * 14},35,${alpha * 0.64})`;
+        ctx.beginPath();
+        ctx.moveTo(tipX, tipY - tipH);
+        ctx.quadraticCurveTo(tipX + fireRadius * 0.48, tipY - tipH * 0.28, tipX + fireRadius * 0.18, tipY + fireRadius * 0.48);
+        ctx.quadraticCurveTo(tipX - fireRadius * 0.48, tipY - tipH * 0.12, tipX, tipY - tipH);
+        ctx.fill();
+      }
+
+      const core = ctx.createRadialGradient(
+        p.x - fireRadius * 0.18, p.y - fireRadius * 0.18, 0,
+        p.x, p.y, fireRadius * 1.18
+      );
+      core.addColorStop(0, `rgba(255,255,210,${alpha * 0.88})`);
+      core.addColorStop(0.42, `rgba(255,205,70,${alpha * 0.72})`);
+      core.addColorStop(1, `rgba(255,92,18,${alpha * 0.08})`);
+      ctx.fillStyle = core;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(2, p.radius * 0.16), 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, fireRadius * 1.08, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       break;
@@ -1812,12 +1688,11 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       break;
   }
 
-  drawModifierIdentityLayer(rc, p, alpha);
 }
 
 // ──────────────────────────── Garlic Aura ────────────────────────────
 
-export function drawGarlicAura(rc: RenderContext, player: Player, radius: number, modifierMask: number = 0) {
+export function drawGarlicAura(rc: RenderContext, player: Player, radius: number, _modifierMask: number = 0) {
   const { ctx } = rc;
   const time = Date.now() * 0.001;
   const pulse = 0.15 + Math.sin(time * 3) * 0.05;
@@ -1858,38 +1733,6 @@ export function drawGarlicAura(rc: RenderContext, player: Player, radius: number
       rotation: Math.sin(time + i) * 0.18,
       glow: false,
     });
-  }
-
-  if (modifierMask !== 0) {
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    let index = 0;
-    for (const entry of MODIFIER_VISUALS) {
-      if ((modifierMask & entry.mask) === 0) continue;
-      const visual = entry.visual;
-      const orbit = radius * (0.8 + index * 0.09);
-      const count = visual.layer === 'control' ? 6 : 3;
-      ctx.strokeStyle = `${visual.glow}${0.16 + pulse * 0.55})`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(player.x, player.y, orbit, 0, Math.PI * 2);
-      ctx.stroke();
-      for (let i = 0; i < count; i++) {
-        const angle = time * (0.55 + index * 0.08) + i * Math.PI * 2 / count;
-        drawModifierGlyph(
-          ctx,
-          player.x + Math.cos(angle) * orbit,
-          player.y + Math.sin(angle) * orbit,
-          visual,
-          0.62,
-          13
-        );
-      }
-      index++;
-    }
-    ctx.restore();
   }
 }
 

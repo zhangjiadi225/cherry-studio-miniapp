@@ -140,15 +140,6 @@ export class AudioSystem {
       case 'burst':
         this.playSweep(270, 95, 0.09, 'sawtooth', 0.05);
         break;
-      case 'thunder':
-        this.playTone(1180, 0.04, 'square', 0.05);
-        this.playSweep(820, 360, 0.08, 'square', 0.035, 0.035);
-        break;
-      case 'cascade':
-        this.playTone(760, 0.035, 'triangle', 0.04);
-        this.playTone(940, 0.035, 'triangle', 0.035, 0.035);
-        this.playTone(1120, 0.04, 'triangle', 0.03, 0.07);
-        break;
     }
   }
 

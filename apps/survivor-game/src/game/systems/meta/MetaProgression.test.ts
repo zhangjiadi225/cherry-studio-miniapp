@@ -109,12 +109,11 @@ describe('meta star chart', () => {
 
   it('uses cross-branch prerequisites for advanced star routes', () => {
     const mechanismPath = META_UPGRADES.find((node) => node.id === 'mechanism_path')!;
-    const chainBurst = META_UPGRADES.find((node) => node.id === 'chain_burst')!;
-    const lightningBurst = META_UPGRADES.find((node) => node.id === 'lightning_burst')!;
+    const upgradeIds = META_UPGRADES.map((node) => node.id as string);
 
     expect(mechanismPath.requires).toEqual(['ranged_path', 'damage_path']);
-    expect(chainBurst.requires).toEqual(['chain_conductor', 'death_burst']);
-    expect(lightningBurst.requires).toEqual(['death_burst', 'reflection_prism']);
+    expect(upgradeIds).not.toContain('chain_burst');
+    expect(upgradeIds).not.toContain('lightning_burst');
   });
 
   it('unlocks start-run mechanisms without granting permanent player stats', () => {

@@ -25,6 +25,14 @@ export function drawParticle(rc: RenderContext, p: Particle) {
   const r = p.radius * p.alpha;
 
   switch (type) {
+    case 'beam':
+      drawBeamParticle(ctx, p);
+      break;
+
+    case 'crescent':
+      drawCrescentParticle(ctx, p, r);
+      break;
+
     case 'circle':
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.fill();
@@ -56,6 +64,57 @@ export function drawParticle(rc: RenderContext, p: Particle) {
   }
 
   ctx.globalAlpha = 1;
+}
+
+function drawBeamParticle(ctx: CanvasRenderingContext2D, p: Particle) {
+  const endX = p.endX ?? p.x;
+  const endY = p.endY ?? p.y;
+  const dx = endX - p.x;
+  const dy = endY - p.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const nx = -dy / len;
+  const ny = dx / len;
+  const seed = p.rotation ?? 0;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  for (let pass = 0; pass < 3; pass++) {
+    ctx.strokeStyle = pass === 0
+      ? `rgba(62,178,255,${p.alpha * 0.22})`
+      : pass === 1
+        ? `rgba(125,232,255,${p.alpha * 0.7})`
+        : `rgba(245,255,255,${p.alpha * 0.92})`;
+    ctx.lineWidth = pass === 0 ? 8 : pass === 1 ? 3.2 : 1.2;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    for (let i = 1; i < 6; i++) {
+      const t = i / 6;
+      const jitter = Math.sin(seed * 7.13 + i * 2.41 + pass) * (7 - pass * 2.2);
+      ctx.lineTo(p.x + dx * t + nx * jitter, p.y + dy * t + ny * jitter);
+    }
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCrescentParticle(ctx: CanvasRenderingContext2D, p: Particle, r: number) {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.rotation ?? 0);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = `rgba(146,93,255,${p.alpha * 0.26})`;
+  ctx.lineWidth = Math.max(8, r * 0.38);
+  ctx.beginPath();
+  ctx.arc(0, 0, r, -0.9, 0.9);
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(230,210,255,${p.alpha * 0.82})`;
+  ctx.lineWidth = Math.max(3, r * 0.16);
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.88, -0.78, 0.78);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawStarShape(ctx: CanvasRenderingContext2D, cx: number, cy: number, spikes: number, outerRadius: number, innerRadius: number) {

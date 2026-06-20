@@ -4,6 +4,8 @@ import { ObjectPool } from './ObjectPool';
 function resetParticle(p: Particle) {
   p.x = 0;
   p.y = 0;
+  p.endX = undefined;
+  p.endY = undefined;
   p.vx = 0;
   p.vy = 0;
   p.life = 0;
@@ -128,6 +130,7 @@ export const pools = {
   particles: new ObjectPool<Particle>(
     () => ({
       x: 0, y: 0, vx: 0, vy: 0,
+      endX: undefined, endY: undefined,
       life: 0, maxLife: 0, radius: 0,
       color: '', alpha: 1,
       rotation: 0, rotSpeed: 0,

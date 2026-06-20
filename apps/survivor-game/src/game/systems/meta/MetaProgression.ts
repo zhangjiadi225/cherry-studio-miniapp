@@ -22,13 +22,11 @@ export type MetaUpgradeId =
   | 'mechanism_path'
   | 'chain_conductor'
   | 'reflection_prism'
-  | 'chain_burst'
   | 'area_path'
   | 'impact_pulse'
   | 'repulsion_field'
   | 'damage_path'
-  | 'death_burst'
-  | 'lightning_burst';
+  | 'death_burst';
 
 export type DesktopTab = 'start' | 'growth' | 'skins' | 'codex';
 export type CodexTab = 'weapons' | 'passives' | 'enemies' | 'modules';
@@ -313,20 +311,6 @@ export const META_UPGRADES: MetaUpgradeNode[] = [
     requires: ['opening_choice'],
   },
   {
-    id: 'chain_burst',
-    name: '连锁爆炸',
-    icon: '✹↝',
-    branch: 'mechanism',
-    kind: 'keystone',
-    cost: 48,
-    desc: '连锁爆炸进入模块池，击杀后向附近目标传导小爆炸。',
-    effect: '解锁：连锁爆炸',
-    x: 0.22,
-    y: -0.68,
-    requires: ['chain_conductor', 'death_burst'],
-    grantsModifier: GenericModifierType.CHAIN_BURST,
-  },
-  {
     id: 'repulsion_field',
     name: '排斥力场',
     icon: '⟲',
@@ -366,20 +350,6 @@ export const META_UPGRADES: MetaUpgradeNode[] = [
     y: -0.28,
     requires: ['multi_shot', 'chain_conductor'],
     grantsModifier: GenericModifierType.SPLIT_CORE,
-  },
-  {
-    id: 'lightning_burst',
-    name: '闪电爆炸',
-    icon: '↯✹',
-    branch: 'damage',
-    kind: 'keystone',
-    cost: 52,
-    desc: '雷鸣爆破进入模块池，击杀时释放更大范围闪电爆炸。',
-    effect: '解锁：闪电爆炸',
-    x: -0.62,
-    y: 0.74,
-    requires: ['death_burst', 'reflection_prism'],
-    grantsModifier: GenericModifierType.LIGHTNING_BURST,
   },
 ];
 

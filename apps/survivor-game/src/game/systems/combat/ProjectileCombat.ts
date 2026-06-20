@@ -3,7 +3,12 @@ import { ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ACTIVE_PL
 import { damageEnemy } from '../enemy/Enemy';
 import type { MapSystem } from '../map/MapSystem';
 import { pushDamageNumber } from '../../effects/DamageNumber';
-import { spawnExplosionParticles, spawnHitParticles } from '../../effects/Particle';
+import {
+  spawnChainLightningParticle,
+  spawnCrescentWaveParticle,
+  spawnExplosionParticles,
+  spawnHitParticles,
+} from '../../effects/Particle';
 import { eventBus, GameEvent } from '../../events';
 import { updateProjectile } from '../weapon/Weapon';
 import { pools } from '../../utils/PoolManager';
@@ -12,10 +17,9 @@ import type { EnemyQuery } from '../enemy/EnemyQuery';
 
 const MODIFIERS = Object.values(GENERIC_MODIFIER_DATA);
 const PROJECTILE_COLLISION_LOOKUP_PADDING = 64;
-const REFLECTION_TARGET_RADIUS = 340;
 const REFLECTION_DAMAGE_RATIO = 0.72;
+const REFLECTION_ANGLE_STEP = Math.PI * 0.36;
 const RUNE_REFLECTION_BEAM_MAX_LENGTH = 360;
-const RUNE_SPLIT_BEAM_LENGTH = 260;
 
 export interface ProjectileCombatContext {
   player: Player;
@@ -203,9 +207,6 @@ export class ProjectileCombat {
     const dmgColor = this.getProjectileDamageColor(projectile);
     const dmgSize = projectile.damage >= 30 ? 18 : projectile.damage >= 20 ? 16 : 14;
     pushDamageNumber(ctx.damageNumbers, enemy.x, enemy.y, projectile.damage, dmgColor, dmgSize);
-    if (knockbackModifier) {
-      this.triggerModifierFeedback(ctx, knockbackModifier.id, enemy.x, enemy.y);
-    }
     this.triggerProjectileModifiers(ctx, projectile, enemy, isDead);
     return isDead;
   }
@@ -215,16 +216,10 @@ export class ProjectileCombat {
       if (!this.projectileHasModifier(projectile, modifier.id)) continue;
 
       if (modifier.trigger === 'onKill' && isDead) {
-        this.triggerModifierFeedback(ctx, modifier.id, enemy.x, enemy.y);
         switch (modifier.effect) {
           case 'deathExplosion':
             this.spawnDeathExplosion(ctx, projectile, enemy, 92, 0.45, modifier.visual.accent);
-            break;
-          case 'lightningExplosion':
-            this.spawnDeathExplosion(ctx, projectile, enemy, 126, 0.38, modifier.visual.accent);
-            break;
-          case 'chainExplosion':
-            this.spawnChainExplosion(ctx, projectile, enemy);
+            this.emitModifierCue(modifier.id);
             break;
         }
         continue;
@@ -235,29 +230,20 @@ export class ProjectileCombat {
         case 'pulse':
           if (!projectile.pulseDone) {
             projectile.pulseDone = true;
-            this.triggerModifierFeedback(ctx, modifier.id, projectile.x, projectile.y);
-            this.spawnImpactPulse(ctx, projectile);
+            this.spawnImpactPulse(ctx, projectile, enemy);
+            this.emitModifierCue(modifier.id);
           }
           break;
         case 'chain':
           if (!projectile.chainDone) {
             projectile.chainDone = true;
             if (this.spawnChainHit(ctx, projectile, enemy)) {
-              this.triggerModifierFeedback(ctx, modifier.id, enemy.x, enemy.y);
+              this.emitModifierCue(modifier.id);
             }
           }
           break;
-        case 'split':
-          if (!projectile.splitDone && this.canSplitProjectile(projectile)) {
-            projectile.splitDone = true;
-            this.triggerModifierFeedback(ctx, modifier.id, projectile.x, projectile.y);
-            this.spawnSplitProjectiles(ctx, projectile);
-          }
-          break;
         case 'reflect':
-          if (this.spawnReflectionProjectile(ctx, projectile, enemy, modifier.id)) {
-            this.triggerModifierFeedback(ctx, modifier.id, enemy.x, enemy.y);
-          }
+          this.spawnReflectionProjectile(ctx, projectile, enemy);
           break;
       }
     }
@@ -276,25 +262,7 @@ export class ProjectileCombat {
     return undefined;
   }
 
-  private triggerModifierFeedback(
-    ctx: ProjectileCombatContext,
-    modifierType: GenericModifierType,
-    x: number,
-    y: number
-  ) {
-    const modifier = GENERIC_MODIFIER_DATA[modifierType];
-    const visual = modifier.visual;
-    const isKill = visual.layer === 'kill';
-    const isControl = visual.layer === 'control';
-    spawnExplosionParticles(ctx.particles, x, y, visual.accent, isKill ? 18 : 10, {
-      speed: isKill ? 190 : isControl ? 120 : 145,
-      life: isKill ? 0.62 : 0.42,
-      radius: isKill ? 3.5 : 2.6,
-      type: visual.particle,
-      glow: true,
-      innerColor: visual.color,
-      ringCount: isControl ? 4 : 6,
-    });
+  private emitModifierCue(modifierType: GenericModifierType) {
     eventBus.emit(GameEvent.MODIFIER_TRIGGER, modifierType);
   }
 
@@ -307,18 +275,44 @@ export class ProjectileCombat {
            projectile.type === WeaponType.HOLY_WATER ? '#88ccff' : '#ffffff';
   }
 
-  private spawnImpactPulse(ctx: ProjectileCombatContext, projectile: Projectile) {
-    const radius = Math.max(36, projectile.radius * 1.8);
-    const damage = projectile.damage * 0.35;
-    spawnExplosionParticles(ctx.particles, projectile.x, projectile.y, '#b277ff', 10, {
-      speed: 120, life: 0.45, radius: 3, type: 'spark', glow: true,
-      innerColor: '#f0ddff', ringCount: 5,
-    });
+  private getProjectileDirection(projectile: Projectile, fallbackTarget?: Enemy): { x: number; y: number } {
+    const speed = Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy);
+    if (speed > 0.01) return { x: projectile.vx / speed, y: projectile.vy / speed };
+    if (projectile.originX !== undefined && projectile.originY !== undefined) {
+      const dx = projectile.x - projectile.originX;
+      const dy = projectile.y - projectile.originY;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len > 0.01) return { x: dx / len, y: dy / len };
+    }
+    if (fallbackTarget) {
+      const dx = fallbackTarget.x - projectile.x;
+      const dy = fallbackTarget.y - projectile.y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len > 0.01) return { x: dx / len, y: dy / len };
+    }
+    return { x: 1, y: 0 };
+  }
 
-    ctx.enemyQuery.forNearby(projectile.x, projectile.y, radius, (target) => {
-      const dir = { x: target.x - projectile.x, y: target.y - projectile.y };
-      const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
-      damageEnemy(target, damage, (dir.x / len) * projectile.knockback * 0.4, (dir.y / len) * projectile.knockback * 0.4);
+  private spawnImpactPulse(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy) {
+    const dir = this.getProjectileDirection(projectile, source);
+    const backX = -dir.x;
+    const backY = -dir.y;
+    const radius = Math.max(62, projectile.radius * 2.6);
+    const centerX = source.x + backX * radius * 0.62;
+    const centerY = source.y + backY * radius * 0.62;
+    const damage = projectile.damage * 0.35;
+    spawnCrescentWaveParticle(ctx.particles, centerX, centerY, Math.atan2(backY, backX));
+
+    ctx.enemyQuery.forNearby(centerX, centerY, radius, (target) => {
+      if (target.hp <= 0 || target.id === source.id) return;
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > radius * radius) return;
+      const dist = Math.sqrt(distSq) || 1;
+      const alignment = (dx / dist) * backX + (dy / dist) * backY;
+      if (alignment < 0.32) return;
+      damageEnemy(target, damage, backX * projectile.knockback * 0.38, backY * projectile.knockback * 0.38);
       pushDamageNumber(ctx.damageNumbers, target.x, target.y, damage, '#c49cff', 12);
     });
   }
@@ -349,27 +343,6 @@ export class ProjectileCombat {
     });
   }
 
-  private spawnChainExplosion(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy) {
-    const chainRadius = 260;
-    const targets: Enemy[] = [];
-    ctx.enemyQuery.forNearby(source.x, source.y, chainRadius, (target) => {
-      if (target.hp <= 0 || target.id === source.id || targets.length >= 2) return;
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      if (dx * dx + dy * dy <= chainRadius * chainRadius) targets.push(target);
-    });
-
-    for (const target of targets) {
-      spawnExplosionParticles(ctx.particles, target.x, target.y, '#ffd166', 10, {
-        speed: 135, life: 0.4, radius: 3, type: 'star', glow: true,
-        innerColor: '#fff0bd', ringCount: 5,
-      });
-      const damage = projectile.damage * 0.32;
-      damageEnemy(target, damage, 0, 0);
-      pushDamageNumber(ctx.damageNumbers, target.x, target.y, damage, '#ffd166', 12);
-    }
-  }
-
   private spawnChainHit(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy): boolean {
     let best: Enemy | undefined;
     let bestDistSq = Infinity;
@@ -391,18 +364,12 @@ export class ProjectileCombat {
     const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
     const damage = projectile.damage * 0.55;
     damageEnemy(best, damage, (dir.x / len) * projectile.knockback * 0.7, (dir.y / len) * projectile.knockback * 0.7);
+    spawnChainLightningParticle(ctx.particles, source.x, source.y, best.x, best.y);
     spawnHitParticles(ctx.particles, best.x, best.y, '#bde7ff', 6, {
       speed: 130, life: 0.35, radius: 2.5, type: 'star', glow: true,
     });
     pushDamageNumber(ctx.damageNumbers, best.x, best.y, damage, '#bde7ff', 13);
     return true;
-  }
-
-  private canSplitProjectile(projectile: Projectile): boolean {
-    return projectile.type === WeaponType.MAGIC_WAND ||
-           projectile.type === WeaponType.FIRE_WAND ||
-           projectile.type === WeaponType.RUNE_LANCE ||
-           projectile.type === WeaponType.MOON_BLADE;
   }
 
   private canReflectProjectile(projectile: Projectile): boolean {
@@ -498,57 +465,49 @@ export class ProjectileCombat {
   private spawnReflectionProjectile(
     ctx: ProjectileCombatContext,
     projectile: Projectile,
-    source: Enemy,
-    modifierType: GenericModifierType
+    source: Enemy
   ): boolean {
     const remaining = projectile.reflectRemaining ?? 0;
     if (remaining <= 0 || !this.canReflectProjectile(projectile)) return false;
     if (ctx.projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) return false;
 
-    let best: Enemy | undefined;
-    let bestDistSq = REFLECTION_TARGET_RADIUS * REFLECTION_TARGET_RADIUS;
-    ctx.enemyQuery.forNearby(source.x, source.y, REFLECTION_TARGET_RADIUS, (target) => {
-      if (target.hp <= 0 || target.id === source.id || projectile.hitEnemies.has(target.id)) return;
-      const dx = target.x - source.x;
-      const dy = target.y - source.y;
-      const dSq = dx * dx + dy * dy;
-      if (dSq < bestDistSq) {
-        best = target;
-        bestDistSq = dSq;
-      }
-    });
-    if (!best) return false;
-
     const nextRemaining = remaining - 1;
     projectile.reflectRemaining = nextRemaining;
+    const dir = this.getProjectileDirection(projectile, source);
+    const baseAngle = Math.atan2(dir.y, dir.x);
+    const bendDirection = remaining % 2 === 0 ? -1 : 1;
+    const reflectAngle = baseAngle + REFLECTION_ANGLE_STEP * bendDirection;
+    const dirX = Math.cos(reflectAngle);
+    const dirY = Math.sin(reflectAngle);
 
-    const dx = best.x - source.x;
-    const dy = best.y - source.y;
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
     if (projectile.type === WeaponType.FIRE_WAND) {
       const child = pools.projectiles.acquire();
-      this.configureStationaryFirePatch(child, projectile, best.x, best.y, REFLECTION_DAMAGE_RATIO, 0.85);
+      const travel = Math.max(54, projectile.radius * 2.4);
+      this.configureStationaryFirePatch(
+        child,
+        projectile,
+        source.x + dirX * travel,
+        source.y + dirY * travel,
+        REFLECTION_DAMAGE_RATIO,
+        0.85
+      );
       child.reflectRemaining = nextRemaining;
       for (const enemyId of projectile.hitEnemies) child.hitEnemies.add(enemyId);
       child.hitEnemies.add(source.id);
       ctx.projectiles.push(child);
-
-      spawnHitParticles(ctx.particles, source.x, source.y, GENERIC_MODIFIER_DATA[modifierType].visual.accent, 5, {
-        speed: 115, life: 0.28, radius: 2.2, type: 'star', glow: true,
-      });
       return true;
     }
 
     if (projectile.type === WeaponType.RUNE_LANCE) {
       const child = pools.projectiles.acquire();
-      const beamLength = Math.min(RUNE_REFLECTION_BEAM_MAX_LENGTH, Math.max(180, Math.sqrt(bestDistSq) + best.radius * 2));
+      const beamLength = Math.min(RUNE_REFLECTION_BEAM_MAX_LENGTH, Math.max(180, projectile.beamLength ?? RUNE_REFLECTION_BEAM_MAX_LENGTH));
       this.configureRuneBeam(
         child,
         projectile,
         source.x,
         source.y,
-        dx / len,
-        dy / len,
+        dirX,
+        dirY,
         beamLength,
         REFLECTION_DAMAGE_RATIO,
         0.85
@@ -557,10 +516,6 @@ export class ProjectileCombat {
       for (const enemyId of projectile.hitEnemies) child.hitEnemies.add(enemyId);
       child.hitEnemies.add(source.id);
       ctx.projectiles.push(child);
-
-      spawnHitParticles(ctx.particles, source.x, source.y, GENERIC_MODIFIER_DATA[modifierType].visual.accent, 5, {
-        speed: 115, life: 0.28, radius: 2.2, type: 'star', glow: true,
-      });
       return true;
     }
 
@@ -568,11 +523,11 @@ export class ProjectileCombat {
     const child = pools.projectiles.acquire();
     child.x = source.x;
     child.y = source.y;
-    child.vx = (dx / len) * speed;
-    child.vy = (dy / len) * speed;
+    child.vx = dirX * speed;
+    child.vy = dirY * speed;
     child.damage = projectile.damage * REFLECTION_DAMAGE_RATIO;
     child.radius = Math.max(4, projectile.radius * 0.85);
-    child.life = Math.min(1.15, Math.max(0.55, Math.sqrt(bestDistSq) / speed + 0.22));
+    child.life = Math.min(1.15, Math.max(0.55, projectile.maxLife * 0.6));
     child.maxLife = child.life;
     child.pierce = 0;
     child.pierceCount = 0;
@@ -589,84 +544,6 @@ export class ProjectileCombat {
     child.reflectRemaining = nextRemaining;
     this.clearProjectileMotionExtras(child);
     ctx.projectiles.push(child);
-
-    spawnHitParticles(ctx.particles, source.x, source.y, GENERIC_MODIFIER_DATA[modifierType].visual.accent, 5, {
-      speed: 115, life: 0.28, radius: 2.2, type: 'star', glow: true,
-    });
     return true;
-  }
-
-  private spawnSplitProjectiles(ctx: ProjectileCombatContext, projectile: Projectile) {
-    if (projectile.type === WeaponType.FIRE_WAND) {
-      for (const offset of [-1, 1]) {
-        if (ctx.projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) break;
-        const child = pools.projectiles.acquire();
-        const angle = projectile.animTimer + offset * 1.05;
-        this.configureStationaryFirePatch(
-          child,
-          projectile,
-          projectile.x + Math.cos(angle) * projectile.radius * 1.25,
-          projectile.y + Math.sin(angle) * projectile.radius * 1.25,
-          0.4,
-          0.72
-        );
-        ctx.projectiles.push(child);
-      }
-      return;
-    }
-
-    if (projectile.type === WeaponType.RUNE_LANCE) {
-      const baseAngle = Math.atan2(projectile.vy, projectile.vx || 1);
-      const startX = projectile.originX ?? projectile.x;
-      const startY = projectile.originY ?? projectile.y;
-      for (const offset of [-0.36, 0.36]) {
-        if (ctx.projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) break;
-        const child = pools.projectiles.acquire();
-        const angle = baseAngle + offset;
-        this.configureRuneBeam(
-          child,
-          projectile,
-          startX,
-          startY,
-          Math.cos(angle),
-          Math.sin(angle),
-          Math.min(RUNE_SPLIT_BEAM_LENGTH, Math.max(180, projectile.beamLength ?? RUNE_SPLIT_BEAM_LENGTH)),
-          0.4,
-          0.72
-        );
-        ctx.projectiles.push(child);
-      }
-      return;
-    }
-
-    const speed = Math.max(220, Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) || 320);
-    const baseAngle = Math.atan2(projectile.vy, projectile.vx || 1);
-    for (const offset of [-0.45, 0.45]) {
-      if (ctx.projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) break;
-      const child = pools.projectiles.acquire();
-      const angle = baseAngle + offset;
-      child.x = projectile.x;
-      child.y = projectile.y;
-      child.vx = Math.cos(angle) * speed;
-      child.vy = Math.sin(angle) * speed;
-      child.damage = projectile.damage * 0.4;
-      child.radius = Math.max(4, projectile.radius * 0.65);
-      child.life = Math.min(1.1, Math.max(0.55, projectile.maxLife * 0.55));
-      child.maxLife = child.life;
-      child.pierce = 0;
-      child.pierceCount = 0;
-      child.type = projectile.type;
-      child.hitEnemies.clear();
-      child.knockback = projectile.knockback * 0.6;
-      child.animTimer = 0;
-      child.modifierMask = projectile.modifierMask;
-      child.splitDone = true;
-      child.chainDone = false;
-      child.pulseDone = false;
-      child.reflectRemaining = projectile.reflectRemaining;
-      this.clearProjectileMotionExtras(child);
-      if (projectile.type === WeaponType.AXE) child.gravY = projectile.gravY;
-      ctx.projectiles.push(child);
-    }
   }
 }

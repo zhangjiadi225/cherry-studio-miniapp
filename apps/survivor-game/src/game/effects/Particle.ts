@@ -12,9 +12,9 @@ export function createParticle(
   color: string,
   speed: number = 100,
   life: number = 0.5,
-  radius: number = 3,
-  options: {
-    type?: 'circle' | 'square' | 'star' | 'spark';
+	  radius: number = 3,
+	  options: {
+	    type?: 'circle' | 'square' | 'star' | 'spark' | 'beam' | 'crescent';
     trail?: boolean;
     glow?: boolean;
     glowRadius?: number;
@@ -27,9 +27,11 @@ export function createParticle(
 ): Particle {
   const p = pools.particles.acquire();
   const angle = options.angle ?? Math.random() * Math.PI * 2;
-  const spd = randFloat(options.minSpeed ?? speed * 0.3, options.maxSpeed ?? speed);
-  p.x = x;
-  p.y = y;
+	  const spd = randFloat(options.minSpeed ?? speed * 0.3, options.maxSpeed ?? speed);
+	  p.x = x;
+	  p.y = y;
+	  p.endX = undefined;
+	  p.endY = undefined;
   p.vx = Math.cos(angle) * spd;
   p.vy = Math.sin(angle) * spd;
   p.life = life;
@@ -43,8 +45,52 @@ export function createParticle(
   p.trail = options.trail ?? false;
   p.glow = options.glow ?? false;
   p.glowRadius = options.glowRadius ?? radius * 3;
-  p.glowColor = options.glowColor ?? color;
-  return p;
+	  p.glowColor = options.glowColor ?? color;
+	  return p;
+	}
+
+export function spawnChainLightningParticle(
+  particles: Particle[],
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number
+) {
+  if (!hasParticleCapacity(particles)) return;
+  const p = createParticle(x1, y1, '#9fe8ff', 0, 0.16, 3, {
+    type: 'beam',
+    minSpeed: 0,
+    maxSpeed: 0,
+    glow: true,
+    glowRadius: 14,
+    glowColor: '#4bb7ff',
+    rotSpeed: 0,
+  });
+  p.endX = x2;
+  p.endY = y2;
+  p.rotation = Math.random() * Math.PI * 2;
+  particles.push(p);
+}
+
+export function spawnCrescentWaveParticle(
+  particles: Particle[],
+  x: number,
+  y: number,
+  angle: number
+) {
+  if (!hasParticleCapacity(particles)) return;
+  const p = createParticle(x, y, '#d4a6ff', 140, 0.28, 32, {
+    type: 'crescent',
+    minSpeed: 140,
+    maxSpeed: 140,
+    angle,
+    glow: true,
+    glowRadius: 20,
+    glowColor: '#925dff',
+    rotSpeed: 0,
+  });
+  p.rotation = angle;
+  particles.push(p);
 }
 
 export function updateParticle(p: Particle, dt: number): boolean {

@@ -353,6 +353,95 @@ describe('weapon output model', () => {
     expect(Math.hypot(projectile.x - player.x, projectile.y - player.y)).toBeCloseTo(radius, 5);
   });
 
+  it('treats split as attack count doubling and double cast as a full repeat', () => {
+    const player = createPlayer();
+    const weapon = createWeapon(WeaponType.MAGIC_WAND);
+    weapon.timer = weapon.cooldown;
+    addModifier(weapon, GenericModifierType.SPLIT_CORE);
+    addModifier(weapon, GenericModifierType.DOUBLE_CAST);
+    const projectiles: Projectile[] = [];
+
+    updateWeapon(weapon, player, projectiles, 0, enemyQuery([makeEnemy(160, 0)]));
+
+    expect(projectiles).toHaveLength(4);
+    expect(projectiles.every((projectile) => projectile.damage === weapon.damage)).toBe(true);
+  });
+
+  it('reflects by angle even when no follow-up target is available', () => {
+    const player = createPlayer();
+    const weapon = createWeapon(WeaponType.MAGIC_WAND);
+    weapon.timer = weapon.cooldown;
+    addModifier(weapon, GenericModifierType.REFLECTION_PRISM);
+    const target = makeEnemy(45, 0);
+    const projectiles: Projectile[] = [];
+    const particles: Particle[] = [];
+    const damageNumbers: DamageNumber[] = [];
+
+    updateWeapon(weapon, player, projectiles, 0, enemyQuery([target]));
+    new ProjectileCombat().update({
+      player,
+      projectiles,
+      enemyQuery: enemyQuery([target]),
+      mapSystem: { handleProjectileCollision: () => false } as any,
+      particles,
+      damageNumbers,
+    }, 0.15);
+
+    expect(projectiles).toHaveLength(1);
+    expect(projectiles[0].hitEnemies.has(target.id)).toBe(true);
+    expect(Math.abs(projectiles[0].vy)).toBeGreaterThan(0.01);
+  });
+
+  it('draws chain conductor as a lightning beam between enemies', () => {
+    const player = createPlayer();
+    const weapon = createWeapon(WeaponType.MAGIC_WAND);
+    weapon.timer = weapon.cooldown;
+    addModifier(weapon, GenericModifierType.CHAIN_CONDUCTOR);
+    const source = makeEnemy(45, 0, 1);
+    const chained = makeEnemy(90, 20, 2);
+    const projectiles: Projectile[] = [];
+    const particles: Particle[] = [];
+    const damageNumbers: DamageNumber[] = [];
+
+    updateWeapon(weapon, player, projectiles, 0, enemyQuery([source]));
+    new ProjectileCombat().update({
+      player,
+      projectiles,
+      enemyQuery: enemyQuery([source, chained]),
+      mapSystem: { handleProjectileCollision: () => false } as any,
+      particles,
+      damageNumbers,
+    }, 0.15);
+
+    expect(chained.hp).toBeLessThan(chained.maxHp);
+    expect(particles.some((particle) => particle.type === 'beam')).toBe(true);
+  });
+
+  it('emits impact pulse as a backward crescent wave', () => {
+    const player = createPlayer();
+    const weapon = createWeapon(WeaponType.MAGIC_WAND);
+    weapon.timer = weapon.cooldown;
+    addModifier(weapon, GenericModifierType.IMPACT_PULSE);
+    const target = makeEnemy(45, 0, 1);
+    const behind = makeEnemy(10, 0, 2);
+    const projectiles: Projectile[] = [];
+    const particles: Particle[] = [];
+    const damageNumbers: DamageNumber[] = [];
+
+    updateWeapon(weapon, player, projectiles, 0, enemyQuery([target]));
+    new ProjectileCombat().update({
+      player,
+      projectiles,
+      enemyQuery: enemyQuery([target, behind]),
+      mapSystem: { handleProjectileCollision: () => false } as any,
+      particles,
+      damageNumbers,
+    }, 0.15);
+
+    expect(behind.hp).toBeLessThan(behind.maxHp);
+    expect(particles.some((particle) => particle.type === 'crescent')).toBe(true);
+  });
+
   it('swings axe as a 120-degree melee cleave instead of a flying axe', () => {
     const player = createPlayer();
     const weapon = createWeapon(WeaponType.AXE);
