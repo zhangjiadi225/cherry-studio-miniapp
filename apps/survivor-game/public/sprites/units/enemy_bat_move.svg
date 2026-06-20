@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <defs>
+    <radialGradient id="bat-aura" cx="50%" cy="45%" r="68%">
+      <stop offset="0" stop-color="#ff526f" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="#6d2435" stop-opacity=".12"/>
+      <stop offset="1" stop-color="#080207" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bat-wing" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#9b4b35"/>
+      <stop offset=".52" stop-color="#4b2031"/>
+      <stop offset="1" stop-color="#130914"/>
+    </linearGradient>
+    <radialGradient id="bat-body" cx="44%" cy="26%" r="74%">
+      <stop offset="0" stop-color="#d37a43"/>
+      <stop offset=".44" stop-color="#6e2e2c"/>
+      <stop offset="1" stop-color="#20111a"/>
+    </radialGradient>
+    <filter id="bat-eye-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <g id="bat">
+      <ellipse cx="0" cy="24" rx="22" ry="7" fill="#030103" opacity=".45"/>
+      <ellipse cx="0" cy="1" rx="49" ry="30" fill="url(#bat-aura)"/>
+      <path d="M-9-1 C-26-33-52-34-66-9 C-51-13-43-3-35 10 C-29 2-21 3-11 11Z" fill="url(#bat-wing)" stroke="#13070d" stroke-width="2.2"/>
+      <path d="M9-1 C26-33 52-34 66-9 C51-13 43-3 35 10 C29 2 21 3 11 11Z" fill="url(#bat-wing)" stroke="#13070d" stroke-width="2.2"/>
+      <path d="M-50-12 L-38 2 L-27-9 L-16 7 M50-12 L38 2 L27-9 L16 7" fill="none" stroke="#d37a43" stroke-width="1.5" opacity=".5"/>
+      <ellipse cx="0" cy="0" rx="15" ry="20" fill="url(#bat-body)" stroke="#13070d" stroke-width="2.8"/>
+      <path d="M-8-16 L-14-31 L-2-20 M8-16 L14-31 L2-20" fill="#30131f" stroke="#13070d" stroke-width="2"/>
+      <path d="M-10-5 C-5-9 5-9 10-5" fill="none" stroke="#ffd28b" stroke-width="1.6" opacity=".38"/>
+      <ellipse cx="-5" cy="-2" rx="3.2" ry="2.6" fill="#ff4059" filter="url(#bat-eye-glow)"/>
+      <ellipse cx="5" cy="-2" rx="3.2" ry="2.6" fill="#ff4059" filter="url(#bat-eye-glow)"/>
+      <path d="M-6 8 C-2 11 2 11 6 8" fill="none" stroke="#ffd6a3" stroke-width="1.8" stroke-linecap="round"/>
+      <path d="M-3 9 L-1 15 M3 9 L1 15" stroke="#f5ead0" stroke-width="1.2" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <rect width="192" height="192" fill="none"/>
+  <g transform="translate(48 48) rotate(-2)"><use href="#bat" transform="scale(1 .82)"/></g>
+  <g transform="translate(144 48)"><use href="#bat" transform="scale(1 .98)"/></g>
+  <g transform="translate(48 144)"><use href="#bat" transform="scale(.92 1.16)"/></g>
+  <g transform="translate(144 144)"><use href="#bat" transform="scale(1 .98)"/></g>
+</svg>

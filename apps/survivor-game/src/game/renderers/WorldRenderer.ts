@@ -9,8 +9,17 @@ export interface RenderContext {
   h: number;
 }
 
-/** 镜头移动超过此距离才重绘地面缓存 */
-const GROUND_CACHE_THRESHOLD = 180;
+/** 地面缓存比视口四周多绘制一圈，镜头在缓存内移动时只平滑偏移缓存 */
+const GROUND_CACHE_PADDING = 280;
+const GROUND_CACHE_THRESHOLD = 170;
+
+function hexToRgba(hex: string, alpha: number): string {
+  const value = hex.replace('#', '');
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 /**
  * 世界渲染器：地面网格、区域装饰、障碍物、竞技场边界
@@ -29,9 +38,11 @@ export class WorldRenderer {
     this.w = w;
     this.h = h;
     const dpr = window.devicePixelRatio || 1;
+    const cacheW = w + GROUND_CACHE_PADDING * 2;
+    const cacheH = h + GROUND_CACHE_PADDING * 2;
     this.groundCanvas = document.createElement('canvas');
-    this.groundCanvas.width = w * dpr;
-    this.groundCanvas.height = h * dpr;
+    this.groundCanvas.width = cacheW * dpr;
+    this.groundCanvas.height = cacheH * dpr;
     this.groundCtx = this.groundCanvas.getContext('2d')!;
     this.groundCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.groundCacheCamX = Infinity;
@@ -56,45 +67,67 @@ export class WorldRenderer {
     // 绘制缓存到主画布
     if (this.groundCanvas) {
       const dpr = window.devicePixelRatio || 1;
+      const cacheW = this.groundCanvas.width / dpr;
+      const cacheH = this.groundCanvas.height / dpr;
+      const drawX = this.groundCacheCamX - cam.x - GROUND_CACHE_PADDING;
+      const drawY = this.groundCacheCamY - cam.y - GROUND_CACHE_PADDING;
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.drawImage(this.groundCanvas, 0, 0);
+      ctx.drawImage(this.groundCanvas, drawX, drawY, cacheW, cacheH);
       ctx.restore();
     }
 
     // 动态浮游粒子（每帧更新）
     const time = Date.now() * 0.001;
-    const startX = Math.floor((cam.x - w / 2) / gridSize) * gridSize;
-    const startY = Math.floor((cam.y - h / 2) / gridSize) * gridSize;
-    ctx.globalAlpha = 0.08;
+    const startX = cam.x - w / 2 - gridSize;
+    const startY = cam.y - h / 2 - gridSize;
+    ctx.save();
+    ctx.globalAlpha = 0.1;
+    ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 20; i++) {
       const px = startX + (Math.sin(i * 7.3 + time * 0.2) * 0.5 + 0.5) * (w + gridSize * 2);
       const py = startY + (Math.cos(i * 5.7 + time * 0.15) * 0.5 + 0.5) * (h + gridSize * 2);
       const pr = 2 + Math.sin(i + time * 0.5) * 1;
       const zone = getZone(px, py);
       ctx.fillStyle = ZONE_COLORS[zone].particle;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(time * 0.35 + i);
       ctx.beginPath();
-      ctx.arc(px, py, pr, 0, Math.PI * 2);
+      ctx.moveTo(0, -pr * 1.8);
+      ctx.lineTo(pr, 0);
+      ctx.lineTo(0, pr * 1.8);
+      ctx.lineTo(-pr, 0);
+      ctx.closePath();
       ctx.fill();
+      ctx.restore();
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    this.drawFogRibbons(ctx, startX, startY, w, h, time);
   }
 
   private redrawGroundCache(cam: Camera, gridSize: number, w: number, h: number) {
     const gctx = this.groundCtx!;
     const dpr = window.devicePixelRatio || 1;
+    const cacheW = w + GROUND_CACHE_PADDING * 2;
+    const cacheH = h + GROUND_CACHE_PADDING * 2;
     gctx.save();
     gctx.setTransform(1, 0, 0, 1, 0, 0);
     gctx.fillStyle = COLORS.bg;
     gctx.fillRect(0, 0, this.groundCanvas!.width, this.groundCanvas!.height);
     gctx.restore();
     gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    gctx.translate(w / 2 - cam.x, h / 2 - cam.y);
+    this.drawAtmosphere(gctx, cacheW, cacheH);
+    gctx.translate(cacheW / 2 - cam.x, cacheH / 2 - cam.y);
 
-    const startX = Math.floor((cam.x - w / 2) / gridSize) * gridSize;
-    const startY = Math.floor((cam.y - h / 2) / gridSize) * gridSize;
-    const endX = startX + w + gridSize * 2;
-    const endY = startY + h + gridSize * 2;
+    const startX = Math.floor((cam.x - cacheW / 2) / gridSize) * gridSize;
+    const startY = Math.floor((cam.y - cacheH / 2) / gridSize) * gridSize;
+    const endX = startX + cacheW + gridSize * 2;
+    const endY = startY + cacheH + gridSize * 2;
+
+    this.drawZoneWash(gctx, startX, startY, endX, endY, gridSize);
+    this.drawFloorDepth(gctx, startX, startY, endX, endY, gridSize);
 
     // 主网格线
     gctx.lineWidth = 0.5;
@@ -161,6 +194,124 @@ export class WorldRenderer {
     gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
+  private drawAtmosphere(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    const base = ctx.createLinearGradient(0, 0, 0, h);
+    base.addColorStop(0, '#09101d');
+    base.addColorStop(0.55, COLORS.bg);
+    base.addColorStop(1, '#05060b');
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, w, h);
+
+    const vignette = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.18, w / 2, h / 2, Math.max(w, h) * 0.72);
+    vignette.addColorStop(0, 'rgba(30,58,88,0.08)');
+    vignette.addColorStop(0.65, 'rgba(0,0,0,0.1)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, w, h);
+  }
+
+  private drawZoneWash(
+    ctx: CanvasRenderingContext2D,
+    startX: number, startY: number, endX: number, endY: number,
+    gridSize: number
+  ) {
+    const tile = gridSize * 4;
+    ctx.save();
+    for (let x = startX - tile; x <= endX + tile; x += tile) {
+      for (let y = startY - tile; y <= endY + tile; y += tile) {
+        const zone = getZone(x + tile / 2, y + tile / 2);
+        const h = hashXY(x, y);
+        ctx.fillStyle = hexToRgba(ZONE_COLORS[zone].accent, 0.035 + (h % 4) * 0.006);
+        ctx.fillRect(x, y, tile, tile);
+      }
+    }
+    ctx.restore();
+  }
+
+  private drawFloorDepth(
+    ctx: CanvasRenderingContext2D,
+    startX: number, startY: number, endX: number, endY: number,
+    gridSize: number
+  ) {
+    const slab = gridSize * 2;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let x = startX - slab; x <= endX + slab; x += slab) {
+      for (let y = startY - slab; y <= endY + slab; y += slab) {
+        const h = hashXY(x, y);
+        const zone = getZone(x + slab / 2, y + slab / 2);
+        if (h % 3 === 0) {
+          ctx.fillStyle = hexToRgba(ZONE_COLORS[zone].accent, 0.018);
+          ctx.fillRect(x + 2, y + 2, slab - 4, slab - 4);
+        }
+
+        if (h % 4 === 0) {
+          ctx.strokeStyle = hexToRgba(ZONE_COLORS[zone].accent, 0.12);
+          ctx.lineWidth = 1;
+          const cx = x + (h % slab);
+          const cy = y + ((h >> 5) % slab);
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + 18 + (h % 18), cy + 9);
+          ctx.lineTo(cx + 10, cy + 22 + ((h >> 8) % 14));
+          ctx.stroke();
+        }
+
+        if (h % 13 === 0) {
+          const cx = x + slab * 0.5;
+          const cy = y + slab * 0.5;
+          ctx.strokeStyle = hexToRgba(ZONE_COLORS[zone].accent, 0.1);
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 18 + (h % 12), (h % 6) * 0.4, Math.PI * 1.25 + (h % 5) * 0.2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(cx - 4, cy);
+          ctx.lineTo(cx + 4, cy);
+          ctx.moveTo(cx, cy - 4);
+          ctx.lineTo(cx, cy + 4);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  private drawFogRibbons(
+    ctx: CanvasRenderingContext2D,
+    startX: number,
+    startY: number,
+    w: number,
+    h: number,
+    time: number
+  ) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    for (let band = 0; band < 3; band++) {
+      const y = startY + h * (0.22 + band * 0.23) + Math.sin(time * 0.18 + band) * 26;
+      const alpha = 0.025 + band * 0.012;
+      const grad = ctx.createLinearGradient(startX, y, startX + w, y);
+      grad.addColorStop(0, 'rgba(88,180,255,0)');
+      grad.addColorStop(0.28, `rgba(88,180,255,${alpha})`);
+      grad.addColorStop(0.62, `rgba(174,116,255,${alpha * 0.85})`);
+      grad.addColorStop(1, 'rgba(88,180,255,0)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 18 + band * 7;
+      ctx.beginPath();
+      ctx.moveTo(startX - 80, y);
+      const segments = 6;
+      for (let i = 1; i <= segments; i++) {
+        const x = startX + (i / segments) * (w + 160) - 80;
+        const wave = Math.sin(time * 0.25 + band * 2 + i * 1.7) * (14 + band * 4);
+        ctx.lineTo(x, y + wave);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   private drawZoneDecorations(
     ctx: CanvasRenderingContext2D,
     startX: number, startY: number, endX: number, endY: number,
@@ -177,7 +328,7 @@ export class WorldRenderer {
         const fx = x + ((h >> 4) % gridSize);
         const fy = y + ((h >> 8) % gridSize);
 
-        ctx.globalAlpha = 0.12;
+        ctx.globalAlpha = 0.14;
         ctx.fillStyle = accent;
         ctx.strokeStyle = accent;
         ctx.lineWidth = 1;
@@ -217,6 +368,17 @@ export class WorldRenderer {
             break;
           }
         }
+
+        if (h % 11 === 0) {
+          ctx.globalAlpha = 0.18;
+          ctx.beginPath();
+          ctx.moveTo(fx, fy - 7);
+          ctx.lineTo(fx + 5, fy);
+          ctx.lineTo(fx, fy + 7);
+          ctx.lineTo(fx - 5, fy);
+          ctx.closePath();
+          ctx.stroke();
+        }
       }
     }
     ctx.globalAlpha = 1;
@@ -233,20 +395,33 @@ export class WorldRenderer {
         case 'tombstone': {
           const w = obs.width;
           const h = obs.height;
-          ctx.fillStyle = '#3a3a4a';
-          ctx.strokeStyle = '#555566';
+          const stoneGrad = ctx.createLinearGradient(obs.x, obs.y - h / 2, obs.x, obs.y + h / 2);
+          stoneGrad.addColorStop(0, '#626276');
+          stoneGrad.addColorStop(0.45, '#3e4051');
+          stoneGrad.addColorStop(1, '#232533');
+          ctx.fillStyle = stoneGrad;
+          ctx.strokeStyle = '#818197';
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.roundRect(obs.x - w / 2, obs.y - h / 2, w, h, 3);
+          ctx.roundRect(obs.x - w / 2, obs.y - h / 2, w, h, 5);
           ctx.fill();
           ctx.stroke();
-          ctx.strokeStyle = '#666677';
+          ctx.fillStyle = 'rgba(185,205,230,0.12)';
+          ctx.fillRect(obs.x - w / 2 + 3, obs.y - h / 2 + 4, w - 6, 3);
+          ctx.strokeStyle = '#b2b2c6';
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.moveTo(obs.x, obs.y - h / 2 + 4);
           ctx.lineTo(obs.x, obs.y + h / 2 - 4);
           ctx.moveTo(obs.x - w / 4, obs.y - h / 4 + 2);
           ctx.lineTo(obs.x + w / 4, obs.y - h / 4 + 2);
+          ctx.stroke();
+          ctx.strokeStyle = 'rgba(20,22,32,0.72)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(obs.x + w * 0.18, obs.y - h * 0.25);
+          ctx.lineTo(obs.x + w * 0.08, obs.y - h * 0.04);
+          ctx.lineTo(obs.x + w * 0.2, obs.y + h * 0.1);
           ctx.stroke();
           ctx.fillStyle = 'rgba(0,0,0,0.3)';
           ctx.beginPath();

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="288" height="192" viewBox="0 0 288 192">
+  <defs>
+    <radialGradient id="ghost-aura" cx="50%" cy="38%" r="64%">
+      <stop offset="0" stop-color="#edf7ff" stop-opacity=".38"/>
+      <stop offset=".5" stop-color="#86bfff" stop-opacity=".17"/>
+      <stop offset="1" stop-color="#061322" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ghost-body" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#e9f6ff" stop-opacity=".9"/>
+      <stop offset=".65" stop-color="#9fb9dc" stop-opacity=".72"/>
+      <stop offset="1" stop-color="#6f88b1" stop-opacity=".36"/>
+    </linearGradient>
+    <filter id="ghost-glow" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <g id="ghost">
+      <ellipse cx="0" cy="25" rx="19" ry="6" fill="#020613" opacity=".33"/>
+      <circle cx="0" cy="-1" r="29" fill="url(#ghost-aura)" filter="url(#ghost-glow)"/>
+      <path d="M-22-1 C-22-17-11-27 0-27 C12-27 23-16 22 0 L22 18 C15 11 9 22 3 15 C-4 25-12 11-22 20Z" fill="url(#ghost-body)" stroke="#c7e8ff" stroke-width="2"/>
+      <ellipse cx="-7" cy="-5" rx="4.5" ry="6" fill="#0c1424"/>
+      <ellipse cx="7" cy="-5" rx="4.5" ry="6" fill="#0c1424"/>
+      <circle cx="-7" cy="-4" r="1.7" fill="#8ee9ff"/>
+      <circle cx="7" cy="-4" r="1.7" fill="#8ee9ff"/>
+      <path d="M-11 9 C-4 13 4 13 11 9" fill="none" stroke="#e8f7ff" stroke-width="1.4" opacity=".48"/>
+    </g>
+  </defs>
+  <g transform="translate(48 48)"><use href="#ghost"/></g>
+  <g transform="translate(144 48)"><use href="#ghost" transform="translate(0 -3)"/></g>
+  <g transform="translate(240 48) rotate(-3)"><use href="#ghost" transform="translate(-2 -1)"/></g>
+  <g transform="translate(48 144)"><use href="#ghost" transform="translate(0 -5)"/></g>
+  <g transform="translate(144 144)"><use href="#ghost" transform="translate(0 1)"/></g>
+  <g transform="translate(240 144) rotate(3)"><use href="#ghost" transform="translate(2 -1)"/></g>
+</svg>

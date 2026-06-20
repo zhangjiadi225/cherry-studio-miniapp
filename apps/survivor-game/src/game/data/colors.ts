@@ -1,10 +1,10 @@
 import type { MapZone } from '../types';
 
 export const COLORS = {
-  bg: '#0a0a1a',
-  ground1: '#111128',
-  ground2: '#0d0d22',
-  groundLine: '#1a1a35',
+  bg: '#070910',
+  ground1: '#101827',
+  ground2: '#0b1020',
+  groundLine: '#24324d',
   playerBody: '#4a9eff',
   playerOutline: '#2d7ad6',
   playerGlow: 'rgba(74,158,255,0.3)',
@@ -40,8 +40,8 @@ export const COLORS = {
 };
 
 export const ZONE_COLORS: Record<MapZone, { line: string; dot: string; accent: string; particle: string }> = {
-  shadow: { line: '#1a1a45', dot: '#4a4a8a', accent: '#6a4aff', particle: '#7a6aff' },
-  blood: { line: '#451a1a', dot: '#8a4a4a', accent: '#ff4a4a', particle: '#ff6a6a' },
-  bone: { line: '#3a3a1a', dot: '#8a8a4a', accent: '#cccc66', particle: '#dddd88' },
-  storm: { line: '#1a3a2a', dot: '#4a8a5a', accent: '#66ff88', particle: '#88ffaa' },
+  shadow: { line: '#202852', dot: '#5261a8', accent: '#8a6fff', particle: '#a190ff' },
+  blood: { line: '#522024', dot: '#a84f56', accent: '#ff5858', particle: '#ff8070' },
+  bone: { line: '#4a4024', dot: '#b1a66a', accent: '#eadb86', particle: '#fff0a6' },
+  storm: { line: '#1e4b3f', dot: '#5fc092', accent: '#66ffc2', particle: '#93ffda' },
 };

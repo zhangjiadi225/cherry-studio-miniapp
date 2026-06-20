@@ -3,6 +3,8 @@ import type { Player, Enemy, Projectile, XPGem, GenericModifierVisual } from '..
 import { WeaponType, EnemyType } from '../types';
 import { COLORS, ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from '../constants';
 import { getSkinById } from '../systems/meta/MetaProgression';
+import { spriteRegistry } from './SpriteRegistry';
+import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
 
 // ──────────────────────────── Helpers ────────────────────────────
 
@@ -94,76 +96,134 @@ function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, spikes:
 
 export function drawXPGem(rc: RenderContext, gem: XPGem) {
   const { ctx } = rc;
-  const pulse = 1 + Math.sin(gem.animTimer) * 0.15;
+  const pulse = 1 + Math.sin(gem.animTimer * 1.4) * 0.12;
   const r = gem.radius * pulse;
-  let color: string;
-  let glowColor: string;
+  let color = COLORS.gemSmall;
+  let core = '#d7fbff';
+  let rim = '#60efff';
+  let glowColor = 'rgba(68,221,255,';
   switch (gem.type) {
-    case 'small': color = COLORS.gemSmall; glowColor = 'rgba(68,221,255,'; break;
-    case 'medium': color = COLORS.gemMedium; glowColor = 'rgba(68,255,136,'; break;
-    case 'large': color = COLORS.gemLarge; glowColor = 'rgba(255,221,68,'; break;
+    case 'small':
+      color = COLORS.gemSmall;
+      core = '#d9fbff';
+      rim = '#60efff';
+      glowColor = 'rgba(68,221,255,';
+      break;
+    case 'medium':
+      color = COLORS.gemMedium;
+      core = '#e4ffe9';
+      rim = '#69ff9d';
+      glowColor = 'rgba(68,255,136,';
+      break;
+    case 'large':
+      color = COLORS.gemLarge;
+      core = '#fff6b8';
+      rim = '#ffd166';
+      glowColor = 'rgba(255,221,68,';
+      break;
   }
 
-  const outerGlow = ctx.createRadialGradient(gem.x, gem.y, 0, gem.x, gem.y, r * 3);
-  outerGlow.addColorStop(0, glowColor + '0.25)');
-  outerGlow.addColorStop(0.5, glowColor + '0.1)');
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const outerGlow = ctx.createRadialGradient(gem.x, gem.y, 0, gem.x, gem.y, r * 4.1);
+  outerGlow.addColorStop(0, glowColor + '0.38)');
+  outerGlow.addColorStop(0.42, glowColor + '0.14)');
   outerGlow.addColorStop(1, glowColor + '0)');
   ctx.fillStyle = outerGlow;
   ctx.beginPath();
-  ctx.arc(gem.x, gem.y, r * 3, 0, Math.PI * 2);
+  ctx.arc(gem.x, gem.y, r * 4.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = 'rgba(0,0,0,0.36)';
+  ctx.beginPath();
+  ctx.ellipse(gem.x, gem.y + r * 1.25, r * 0.82, r * 0.28, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  const innerGlow = ctx.createRadialGradient(gem.x, gem.y, 0, gem.x, gem.y, r * 1.5);
-  innerGlow.addColorStop(0, color + '60');
-  innerGlow.addColorStop(1, color + '00');
-  ctx.fillStyle = innerGlow;
-  ctx.beginPath();
-  ctx.arc(gem.x, gem.y, r * 1.5, 0, Math.PI * 2);
-  ctx.fill();
+  const tilt = Math.sin(gem.animTimer * 0.8) * 0.09;
+  ctx.save();
+  ctx.translate(gem.x, gem.y);
+  ctx.rotate(tilt);
 
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(gem.x, gem.y - r);
-  ctx.lineTo(gem.x + r * 0.7, gem.y);
-  ctx.lineTo(gem.x, gem.y + r);
-  ctx.lineTo(gem.x - r * 0.7, gem.y);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-  ctx.lineWidth = 0.5;
-  ctx.beginPath();
-  ctx.moveTo(gem.x, gem.y - r);
-  ctx.lineTo(gem.x + r * 0.7, gem.y);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(gem.x, gem.y - r);
-  ctx.lineTo(gem.x - r * 0.7, gem.y);
-  ctx.stroke();
-
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.beginPath();
-  ctx.moveTo(gem.x, gem.y - r * 0.6);
-  ctx.lineTo(gem.x + r * 0.3, gem.y);
-  ctx.lineTo(gem.x, gem.y + r * 0.3);
-  ctx.lineTo(gem.x - r * 0.3, gem.y - r * 0.2);
-  ctx.closePath();
-  ctx.fill();
-
-  if (gem.type === 'large') {
-    const sparklePhase = gem.animTimer * 3;
-    for (let i = 0; i < 4; i++) {
-      const angle = sparklePhase + (i / 4) * Math.PI * 2;
-      const dist = r * 1.2 + Math.sin(gem.animTimer * 2 + i) * 2;
-      const sx = gem.x + Math.cos(angle) * dist;
-      const sy = gem.y + Math.sin(angle) * dist;
-      const sparkleSize = 1.5 + Math.sin(gem.animTimer * 4 + i * 2) * 0.5;
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.beginPath();
-      ctx.arc(sx, sy, sparkleSize, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  if (gem.type !== 'small') {
+    ctx.save();
+    ctx.globalAlpha = gem.type === 'large' ? 0.72 : 0.42;
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2.5, 3.5]);
+    ctx.lineDashOffset = -gem.animTimer * 8;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * (gem.type === 'large' ? 2.05 : 1.72), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
   }
+
+  const gemGrad = ctx.createLinearGradient(-r, -r, r, r);
+  gemGrad.addColorStop(0, core);
+  gemGrad.addColorStop(0.32, color);
+  gemGrad.addColorStop(1, '#112033');
+  ctx.fillStyle = gemGrad;
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 1.28);
+  ctx.lineTo(r * 0.9, -r * 0.2);
+  ctx.lineTo(r * 0.52, r * 1.12);
+  ctx.lineTo(0, r * 1.46);
+  ctx.lineTo(-r * 0.52, r * 1.12);
+  ctx.lineTo(-r * 0.9, -r * 0.2);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = rim;
+  ctx.lineWidth = Math.max(0.8, r * 0.12);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 1.16);
+  ctx.lineTo(r * 0.62, -r * 0.16);
+  ctx.lineTo(0, r * 0.08);
+  ctx.lineTo(-r * 0.62, -r * 0.16);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.moveTo(0, r * 0.08);
+  ctx.lineTo(r * 0.48, r * 1.02);
+  ctx.lineTo(0, r * 1.35);
+  ctx.lineTo(-r * 0.48, r * 1.02);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.36)';
+  ctx.lineWidth = Math.max(0.5, r * 0.07);
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 1.22);
+  ctx.lineTo(0, r * 1.32);
+  ctx.moveTo(-r * 0.78, -r * 0.18);
+  ctx.lineTo(r * 0.78, -r * 0.18);
+  ctx.moveTo(-r * 0.48, r * 1.02);
+  ctx.lineTo(r * 0.48, r * 1.02);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.78)';
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.26, -r * 0.52, r * 0.16, r * 0.28, -0.65, 0, Math.PI * 2);
+  ctx.fill();
+
+  const sparkleCount = gem.type === 'large' ? 5 : gem.type === 'medium' ? 3 : 1;
+  for (let i = 0; i < sparkleCount; i++) {
+    const angle = gem.animTimer * 2.4 + (i / sparkleCount) * Math.PI * 2;
+    const dist = r * (1.45 + i * 0.12);
+    const sx = Math.cos(angle) * dist;
+    const sy = Math.sin(angle) * dist * 0.72;
+    const sparkleSize = Math.max(1, r * 0.18) + Math.sin(gem.animTimer * 4 + i * 2) * 0.45;
+    ctx.fillStyle = 'rgba(255,255,255,0.68)';
+    ctx.beginPath();
+    drawStar(ctx, sx, sy, 4, sparkleSize * 1.4, sparkleSize * 0.48);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 // ──────────────────────────── Player ────────────────────────────
@@ -341,6 +401,47 @@ function drawOraclePlayer(
 
 // ──────────────────────────── Enemy ────────────────────────────
 
+function drawBossAura(ctx: CanvasRenderingContext2D, e: Enemy, bob: number) {
+  const isSpectral = e.type === EnemyType.WRAITH;
+  const core = isSpectral ? '255,68,230' : '255,92,30';
+  const rim = isSpectral ? '#ff62f2' : '#ffb347';
+  const pulse = 0.78 + Math.sin(e.animTimer * 1.8) * 0.18;
+  const auraRadius = e.radius * (2.3 + pulse * 0.3);
+
+  const aura = ctx.createRadialGradient(e.x, e.y + bob, e.radius * 0.35, e.x, e.y + bob, auraRadius);
+  aura.addColorStop(0, `rgba(${core},${0.22 * pulse})`);
+  aura.addColorStop(0.52, `rgba(${core},${0.1 * pulse})`);
+  aura.addColorStop(1, `rgba(${core},0)`);
+  ctx.fillStyle = aura;
+  ctx.beginPath();
+  ctx.arc(e.x, e.y + bob, auraRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(e.x, e.y + bob);
+  ctx.rotate(e.animTimer * (isSpectral ? -0.28 : 0.36));
+  ctx.strokeStyle = `rgba(${core},${0.45 * pulse})`;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 6]);
+  ctx.beginPath();
+  ctx.arc(0, 0, e.radius * 1.62, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.strokeStyle = rim;
+  ctx.globalAlpha = 0.5 * pulse;
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    const inner = e.radius * 1.36;
+    const outer = e.radius * 1.72;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+    ctx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawEnemy(rc: RenderContext, e: Enemy) {
   const { ctx } = rc;
   const data = ENEMY_DATA[e.type];
@@ -348,15 +449,19 @@ export function drawEnemy(rc: RenderContext, e: Enemy) {
   const bob = Math.sin(e.animTimer) * 1.5;
   const wobble = Math.sin(e.animTimer * 2) * 0.1;
 
+  if (e.isBoss) drawBossAura(ctx, e, bob);
+
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.beginPath();
   ctx.ellipse(e.x, e.y + e.radius + 3, e.radius * 0.9, e.radius * 0.3, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = color;
-  ctx.beginPath();
+  const drewSprite = spriteRegistry.drawEnemy(ctx, e, bob);
+  if (!drewSprite) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
 
-  switch (e.type) {
+    switch (e.type) {
     case EnemyType.ZOMBIE:
       ctx.save();
       ctx.translate(e.x, e.y + bob);
@@ -589,9 +694,10 @@ export function drawEnemy(rc: RenderContext, e: Enemy) {
       ctx.restore();
       break;
 
-    default:
-      ctx.arc(e.x, e.y + bob, e.radius, 0, Math.PI * 2);
-      ctx.fill();
+      default:
+        ctx.arc(e.x, e.y + bob, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
   }
 
   // Elite effects
@@ -650,6 +756,11 @@ function seededRandom(seed: number): number {
   let s = seed | 0;
   s = ((s * 1103515245 + 12345) & 0x7fffffff);
   return (s >>> 0) / 0x7fffffff;
+}
+
+function getProjectileAngle(p: Projectile, fallback = 0): number {
+  const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+  return speed > 0.1 ? Math.atan2(p.vy, p.vx) : fallback;
 }
 
 function getActiveModifierVisuals(mask: number): GenericModifierVisual[] {
@@ -813,6 +924,11 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       ctx.beginPath();
       ctx.arc(p.x - p.vx * 0.02, p.y - p.vy * 0.02, p.radius * 0.8, 0, Math.PI * 2);
       ctx.fill();
+      weaponSpriteRegistry.drawWeapon(ctx, WeaponType.MAGIC_WAND, p.x, p.y, p.radius * 3.1, {
+        alpha,
+        rotation: getProjectileAngle(p) + Math.PI / 4,
+        glow: true,
+      });
       break;
 
     case WeaponType.FIRE_WAND:
@@ -840,9 +956,21 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         ctx.arc(p.x + Math.cos(angle) * dist, p.y + Math.sin(angle) * dist, 2, 0, Math.PI * 2);
         ctx.fill();
       }
+      weaponSpriteRegistry.drawWeapon(ctx, WeaponType.FIRE_WAND, p.x, p.y, p.radius * 3.2, {
+        alpha,
+        rotation: getProjectileAngle(p) + Math.PI / 4,
+        glow: true,
+      });
       break;
 
     case WeaponType.AXE:
+      if (weaponSpriteRegistry.drawWeapon(ctx, WeaponType.AXE, p.x, p.y, p.radius * 3.2, {
+        alpha,
+        rotation: p.animTimer * 3,
+        glow: true,
+      })) {
+        break;
+      }
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.animTimer * 3);
@@ -905,6 +1033,11 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         ctx.arc(p.x, p.y, p.radius * (2 + progress * 3), 0, Math.PI * 2);
         ctx.fill();
       }
+      weaponSpriteRegistry.drawWeapon(ctx, WeaponType.LIGHTNING, p.x, p.y, Math.min(76, p.radius * 1.9), {
+        alpha,
+        rotation: Math.sin(p.animTimer * 4) * 0.12,
+        glow: true,
+      });
       break;
     }
 
@@ -1064,6 +1197,11 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       ctx.beginPath();
       ctx.arc(originX, originY, 2.5, 0, Math.PI * 2);
       ctx.fill();
+      weaponSpriteRegistry.drawWeapon(ctx, WeaponType.WHIP, originX, originY, 34, {
+        alpha: alpha * 0.88,
+        rotation: swingDir > 0 ? -0.5 : Math.PI + 0.5,
+        glow: true,
+      });
       break;
     }
 
@@ -1107,6 +1245,11 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         ctx.fill();
       }
       ctx.restore();
+      weaponSpriteRegistry.drawWeapon(ctx, WeaponType.BIBLE, p.x, p.y, p.radius * 2.4, {
+        alpha,
+        rotation: p.animTimer,
+        glow: true,
+      });
       break;
 
     case WeaponType.HOLY_WATER: {
@@ -1137,6 +1280,11 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
           ctx.fill();
         }
       }
+      weaponSpriteRegistry.drawWeapon(ctx, WeaponType.HOLY_WATER, p.x, p.y, Math.min(58, Math.max(34, p.radius * 1.2)), {
+        alpha,
+        rotation: Math.sin(p.animTimer) * 0.12,
+        glow: true,
+      });
       break;
     }
 
@@ -1180,6 +1328,16 @@ export function drawGarlicAura(rc: RenderContext, player: Player, radius: number
     ctx.beginPath();
     ctx.arc(player.x + Math.cos(angle) * dist, player.y + Math.sin(angle) * dist, size, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  for (let i = 0; i < 3; i++) {
+    const angle = -time * 0.42 + i * Math.PI * 2 / 3;
+    const dist = radius * 0.42;
+    weaponSpriteRegistry.drawWeapon(ctx, WeaponType.GARLIC, player.x + Math.cos(angle) * dist, player.y + Math.sin(angle) * dist, 28, {
+      alpha: 0.42 + pulse,
+      rotation: Math.sin(time + i) * 0.18,
+      glow: true,
+    });
   }
 
   const visuals = getActiveModifierVisuals(modifierMask);

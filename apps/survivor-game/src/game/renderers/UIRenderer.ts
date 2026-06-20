@@ -1,11 +1,12 @@
 import type { RenderContext } from './WorldRenderer';
-import type { Player, Enemy, UpgradeOption, TouchJoystickState } from '../types';
+import type { Player, Enemy, UpgradeOption, TouchJoystickState, WeaponType } from '../types';
 import { COLORS, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA, GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA } from '../constants';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   META_UPGRADES, CHARACTER_SKINS, hasMetaUpgrade, canBuyMetaUpgrade,
 } from '../systems/meta/MetaProgression';
 import { getShopLayout, isMobileViewport } from '../systems/upgrade/ShopLayout';
+import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
 
 const gradientCache = new Map<string, CanvasGradient>();
 const GRADIENT_CACHE_LIMIT = 160;
@@ -52,6 +53,52 @@ function cachedRadialGradient(
   return gradient;
 }
 
+function drawHudGlassPanel(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radius: number,
+  stroke: string,
+  glow: string
+) {
+  ctx.save();
+  ctx.shadowColor = glow;
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = cachedLinearGradient(ctx, `hud-panel-${w}-${h}`, x, y, x, y + h, [
+    [0, 'rgba(20,30,55,0.88)'],
+    [0.5, 'rgba(6,10,22,0.78)'],
+    [1, 'rgba(2,4,10,0.84)'],
+  ]);
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, radius);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, radius);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.beginPath();
+  ctx.roundRect(x + 2, y + 2, w - 4, Math.max(2, h * 0.22), Math.max(2, radius - 2));
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawHudChip(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  stroke: string,
+  glow: string
+) {
+  drawHudGlassPanel(ctx, x, y, w, h, 7, stroke, glow);
+}
+
 // ──────────────────────────── HUD ────────────────────────────
 
 export function drawUI(rc: RenderContext, player: Player, elapsed: number, killCount: number, objective?: string) {
@@ -63,21 +110,47 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   const barX = padding;
   const barY = padding;
 
+  const rowY = barY + barH + 6;
+  const rowH = mobile ? 22 : 24;
+  const levelW = mobile ? 46 : 50;
+  const hpW = mobile ? 94 : 120;
+  const shardW = mobile ? 82 : 104;
+  const gap = mobile ? 6 : 10;
+  const topPanelW = Math.min(barW + 10, levelW + hpW + shardW + gap * 2 + 10);
+  drawHudGlassPanel(
+    ctx,
+    barX - 5,
+    barY - 5,
+    topPanelW,
+    rowY + rowH - barY + 10,
+    12,
+    'rgba(143,232,255,0.22)',
+    'rgba(70,180,255,0.18)'
+  );
+
   // XP Bar background
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillStyle = 'rgba(0,0,0,0.48)';
   ctx.beginPath();
   ctx.roundRect(barX - 2, barY - 2, barW + 4, barH + 4, 8);
   ctx.fill();
 
   // XP Bar fill
-  ctx.fillStyle = COLORS.xpBarBg;
+  ctx.fillStyle = cachedLinearGradient(ctx, `xp-bg-${barW}-${barH}`, barX, barY, barX + barW, barY, [
+    [0, '#081224'],
+    [0.5, '#101b2f'],
+    [1, '#07101d'],
+  ]);
   ctx.beginPath();
   ctx.roundRect(barX, barY, barW, barH, 6);
   ctx.fill();
 
   const xpRatio = player.xp / player.xpToNext;
   if (xpRatio > 0) {
-    ctx.fillStyle = COLORS.xpBar;
+    ctx.fillStyle = cachedLinearGradient(ctx, `xp-fill-${barW}-${barH}`, barX, barY, barX + barW, barY, [
+      [0, '#5df2ff'],
+      [0.48, COLORS.xpBar],
+      [1, '#ffd166'],
+    ]);
     ctx.beginPath();
     ctx.roundRect(barX, barY, barW * xpRatio, barH, 6);
     ctx.fill();
@@ -99,55 +172,24 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   ctx.textBaseline = 'middle';
   ctx.fillText(`${Math.floor(xpRatio * 100)}%`, barX + barW / 2, barY + barH / 2);
 
-  const rowY = barY + barH + 6;
-  const rowH = mobile ? 22 : 24;
-  const levelW = mobile ? 46 : 50;
-  const hpW = mobile ? 94 : 120;
-  const shardW = mobile ? 82 : 104;
-  const gap = mobile ? 6 : 10;
-
   // Level badge
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.beginPath();
-  ctx.roundRect(barX, rowY, levelW, rowH, 6);
-  ctx.fill();
-  ctx.strokeStyle = '#44ff44';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.roundRect(barX, rowY, levelW, rowH, 6);
-  ctx.stroke();
+  drawHudChip(ctx, barX, rowY, levelW, rowH, 'rgba(100,255,160,0.42)', 'rgba(68,255,140,0.16)');
   ctx.font = `bold ${mobile ? 12 : 14}px "Segoe UI", sans-serif`;
-  ctx.fillStyle = '#44ff44';
+  ctx.fillStyle = '#76ff9a';
   ctx.textAlign = 'center';
   ctx.fillText(`Lv.${player.level}`, barX + levelW / 2, rowY + rowH / 2);
 
   // HP display
   const hpX = barX + levelW + gap;
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.beginPath();
-  ctx.roundRect(hpX, rowY, hpW, rowH, 6);
-  ctx.fill();
-  ctx.strokeStyle = COLORS.danger;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.roundRect(hpX, rowY, hpW, rowH, 6);
-  ctx.stroke();
+  drawHudChip(ctx, hpX, rowY, hpW, rowH, 'rgba(255,82,98,0.48)', 'rgba(255,68,68,0.16)');
   ctx.font = `${mobile ? 11 : 13}px "Segoe UI", sans-serif`;
-  ctx.fillStyle = COLORS.danger;
+  ctx.fillStyle = '#ff7382';
   ctx.textAlign = 'center';
   ctx.fillText(`${mobile ? '' : '❤️ '}${Math.ceil(player.hp)}/${player.maxHp}`, hpX + hpW / 2, rowY + rowH / 2);
 
   // Spendable soul shard display
   const shardX = hpX + hpW + gap;
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.beginPath();
-  ctx.roundRect(shardX, rowY, shardW, rowH, 6);
-  ctx.fill();
-  ctx.strokeStyle = '#8fe8ff';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.roundRect(shardX, rowY, shardW, rowH, 6);
-  ctx.stroke();
+  drawHudChip(ctx, shardX, rowY, shardW, rowH, 'rgba(143,232,255,0.46)', 'rgba(143,232,255,0.16)');
   ctx.font = `${mobile ? 11 : 13}px "Segoe UI", sans-serif`;
   ctx.fillStyle = '#8fe8ff';
   ctx.textAlign = 'center';
@@ -164,15 +206,7 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   const phaseX = mobile ? padding : w - 224;
   const phaseY = mobile ? timerY + timerH + 8 : 12;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.beginPath();
-  ctx.roundRect(phaseX, phaseY, phaseW, phaseH, 6);
-  ctx.fill();
-  ctx.strokeStyle = phaseColor;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.roundRect(phaseX, phaseY, phaseW, phaseH, 6);
-  ctx.stroke();
+  drawHudChip(ctx, phaseX, phaseY, phaseW, phaseH, `${phaseColor}aa`, `${phaseColor}22`);
   ctx.font = `${mobile ? 11 : 12}px "Segoe UI", sans-serif`;
   ctx.fillStyle = phaseColor;
   ctx.textAlign = 'center';
@@ -183,15 +217,16 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   const seconds = Math.floor(elapsed % 60);
   const timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`;
 
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.beginPath();
-  ctx.roundRect(w / 2 - timerW / 2, timerY, timerW, timerH, 8);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.roundRect(w / 2 - timerW / 2, timerY, timerW, timerH, 8);
-  ctx.stroke();
+  drawHudGlassPanel(
+    ctx,
+    w / 2 - timerW / 2,
+    timerY,
+    timerW,
+    timerH,
+    8,
+    'rgba(255,255,255,0.28)',
+    'rgba(143,232,255,0.14)'
+  );
   ctx.font = `bold ${mobile ? 18 : 22}px "Segoe UI", monospace`;
   ctx.textAlign = 'center';
   ctx.fillStyle = COLORS.uiText;
@@ -202,10 +237,7 @@ export function drawUI(rc: RenderContext, player: Player, elapsed: number, killC
   const killH = mobile ? 22 : 24;
   const killX = mobile ? phaseX + phaseW + 6 : w - 100;
   const killY = mobile ? phaseY : 50;
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.beginPath();
-  ctx.roundRect(killX, killY, killW, killH, 6);
-  ctx.fill();
+  drawHudChip(ctx, killX, killY, killW, killH, 'rgba(255,255,255,0.16)', 'rgba(255,80,80,0.1)');
   ctx.font = `${mobile ? 11 : 14}px "Segoe UI", sans-serif`;
   ctx.textAlign = 'center';
   ctx.fillStyle = COLORS.uiDim;
@@ -287,7 +319,7 @@ function drawDesktopLoadoutDocks(ctx: CanvasRenderingContext2D, player: Player, 
     const wep = player.weapons[i];
     const data = WEAPON_DATA[wep.type];
     const wx = padding + i * weaponStep;
-    drawLoadoutSlot(ctx, wx, weaponY, weaponSize, data.icon, wep.level, 'rgba(255,126,126,0.62)', '#44ff44', true);
+    drawLoadoutSlot(ctx, wx, weaponY, weaponSize, data.icon, wep.level, 'rgba(255,126,126,0.62)', '#44ff44', true, wep.type);
   }
 
   if (player.passives.length === 0) return;
@@ -314,7 +346,8 @@ function drawLoadoutSlot(
   level: number,
   stroke: string,
   badgeColor: string,
-  prominentBadge: boolean
+  prominentBadge: boolean,
+  weaponType?: WeaponType
 ) {
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.76)';
@@ -327,11 +360,16 @@ function drawLoadoutSlot(
   ctx.roundRect(x, y, size, size, 10);
   ctx.stroke();
 
-  ctx.font = `${Math.floor(size * (prominentBadge ? 0.52 : 0.46))}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = COLORS.uiText;
-  ctx.fillText(icon, x + size / 2, y + size * 0.48);
+  const drewWeapon = weaponType
+    ? weaponSpriteRegistry.drawWeapon(ctx, weaponType, x + size / 2, y + size * 0.48, size * 0.74, { glow: true })
+    : false;
+  if (!drewWeapon) {
+    ctx.font = `${Math.floor(size * (prominentBadge ? 0.52 : 0.46))}px serif`;
+    ctx.fillStyle = COLORS.uiText;
+    ctx.fillText(icon, x + size / 2, y + size * 0.48);
+  }
 
   const badgeR = prominentBadge ? Math.max(11, size * 0.2) : Math.max(9, size * 0.17);
   const badgeX = x + size - badgeR * 0.78;
@@ -1071,11 +1109,18 @@ function getCodexAccent(tab: CodexTab): string {
   return '#ffb36b';
 }
 
-type CodexCard = { icon: string; title: string; tag: string; desc: string; accent: string };
+type CodexCard = { icon: string; title: string; tag: string; desc: string; accent: string; weaponType?: WeaponType };
 
 function getCodexCards(tab: CodexTab): CodexCard[] {
   if (tab === 'weapons') {
-    return Object.values(WEAPON_DATA).map((d) => ({ icon: d.icon, title: d.name, tag: `${d.family} · 最高Lv.${d.maxLevel ?? '∞'}`, desc: d.desc, accent: '#ff9999' }));
+    return Object.entries(WEAPON_DATA).map(([type, d]) => ({
+      icon: d.icon,
+      title: d.name,
+      tag: `${d.family} · 最高Lv.${d.maxLevel ?? '∞'}`,
+      desc: d.desc,
+      accent: '#ff9999',
+      weaponType: type as WeaponType,
+    }));
   }
   if (tab === 'passives') {
     return Object.values(PASSIVE_DATA).map((d) => ({ icon: d.icon, title: d.name, tag: `上限Lv.${d.maxLevel}`, desc: d.desc, accent: '#88ff88' }));
@@ -1119,8 +1164,15 @@ function drawCodexPanel(rc: RenderContext, activeTab: CodexTab) {
     ctx.beginPath(); ctx.roundRect(x, y, cardW, cardH, 10); ctx.stroke();
     ctx.fillStyle = colorWithAlpha(cd.accent, 0.16);
     ctx.beginPath(); ctx.arc(x + (mobile ? 26 : 34), y + (mobile ? 30 : 36), mobile ? 18 : 22, 0, Math.PI * 2); ctx.fill();
-    ctx.font = `${mobile ? 20 : 24}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff';
-    ctx.fillText(cd.icon, x + (mobile ? 26 : 34), y + (mobile ? 31 : 37));
+    const iconX = x + (mobile ? 26 : 34);
+    const iconY = y + (mobile ? 31 : 37);
+    const drewWeaponIcon = cd.weaponType
+      ? weaponSpriteRegistry.drawWeapon(ctx, cd.weaponType, iconX, iconY, mobile ? 34 : 42, { glow: false })
+      : false;
+    if (!drewWeaponIcon) {
+      ctx.font = `${mobile ? 20 : 24}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff';
+      ctx.fillText(cd.icon, iconX, iconY);
+    }
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.font = `700 ${mobile ? 12 : 15}px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
     ctx.fillText(cd.title, x + (mobile ? 50 : 66), y + (mobile ? 25 : 30));
@@ -1483,10 +1535,19 @@ export function drawUpgradeScreen(
     ctx.fillStyle = unavailable ? colorWithAlpha(accent, 0.75) : accent;
     ctx.fillText(rarity.label, cardW - rarityBadgeW / 2 - 10, 10 + rarityBadgeH / 2);
 
-    ctx.font = `${ultraCompact ? 28 : compact ? 34 : 42}px serif`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = unavailable ? 'rgba(255,255,255,0.65)' : COLORS.uiText;
-    ctx.fillText(opt.icon, cardW / 2, iconY);
+    const weaponIconSize = ultraCompact ? 42 : compact ? 50 : 62;
+    const drewWeaponIcon = opt.type === 'weapon' && opt.weaponType
+      ? weaponSpriteRegistry.drawWeapon(ctx, opt.weaponType, cardW / 2, iconY - 2, weaponIconSize, {
+        alpha: unavailable ? 0.62 : 1,
+        glow: selected && !unavailable,
+      })
+      : false;
+    if (!drewWeaponIcon) {
+      ctx.font = `${ultraCompact ? 28 : compact ? 34 : 42}px serif`;
+      ctx.fillStyle = unavailable ? 'rgba(255,255,255,0.65)' : COLORS.uiText;
+      ctx.fillText(opt.icon, cardW / 2, iconY);
+    }
 
     ctx.font = `bold ${compact ? 13 : 15}px "Segoe UI", sans-serif`;
     ctx.fillStyle = unavailable ? '#999999' : selected ? '#ffffff' : '#dddddd';
