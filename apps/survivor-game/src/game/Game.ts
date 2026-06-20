@@ -1,17 +1,17 @@
 import {
   GameState, Enemy, Projectile, XPGem, Particle, DamageNumber, EnemyProjectile,
-  Camera, WeaponType, PassiveType, Weapon, GenericModifierType, PerformanceStats, MapObstacle
+  Camera, WeaponType, PassiveType, Weapon, GenericModifierType, PerformanceStats, MapObstacle, EnemyType
 } from './types';
 import {
   SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
   CONTACT_COOLDOWN,
   MAGIC_CIRCLE_HEAL_RATE, MAGIC_CIRCLE_RADIUS,
-  GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK,
+  GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ENEMIES,
 } from './constants';
 import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
 import { createPlayer, updatePlayer, damagePlayer, collectShards, hasPassive, tryBloodZoneHeal } from './systems/player/Player';
-import { updateEnemy, isCollidingWithPlayer, resetEnemyIds } from './systems/enemy/Enemy';
+import { createEnemy, updateEnemy, isCollidingWithPlayer, resetEnemyIds, shouldSplitOnDeath } from './systems/enemy/Enemy';
 import { updateEnemyAttacks, updateEnemyProjectile } from './systems/enemy/EnemyAttack';
 import { Spawner } from './systems/enemy/Spawner';
 import {
@@ -34,6 +34,7 @@ import {
   buyMetaUpgrade, selectSkin, selectRunDifficulty, CHARACTER_SKINS,
 } from './systems/meta/MetaProgression';
 import { getRunDifficultyPreset, type RunDifficultyPreset } from './data/runDifficulties';
+import { getDifficultyParams } from './data/difficulty';
 import { MapSystem } from './systems/map/MapSystem';
 import { SpatialEnemyQuery } from './systems/enemy/EnemyQuery';
 import { pools, clearAllPools } from './utils/PoolManager';
@@ -757,6 +758,9 @@ export class Game {
         speed: 150, life: 0.8, radius: 4, type: 'star', glow: true,
       });
     }
+    if (shouldSplitOnDeath(e)) {
+      this.spawnDeathSplitMinions(e);
+    }
 
     this.xpGems.push(createXPGem(e.x, e.y, e.xpValue));
 
@@ -765,6 +769,36 @@ export class Game {
       pushDamageNumber(this.damageNumbers, this.player.x, this.player.y, heal, '#ff6666', 14);
     }
 
+  }
+
+  private spawnDeathSplitMinions(e: Enemy) {
+    const difficultyParams = getDifficultyParams(this.elapsed, this.runDifficulty);
+    const count = Math.min(2, Math.max(0, MAX_ENEMIES - this.enemies.length));
+    for (let i = 0; i < count; i++) {
+      const angle = e.animTimer + i * Math.PI;
+      const child = createEnemy(
+        EnemyType.BAT,
+        e.x + Math.cos(angle) * e.radius * 1.4,
+        e.y + Math.sin(angle) * e.radius * 1.4,
+        this.difficulty,
+        1,
+        false,
+        false,
+        difficultyParams,
+        0,
+        1
+      );
+      child.hp *= 0.55;
+      child.maxHp = child.hp;
+      child.damage *= 0.7;
+      child.xpValue = Math.max(1, child.xpValue * 0.35);
+      child.knockbackX = Math.cos(angle) * 80;
+      child.knockbackY = Math.sin(angle) * 80;
+      this.enemies.push(child);
+    }
+    spawnHitParticles(this.particles, e.x, e.y, '#d6b48a', 12, {
+      speed: 170, life: 0.42, radius: 2.5, type: 'spark', glow: true,
+    });
   }
 
   private checkPlayerDeath() {

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { EnemyType, WeaponType, type Enemy, type Projectile, type Weapon } from '../../types';
+import { WEAPON_DATA } from '../../constants';
 import type { EnemyQuery } from '../enemy/EnemyQuery';
 import { createPlayer } from '../player/Player';
 import { createWeapon, updateWeapon, upgradeWeapon } from './Weapon';
+
+const VALID_WEAPON_TAGS = new Set(['melee', 'ranged', 'piercing']);
 
 function makeEnemy(x: number, y: number): Enemy {
   return {
@@ -27,6 +30,13 @@ function makeEnemy(x: number, y: number): Enemy {
     attackWindup: 0,
     attackPatternIndex: 0,
     pendingAttackPattern: 0,
+    isEmpowered: false,
+    trait: 'none',
+    traitCooldown: 0,
+    traitWindup: 0,
+    traitDuration: 0,
+    traitDirX: 0,
+    traitDirY: 0,
   };
 }
 
@@ -56,6 +66,34 @@ function projectedOutput(type: WeaponType, level: number): number {
 }
 
 describe('weapon output model', () => {
+  it('keeps every weapon classified with lightweight metadata', () => {
+    for (const data of Object.values(WEAPON_DATA)) {
+      expect(typeof data.metadata.showWhenEquipped).toBe('boolean');
+      expect(data.metadata.tags.length).toBeGreaterThan(0);
+      expect(data.metadata.tags.every((tag) => VALID_WEAPON_TAGS.has(tag))).toBe(true);
+    }
+  });
+
+  it('uses metadata to identify stowed equipped weapon assets', () => {
+    const displayTypes = Object.entries(WEAPON_DATA)
+      .filter(([, data]) => data.metadata.showWhenEquipped)
+      .map(([type]) => type);
+
+    expect(displayTypes).toEqual([
+      WeaponType.WHIP,
+      WeaponType.BIBLE,
+      WeaponType.GARLIC,
+      WeaponType.HOLY_WATER,
+      WeaponType.LIGHTNING,
+    ]);
+  });
+
+  it('tags current piercing projectile weapons for later build rules', () => {
+    expect(WEAPON_DATA[WeaponType.AXE].metadata.tags).toContain('piercing');
+    expect(WEAPON_DATA[WeaponType.RUNE_LANCE].metadata.tags).toContain('piercing');
+    expect(WEAPON_DATA[WeaponType.MOON_BLADE].metadata.tags).toContain('piercing');
+  });
+
   it('keeps late lightning from dominating every other damage choice', () => {
     expect(projectedOutput(WeaponType.LIGHTNING, 8)).toBeLessThan(450);
   });

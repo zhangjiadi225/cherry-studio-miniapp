@@ -255,18 +255,10 @@ export function drawXPGem(rc: RenderContext, gem: XPGem) {
 
 // ──────────────────────────── Player ────────────────────────────
 
-const EQUIPPED_DISPLAY_WEAPONS = new Set<WeaponType>([
-  WeaponType.WHIP,
-  WeaponType.BIBLE,
-  WeaponType.GARLIC,
-  WeaponType.HOLY_WATER,
-  WeaponType.LIGHTNING,
-]);
-
 function getEquippedDisplayWeaponTypes(player: Player): WeaponType[] {
   const types: WeaponType[] = [];
   for (const weapon of player.weapons) {
-    if (!EQUIPPED_DISPLAY_WEAPONS.has(weapon.type) || types.includes(weapon.type)) continue;
+    if (!WEAPON_DATA[weapon.type].metadata.showWhenEquipped || types.includes(weapon.type)) continue;
     types.push(weapon.type);
     if (types.length >= 4) break;
   }
@@ -621,6 +613,77 @@ function drawEnemyAttackCharge(ctx: CanvasRenderingContext2D, e: Enemy, bob: num
   ctx.restore();
 }
 
+function drawEnemyEmpoweredAura(ctx: CanvasRenderingContext2D, e: Enemy, bob: number) {
+  if (!e.isEmpowered) return;
+
+  const y = e.y + bob;
+  const pulse = 0.72 + Math.sin(e.animTimer * 4) * 0.18;
+  const active = e.traitWindup > 0 || e.traitDuration > 0;
+  const color =
+    e.trait === 'dash' ? '98,214,255' :
+    e.trait === 'shield' ? '255,225,128' :
+    e.trait === 'phase' ? '128,218,255' :
+    e.trait === 'split' ? '214,180,138' :
+    e.trait === 'charge' ? '255,96,52' :
+    e.trait === 'shadowCaster' ? '214,108,255' :
+    e.trait === 'burstCaster' ? '181,140,255' :
+    '220,235,255';
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(${color},${active ? 0.58 : 0.32})`;
+  ctx.lineWidth = active ? 2.4 : 1.4;
+  ctx.setLineDash(e.trait === 'shield' ? [] : [5, 5]);
+  ctx.lineDashOffset = -e.animTimer * 24;
+  ctx.beginPath();
+  ctx.arc(e.x, y, e.radius * (1.45 + pulse * 0.12), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (e.trait === 'shield') {
+    ctx.strokeStyle = `rgba(${color},0.72)`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(e.x, y, e.radius * 1.18, -Math.PI * 0.82, Math.PI * 0.82);
+    ctx.stroke();
+  } else if (e.trait === 'dash' || e.trait === 'charge') {
+    const len = active ? e.radius * 2.7 : e.radius * 1.7;
+    ctx.strokeStyle = `rgba(${color},${active ? 0.7 : 0.38})`;
+    ctx.lineWidth = e.trait === 'charge' ? 3 : 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(e.x - e.traitDirX * len, y - e.traitDirY * len);
+    ctx.lineTo(e.x - e.traitDirX * e.radius * 0.25, y - e.traitDirY * e.radius * 0.25);
+    ctx.stroke();
+  } else if (e.trait === 'phase') {
+    ctx.fillStyle = `rgba(${color},${e.traitDuration > 0 ? 0.16 : 0.07})`;
+    ctx.beginPath();
+    ctx.ellipse(e.x, y, e.radius * 1.6, e.radius * 1.05, e.animTimer * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (e.trait === 'split') {
+    ctx.fillStyle = `rgba(${color},0.62)`;
+    for (let i = 0; i < 4; i++) {
+      const angle = e.animTimer * 0.7 + i * Math.PI * 0.5;
+      ctx.beginPath();
+      ctx.arc(
+        e.x + Math.cos(angle) * e.radius * 1.25,
+        y + Math.sin(angle) * e.radius * 0.72,
+        Math.max(2, e.radius * 0.13),
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+    }
+  } else if (e.trait === 'burstCaster' || e.trait === 'shadowCaster') {
+    ctx.fillStyle = `rgba(${color},${active ? 0.72 : 0.48})`;
+    ctx.font = `${Math.round(e.radius * 0.85)}px serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(e.trait === 'shadowCaster' ? '✦' : 'II', e.x, y - e.radius * 1.55);
+  }
+  ctx.restore();
+}
+
 export function drawEnemy(rc: RenderContext, e: Enemy) {
   const { ctx } = rc;
   const data = ENEMY_DATA[e.type];
@@ -638,6 +701,10 @@ export function drawEnemy(rc: RenderContext, e: Enemy) {
 
   if (e.attackWindup > 0) drawEnemyAttackCharge(ctx, e, bob);
 
+  ctx.save();
+  if (e.trait === 'phase' && e.traitDuration > 0) {
+    ctx.globalAlpha *= 0.58 + Math.sin(e.animTimer * 6) * 0.08;
+  }
   const drewSprite = spriteRegistry.drawEnemy(ctx, e, bob);
   if (!drewSprite) {
     ctx.fillStyle = color;
@@ -918,6 +985,9 @@ export function drawEnemy(rc: RenderContext, e: Enemy) {
         ctx.fill();
     }
   }
+  ctx.restore();
+
+  drawEnemyEmpoweredAura(ctx, e, bob);
 
   // Elite effects
   if (e.isElite) {

@@ -121,6 +121,13 @@ export interface Enemy {
   attackWindup: number;
   attackPatternIndex: number;
   pendingAttackPattern: number;
+  isEmpowered: boolean;
+  trait: EnemyTrait;
+  traitCooldown: number;
+  traitWindup: number;
+  traitDuration: number;
+  traitDirX: number;
+  traitDirY: number;
 }
 
 export interface Projectile {
@@ -253,6 +260,12 @@ export const WeaponType = {
 export type WeaponType = typeof WeaponType[keyof typeof WeaponType];
 
 export type WeaponFamily = 'projectile' | 'strike' | 'aura' | 'orbit' | 'zone' | 'swing';
+export type WeaponTag = 'melee' | 'ranged' | 'piercing';
+
+export interface WeaponMetadata {
+  showWhenEquipped: boolean;
+  tags: WeaponTag[];
+}
 
 export const GenericModifierType = {
   DOUBLE_CAST: 'double_cast',
@@ -342,6 +355,26 @@ export const EnemyType = {
   WRAITH: 'wraith',
 } as const;
 export type EnemyType = typeof EnemyType[keyof typeof EnemyType];
+
+export type EnemyTrait =
+  | 'none'
+  | 'dash'
+  | 'shield'
+  | 'phase'
+  | 'split'
+  | 'burstCaster'
+  | 'charge'
+  | 'shadowCaster';
+
+export interface EnemyEnhancement {
+  unlockAfter: number;
+  name: string;
+  desc: string;
+  trait: EnemyTrait;
+  hpMult?: number;
+  speedMult?: number;
+  damageMult?: number;
+}
 
 export type MapZone = 'shadow' | 'blood' | 'bone' | 'storm';
 

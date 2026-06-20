@@ -1,10 +1,23 @@
-import { WeaponType, type WeaponFamily } from '../types';
+import { WeaponType, type WeaponFamily, type WeaponMetadata, type WeaponTag } from '../types';
+
+export const WEAPON_TAG_LABELS: Record<WeaponTag, string> = {
+  melee: '近战',
+  ranged: '远程',
+  piercing: '穿透',
+};
+
+export function getWeaponMetadataLabel(metadata: WeaponMetadata): string {
+  const labels = metadata.tags.map((tag) => WEAPON_TAG_LABELS[tag]);
+  if (metadata.showWhenEquipped) labels.unshift('常驻展示');
+  return labels.join(' · ');
+}
 
 export const WEAPON_DATA: Record<WeaponType, {
   name: string;
   icon: string;
   desc: string;
   family: WeaponFamily;
+  metadata: WeaponMetadata;
   baseDamage: number;
   baseCooldown: number;
   baseSpeed: number;
@@ -31,6 +44,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '🪄',
     desc: '每升1级多一节鞭身，最高8级',
     family: 'swing',
+    metadata: { showWhenEquipped: true, tags: ['melee', 'piercing'] },
     baseDamage: 15,
     baseCooldown: 1.5,
     baseSpeed: 0,
@@ -47,6 +61,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '✦',
     desc: '向最近敌人发射魔法弹',
     family: 'projectile',
+    metadata: { showWhenEquipped: false, tags: ['ranged'] },
     baseDamage: 10,
     baseCooldown: 1.2,
     baseSpeed: 400,
@@ -63,6 +78,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '📖',
     desc: '环绕玩家旋转的圣书',
     family: 'orbit',
+    metadata: { showWhenEquipped: true, tags: ['melee', 'piercing'] },
     baseDamage: 18,
     baseCooldown: 8,
     baseSpeed: 200,
@@ -79,6 +95,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '🧄',
     desc: '持续伤害周围的敌人',
     family: 'aura',
+    metadata: { showWhenEquipped: true, tags: ['melee'] },
     baseDamage: 5,
     baseCooldown: 0.5,
     baseSpeed: 0,
@@ -95,6 +112,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '🔥',
     desc: '发射爆炸的火球',
     family: 'projectile',
+    metadata: { showWhenEquipped: false, tags: ['ranged'] },
     baseDamage: 25,
     baseCooldown: 2.0,
     baseSpeed: 300,
@@ -111,6 +129,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '💧',
     desc: '在敌人位置降下伤害区域',
     family: 'zone',
+    metadata: { showWhenEquipped: true, tags: ['ranged'] },
     baseDamage: 10,
     baseCooldown: 5,
     baseSpeed: 0,
@@ -127,6 +146,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '⚡',
     desc: '随机打击屏幕内敌人',
     family: 'strike',
+    metadata: { showWhenEquipped: true, tags: ['ranged'] },
     baseDamage: 30,
     baseCooldown: 3,
     baseSpeed: 0,
@@ -143,6 +163,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '🪓',
     desc: '抛向天空的高伤害飞斧',
     family: 'projectile',
+    metadata: { showWhenEquipped: false, tags: ['ranged', 'piercing'] },
     baseDamage: 35,
     baseCooldown: 3,
     baseSpeed: 250,
@@ -159,6 +180,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '⟡',
     desc: '朝最近敌人发射高速贯穿枪芒',
     family: 'projectile',
+    metadata: { showWhenEquipped: false, tags: ['ranged', 'piercing'] },
     baseDamage: 18,
     baseCooldown: 1.65,
     baseSpeed: 560,
@@ -175,6 +197,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '☾',
     desc: '发射多枚旋转穿透月刃',
     family: 'projectile',
+    metadata: { showWhenEquipped: false, tags: ['ranged', 'piercing'] },
     baseDamage: 12,
     baseCooldown: 2.4,
     baseSpeed: 360,

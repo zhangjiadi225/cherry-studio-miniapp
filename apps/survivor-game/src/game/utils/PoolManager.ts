@@ -112,6 +112,13 @@ function resetEnemy(e: Enemy) {
   e.attackWindup = 0;
   e.attackPatternIndex = 0;
   e.pendingAttackPattern = -1;
+  e.isEmpowered = false;
+  e.trait = 'none';
+  e.traitCooldown = 0;
+  e.traitWindup = 0;
+  e.traitDuration = 0;
+  e.traitDirX = 0;
+  e.traitDirY = 0;
 }
 
 export const pools = {
@@ -201,6 +208,13 @@ export const pools = {
       attackWindup: 0,
       attackPatternIndex: 0,
       pendingAttackPattern: -1,
+      isEmpowered: false,
+      trait: 'none',
+      traitCooldown: 0,
+      traitWindup: 0,
+      traitDuration: 0,
+      traitDirX: 0,
+      traitDirY: 0,
     }),
     resetEnemy,
     256, 1024

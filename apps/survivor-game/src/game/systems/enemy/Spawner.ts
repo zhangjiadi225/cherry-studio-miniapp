@@ -41,7 +41,18 @@ export class Spawner {
       if (enemies.length >= MAX_ENEMIES) break;
       const type = this.pickEnemyType(available, elapsed, difficulty, runDifficulty);
       const pos = this.getSpawnPosition(player);
-      enemies.push(createEnemy(type, pos.x, pos.y, difficulty, curseMult, true, false, difficultyParams));
+      enemies.push(createEnemy(
+        type,
+        pos.x,
+        pos.y,
+        difficulty,
+        curseMult,
+        true,
+        false,
+        difficultyParams,
+        elapsed,
+        runDifficulty.enemyUnlockTimeMult
+      ));
     }
   }
 
@@ -95,7 +106,18 @@ export class Spawner {
       const type = this.pickEnemyType(available, elapsed, difficulty, runDifficulty);
       const pos = this.getSpawnPosition(player);
       const isElite = Math.random() < difficultyParams.eliteChance;
-      enemies.push(createEnemy(type, pos.x, pos.y, difficulty, curseMult, isElite, false, difficultyParams));
+      enemies.push(createEnemy(
+        type,
+        pos.x,
+        pos.y,
+        difficulty,
+        curseMult,
+        isElite,
+        false,
+        difficultyParams,
+        elapsed,
+        runDifficulty.enemyUnlockTimeMult
+      ));
     }
   }
 
@@ -112,7 +134,18 @@ export class Spawner {
     const bossType = isLateBoss ? EnemyType.WRAITH : EnemyType.DEMON;
     const pos = this.getSpawnPosition(player);
 
-    const boss = createEnemy(bossType, pos.x, pos.y, difficulty, curseMult, true, true, difficultyParams);
+    const boss = createEnemy(
+      bossType,
+      pos.x,
+      pos.y,
+      difficulty,
+      curseMult,
+      true,
+      true,
+      difficultyParams,
+      bossTime,
+      runDifficulty.enemyUnlockTimeMult
+    );
     boss.radius *= 2;
     boss.maxHp *= BOSS_HP_MULT;
     boss.hp = boss.maxHp;
@@ -133,7 +166,9 @@ export class Spawner {
         1,
         false,
         false,
-        difficultyParams
+        difficultyParams,
+        bossTime,
+        runDifficulty.enemyUnlockTimeMult
       ));
     }
   }

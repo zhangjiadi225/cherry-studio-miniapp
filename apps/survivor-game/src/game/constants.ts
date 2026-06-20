@@ -5,7 +5,7 @@ export { ENEMY_DATA } from './data/enemies';
 export { GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from './data/modifiers';
 export { PASSIVE_DATA } from './data/passives';
 export { SUPPLY_DATA } from './data/supplies';
-export { WEAPON_DATA } from './data/weapons';
+export { WEAPON_DATA, getWeaponMetadataLabel } from './data/weapons';
 
 // ===== Game =====
 export const GAME_DURATION = 9 * 60; // 9 minutes

@@ -161,6 +161,30 @@ const CULTIST_ATTACK: EnemyAttackProfile = {
   patterns: [SINGLE_SHOT],
 };
 
+const CULTIST_BURST_ATTACK: EnemyAttackProfile = {
+  ...CULTIST_ATTACK,
+  cooldown: 2.15,
+  windup: 0.34,
+  bulletSpeed: 250,
+  bulletDamageRatio: 0.78,
+  patterns: [AIMED_BURST],
+};
+
+const WRAITH_HUNTER_ATTACK: EnemyAttackProfile = {
+  range: 620,
+  preferredRange: 340,
+  retreatRange: 185,
+  cooldown: 2.55,
+  windup: 0.36,
+  bulletSpeed: 225,
+  bulletRadius: 4,
+  bulletDamageRatio: 0.72,
+  kind: 'wraith_orb',
+  color: '#d16dff',
+  glowColor: 'rgba(209,109,255,0.36)',
+  patterns: [SINGLE_SHOT, SHADOW_BARRAGE],
+};
+
 const DEMON_BOSS_ATTACK: EnemyAttackProfile = {
   range: 820,
   preferredRange: 330,
@@ -192,9 +216,14 @@ const WRAITH_BOSS_ATTACK: EnemyAttackProfile = {
 };
 
 export function getEnemyAttackProfile(enemy: Enemy): EnemyAttackProfile | undefined {
-  if (enemy.type === EnemyType.CULTIST) return CULTIST_ATTACK;
   if (enemy.isBoss && enemy.type === EnemyType.DEMON) return DEMON_BOSS_ATTACK;
   if (enemy.isBoss && enemy.type === EnemyType.WRAITH) return WRAITH_BOSS_ATTACK;
+  if (enemy.type === EnemyType.CULTIST) {
+    return enemy.isEmpowered && enemy.trait === 'burstCaster' ? CULTIST_BURST_ATTACK : CULTIST_ATTACK;
+  }
+  if (enemy.type === EnemyType.WRAITH && enemy.isEmpowered && enemy.trait === 'shadowCaster') {
+    return WRAITH_HUNTER_ATTACK;
+  }
   return undefined;
 }
 

@@ -1,6 +1,9 @@
 import type { RenderContext } from './WorldRenderer';
 import type { Player, Enemy, UpgradeOption, TouchJoystickState, WeaponType, PerformanceStats } from '../types';
-import { COLORS, GAME_DURATION, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA, GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA } from '../constants';
+import {
+  COLORS, GAME_DURATION, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA,
+  GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA, getWeaponMetadataLabel
+} from '../constants';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   META_UPGRADES, CHARACTER_SKINS, hasMetaUpgrade, canBuyMetaUpgrade,
@@ -1222,7 +1225,7 @@ function getCodexCards(tab: CodexTab): CodexCard[] {
     return Object.entries(WEAPON_DATA).map(([type, d]) => ({
       icon: d.icon,
       title: d.name,
-      tag: `${d.family} · 最高Lv.${d.maxLevel ?? '∞'}`,
+      tag: `${getWeaponMetadataLabel(d.metadata)} · Lv.${d.maxLevel ?? '∞'}`,
       desc: d.desc,
       accent: '#ff9999',
       weaponType: type as WeaponType,
@@ -1232,7 +1235,17 @@ function getCodexCards(tab: CodexTab): CodexCard[] {
     return Object.values(PASSIVE_DATA).map((d) => ({ icon: d.icon, title: d.name, tag: `上限Lv.${d.maxLevel}`, desc: d.desc, accent: '#88ff88' }));
   }
   if (tab === 'enemies') {
-    return Object.values(ENEMY_DATA).map((d) => ({ icon: '◇', title: d.name, tag: `魂晶${d.xpValue} · ${d.spawnAfter}s`, desc: `HP ${d.baseHp} / 伤害 ${d.baseDamage} / 速度 ${d.baseSpeed}`, accent: d.color }));
+    return Object.values(ENEMY_DATA).map((d) => ({
+      icon: '◇',
+      title: d.name,
+      tag: d.enhancement
+        ? `魂晶${d.xpValue} · ${d.spawnAfter}s · 强化${d.enhancement.unlockAfter}s`
+        : `魂晶${d.xpValue} · ${d.spawnAfter}s`,
+      desc: d.enhancement
+        ? `${d.enhancement.name}：${d.enhancement.desc}`
+        : `HP ${d.baseHp} / 伤害 ${d.baseDamage} / 速度 ${d.baseSpeed}`,
+      accent: d.color,
+    }));
   }
   return Object.values(GENERIC_MODIFIER_DATA).map((d) => ({ icon: d.icon, title: d.name, tag: `${d.trigger}→${d.effect}`, desc: d.desc, accent: '#d3a8ff' }));
 }
