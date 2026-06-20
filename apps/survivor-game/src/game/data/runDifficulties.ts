@@ -37,6 +37,7 @@ export interface RunDifficultyPreset {
   eliteChanceMult: number;
   enemyUnlockTimeMult: number;
   complexEnemyWeightMult: number;
+  rangedEnemyWeightCap: number;
   bossPatternLimit: number;
   enemyAttackCooldownMult: number;
   enemyProjectileCapMult: number;
@@ -64,6 +65,7 @@ export const RUN_DIFFICULTY_PRESETS: Record<RunDifficultyId, RunDifficultyPreset
     eliteChanceMult: 0.65,
     enemyUnlockTimeMult: 1.35,
     complexEnemyWeightMult: 0.55,
+    rangedEnemyWeightCap: 0.26,
     bossPatternLimit: 1,
     enemyAttackCooldownMult: 1.25,
     enemyProjectileCapMult: 0.65,
@@ -87,6 +89,7 @@ export const RUN_DIFFICULTY_PRESETS: Record<RunDifficultyId, RunDifficultyPreset
     eliteChanceMult: 1,
     enemyUnlockTimeMult: 1,
     complexEnemyWeightMult: 1,
+    rangedEnemyWeightCap: 0.38,
     bossPatternLimit: 3,
     enemyAttackCooldownMult: 1,
     enemyProjectileCapMult: 1,
@@ -126,9 +129,10 @@ export const RUN_DIFFICULTY_PRESETS: Record<RunDifficultyId, RunDifficultyPreset
     eliteChanceMult: 1,
     enemyUnlockTimeMult: 0.65,
     complexEnemyWeightMult: 1,
+    rangedEnemyWeightCap: 0.42,
     bossPatternLimit: 3,
-    enemyAttackCooldownMult: 0.85,
-    enemyProjectileCapMult: 1.25,
+    enemyAttackCooldownMult: 1,
+    enemyProjectileCapMult: 1,
     soulFireRewardMult: 1.4,
   },
 } as const;

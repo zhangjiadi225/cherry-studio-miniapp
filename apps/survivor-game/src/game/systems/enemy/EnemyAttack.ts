@@ -42,6 +42,8 @@ interface EnemyAttackContext {
   maxProjectiles: number;
 }
 
+export const ENEMY_PROJECTILE_LIFETIME = 2.75;
+
 export interface EnemyEngagementProfile {
   preferredRange: number;
   retreatRange: number;
@@ -71,7 +73,7 @@ function spawnEnemyProjectile(
   p.vy = Math.sin(angle) * speed;
   p.damage = enemy.damage * profile.bulletDamageRatio * damageScale;
   p.radius = profile.bulletRadius * radiusScale;
-  p.life = 3.4;
+  p.life = ENEMY_PROJECTILE_LIFETIME;
   p.maxLife = p.life;
   p.sourceType = enemy.type;
   p.sourceId = enemy.id;
@@ -139,19 +141,19 @@ function fireShadowBarrage(ctx: EnemyAttackContext, enemy: Enemy, profile: Enemy
 }
 
 const SINGLE_SHOT: EnemyAttackPattern = { id: 'single', fire: fireSingle };
-const AIMED_BURST: EnemyAttackPattern = { id: 'aimed_burst', cooldown: 2.2, fire: fireAimedBurst };
+const AIMED_BURST: EnemyAttackPattern = { id: 'aimed_burst', cooldown: 2.7, fire: fireAimedBurst };
 const FIRE_FAN: EnemyAttackPattern = { id: 'fire_fan', cooldown: 2.7, fire: fireFan };
 const RING_PULSE: EnemyAttackPattern = { id: 'ring_pulse', cooldown: 3.2, fire: fireRingPulse };
 const SPIRAL: EnemyAttackPattern = { id: 'spiral', cooldown: 2.8, fire: fireSpiral };
 const CROSS_VOLLEY: EnemyAttackPattern = { id: 'cross_volley', cooldown: 2.9, fire: fireCrossVolley };
-const SHADOW_BARRAGE: EnemyAttackPattern = { id: 'shadow_barrage', cooldown: 2.4, fire: fireShadowBarrage };
+const SHADOW_BARRAGE: EnemyAttackPattern = { id: 'shadow_barrage', cooldown: 3.1, fire: fireShadowBarrage };
 
 const CULTIST_ATTACK: EnemyAttackProfile = {
   range: 430,
   preferredRange: 285,
   retreatRange: 190,
-  cooldown: 1.8,
-  windup: 0.28,
+  cooldown: 2.05,
+  windup: 0.34,
   bulletSpeed: 235,
   bulletRadius: 4,
   bulletDamageRatio: 1,
@@ -163,8 +165,8 @@ const CULTIST_ATTACK: EnemyAttackProfile = {
 
 const CULTIST_BURST_ATTACK: EnemyAttackProfile = {
   ...CULTIST_ATTACK,
-  cooldown: 2.15,
-  windup: 0.34,
+  cooldown: 2.65,
+  windup: 0.42,
   bulletSpeed: 250,
   bulletDamageRatio: 0.78,
   patterns: [AIMED_BURST],
@@ -174,8 +176,8 @@ const WRAITH_HUNTER_ATTACK: EnemyAttackProfile = {
   range: 620,
   preferredRange: 340,
   retreatRange: 185,
-  cooldown: 2.55,
-  windup: 0.36,
+  cooldown: 3.1,
+  windup: 0.44,
   bulletSpeed: 225,
   bulletRadius: 4,
   bulletDamageRatio: 0.72,

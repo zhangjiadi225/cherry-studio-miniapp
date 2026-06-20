@@ -4,10 +4,98 @@ import {
   MAX_ENEMIES,
   BOSS_HP_MULT, BOSS_DMG_MULT, BOSS_XP_MULT, BOSS_MINION_COUNT,
 } from '../../constants';
-import { createEnemy, getAvailableEnemyTypes } from './Enemy';
-import { randFloat, randInt, weightedRandom } from '../../utils/math';
+import { createEnemy, getAvailableEnemyTypes, getEnemyEnhancementUnlockAt } from './Enemy';
+import { weightedRandom } from '../../utils/math';
 import { getDifficultyParams, type DifficultyParams } from '../../data/difficulty';
 import { getRunDifficultyPreset, type RunDifficultyPreset } from '../../data/runDifficulties';
+
+const WRAITH_SHADOW_SPAWN_MULT = 0.62;
+
+function isRangedPressureType(type: EnemyType, elapsed: number, unlockTimeMult: number): boolean {
+  if (type === EnemyType.CULTIST) return true;
+  if (type !== EnemyType.WRAITH) return false;
+
+  const shadowUnlockAt = getEnemyEnhancementUnlockAt(type, unlockTimeMult);
+  return shadowUnlockAt !== undefined && elapsed >= shadowUnlockAt;
+}
+
+function capRangedPressureWeights(
+  available: EnemyType[],
+  weights: number[],
+  elapsed: number,
+  runDifficulty: RunDifficultyPreset
+): number[] {
+  const cap = runDifficulty.rangedEnemyWeightCap;
+  if (cap <= 0 || cap >= 1) return weights;
+
+  let rangedWeight = 0;
+  let otherWeight = 0;
+  const unlockTimeMult = runDifficulty.enemyUnlockTimeMult;
+  for (let i = 0; i < available.length; i++) {
+    if (isRangedPressureType(available[i], elapsed, unlockTimeMult)) {
+      rangedWeight += weights[i];
+    } else {
+      otherWeight += weights[i];
+    }
+  }
+  if (rangedWeight <= 0 || otherWeight <= 0) return weights;
+  if (rangedWeight / (rangedWeight + otherWeight) <= cap) return weights;
+
+  const rangedScale = (cap * otherWeight) / ((1 - cap) * rangedWeight);
+  return weights.map((weight, index) =>
+    isRangedPressureType(available[index], elapsed, unlockTimeMult) ? weight * rangedScale : weight
+  );
+}
+
+export function getEnemySpawnWeights(
+  available: EnemyType[],
+  elapsed: number,
+  difficultyParams: DifficultyParams,
+  runDifficulty: RunDifficultyPreset = getRunDifficultyPreset()
+): number[] {
+  const unlockTimeMult = runDifficulty.enemyUnlockTimeMult;
+  const weights = available.map(type => {
+    const data = ENEMY_DATA[type];
+    const unlockAt = data.spawnAfter * unlockTimeMult;
+    const timeSinceUnlock = Math.max(0, elapsed - unlockAt);
+    let w = Math.max(1, 10 - timeSinceUnlock / 30);
+
+    if (type === EnemyType.ZOMBIE || type === EnemyType.BAT) {
+      w *= Math.max(0.3, 1 - elapsed / 600);
+    }
+    if (type === EnemyType.DEMON || type === EnemyType.WRAITH) {
+      w *= Math.min(2.2, 0.65 + timeSinceUnlock / 180);
+    }
+    if (type === EnemyType.WRAITH && isRangedPressureType(type, elapsed, unlockTimeMult)) {
+      w *= WRAITH_SHADOW_SPAWN_MULT;
+    }
+    if (type === EnemyType.CULTIST || type === EnemyType.DEMON || type === EnemyType.WRAITH) {
+      w *= difficultyParams.complexEnemyWeightMultiplier;
+    }
+
+    return w;
+  });
+
+  return capRangedPressureWeights(available, weights, elapsed, runDifficulty);
+}
+
+export function getRangedPressureWeightShare(
+  available: EnemyType[],
+  weights: number[],
+  elapsed: number,
+  runDifficulty: RunDifficultyPreset
+): number {
+  let rangedWeight = 0;
+  let totalWeight = 0;
+  const unlockTimeMult = runDifficulty.enemyUnlockTimeMult;
+  for (let i = 0; i < available.length; i++) {
+    totalWeight += weights[i];
+    if (isRangedPressureType(available[i], elapsed, unlockTimeMult)) {
+      rangedWeight += weights[i];
+    }
+  }
+  return totalWeight > 0 ? rangedWeight / totalWeight : 0;
+}
 
 export class Spawner {
   private spawnTimer = 0;
@@ -39,7 +127,7 @@ export class Spawner {
 
     for (let i = 0; i < count; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
-      const type = this.pickEnemyType(available, elapsed, difficultyParams);
+      const type = this.pickEnemyType(available, elapsed, difficultyParams, runDifficulty);
       const pos = this.getSpawnPosition(player);
       enemies.push(createEnemy(
         type,
@@ -103,7 +191,7 @@ export class Spawner {
     for (let i = 0; i < count; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
 
-      const type = this.pickEnemyType(available, elapsed, difficultyParams);
+      const type = this.pickEnemyType(available, elapsed, difficultyParams, runDifficulty);
       const pos = this.getSpawnPosition(player);
       const isElite = Math.random() < difficultyParams.eliteChance;
       enemies.push(createEnemy(
@@ -202,25 +290,10 @@ export class Spawner {
   private pickEnemyType(
     available: EnemyType[],
     elapsed: number,
-    difficultyParams: DifficultyParams
+    difficultyParams: DifficultyParams,
+    runDifficulty: RunDifficultyPreset
   ): EnemyType {
-    const weights = available.map(type => {
-      const data = ENEMY_DATA[type];
-      const timeSinceUnlock = elapsed - data.spawnAfter;
-      let w = Math.max(1, 10 - timeSinceUnlock / 30);
-
-      if (type === EnemyType.ZOMBIE || type === EnemyType.BAT) {
-        w *= Math.max(0.3, 1 - elapsed / 600);
-      }
-      if (type === EnemyType.DEMON || type === EnemyType.WRAITH) {
-        w *= Math.min(3, elapsed / 300);
-      }
-      if (type === EnemyType.CULTIST || type === EnemyType.DEMON || type === EnemyType.WRAITH) {
-        w *= difficultyParams.complexEnemyWeightMultiplier;
-      }
-
-      return w;
-    });
+    const weights = getEnemySpawnWeights(available, elapsed, difficultyParams, runDifficulty);
 
     return weightedRandom(available, weights);
   }
