@@ -167,7 +167,9 @@ export function applyUpgrade(player: Player, option: UpgradeOption) {
     }
   } else if (option.type === 'modifier' && option.weaponType && option.modifierType) {
     const weapon = player.weapons.find(w => w.type === option.weaponType);
-    if (weapon && !weapon.modifiers.includes(option.modifierType)) {
+    const modifier = GENERIC_MODIFIER_DATA[option.modifierType];
+    const stackCount = weapon?.modifiers.filter(m => m === option.modifierType).length ?? 0;
+    if (weapon && stackCount < modifier.maxStacks) {
       weapon.modifiers.push(option.modifierType);
       weapon.modifierMask |= GENERIC_MODIFIER_MASK[option.modifierType];
     }

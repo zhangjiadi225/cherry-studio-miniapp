@@ -43,6 +43,27 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
       audio: 'crack',
     },
   },
+  [GenericModifierType.REFLECTION_PRISM]: {
+    id: GenericModifierType.REFLECTION_PRISM,
+    name: '反射棱镜',
+    icon: '◇↝',
+    desc: '命中后折射到附近1个未命中过的敌人，每层增加1次反射',
+    compatibleFamilies: ['projectile'],
+    trigger: 'onHit',
+    effect: 'reflect',
+    maxStacks: 3,
+    priceTier: 2,
+    unlockLevel: 3,
+    visual: {
+      glyph: '<>',
+      color: '#e7f6ff',
+      accent: '#75d8ff',
+      glow: 'rgba(110,215,255,',
+      layer: 'hit',
+      particle: 'star',
+      audio: 'chain',
+    },
+  },
   [GenericModifierType.CHAIN_CONDUCTOR]: {
     id: GenericModifierType.CHAIN_CONDUCTOR,
     name: '连锁导体',
@@ -202,4 +223,5 @@ export const GENERIC_MODIFIER_MASK: Record<GenericModifierType, number> = {
   [GenericModifierType.DEATH_BURST]: 1 << 6,
   [GenericModifierType.LIGHTNING_BURST]: 1 << 7,
   [GenericModifierType.CHAIN_BURST]: 1 << 8,
+  [GenericModifierType.REFLECTION_PRISM]: 1 << 9,
 };

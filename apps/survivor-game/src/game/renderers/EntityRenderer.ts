@@ -1174,45 +1174,37 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
     }
 
     case WeaponType.WHIP: {
-      const swingDir = p.vx >= 0 ? 1 : -1;
-      const isSecondHalf = lifeRatio < 0.5;
-      const segCount = Math.max(1, p.count ?? 1);
-      const whipLen = p.radius;
+      const whipDir = p.vx >= 0 ? 1 : -1;
+      const level = Math.max(1, p.count ?? 1);
       const scale = p.segScale ?? 1;
-      const originX = p.x - swingDir * 12;
-      const originY = p.y + 4;
-      const swingPhase = isSecondHalf ? lifeRatio * 2 : (1 - lifeRatio) * 2;
-      const arcH = whipLen * 0.2 * scale;
-      const controlPts: { x: number; y: number }[] = [{ x: originX, y: originY }];
-      for (let i = 1; i <= segCount; i++) {
-        const t = i / segCount;
-        const d = swingDir;
-        const waveDelay = t * 0.45;
-        const localPhase = Math.max(0, Math.min(1, (swingPhase - waveDelay) / 0.55));
-        const reach = t * whipLen * (0.2 + localPhase * 0.8);
-        const archArc = Math.sin(t * Math.PI * 0.75) * (1 - t * 0.3);
-        const tipCurl = t > 0.7 ? Math.sin((t - 0.7) / 0.3 * Math.PI) * 0.35 : 0;
-        const arcHeight = -(arcH * archArc + whipLen * tipCurl) * localPhase;
-        const dirSign = isSecondHalf ? -d : d;
-        controlPts.push({ x: originX + dirSign * reach, y: originY + arcHeight });
-      }
-      const knots: { x: number; y: number }[] = [{ x: originX, y: originY }];
-      const resolution = Math.max(4, Math.floor(72 / segCount));
-      for (let s = 0; s < segCount; s++) {
-        const p0 = controlPts[s];
-        const p3 = controlPts[s + 1];
-        const cpx = (p0.x + p3.x) / 2;
-        const cpy = (p0.y + p3.y) / 2 - 8;
-        for (let j = 1; j <= resolution; j++) {
-          const tt = j / resolution;
-          const mt = 1 - tt;
-          knots.push({
-            x: mt * mt * mt * p0.x + 3 * mt * mt * tt * cpx + 3 * mt * tt * tt * cpx + tt * tt * tt * p3.x,
-            y: mt * mt * mt * p0.y + 3 * mt * mt * tt * cpy + 3 * mt * tt * tt * cpy + tt * tt * tt * p3.y,
+      const progress = 1 - lifeRatio;
+      const attack = Math.sin(progress * Math.PI);
+      const anchorX = p.originX !== undefined ? p.originX + whipDir * 16 : p.x - whipDir * p.radius * 0.35;
+      const anchorY = p.originY ?? p.y;
+      const length = Math.min(128, (62 + level * 7) * scale) * (0.7 + attack * 0.3);
+      const amplitude = (8 + level * 0.9) * scale * (0.32 + attack * 0.72);
+      const sweep = -Math.sin(progress * Math.PI * 1.12) * (17 + level * 0.8) * scale;
+      const samples = 18;
+
+      function buildWhipCurve(phaseOffset: number, lag: number): { x: number; y: number }[] {
+        const pts: { x: number; y: number }[] = [];
+        const phase = progress * Math.PI * 3.6 + phaseOffset;
+        const localAttack = Math.max(0.12, attack - lag);
+        for (let i = 0; i <= samples; i++) {
+          const t = i / samples;
+          const ease = 1 - Math.pow(1 - t, 2.35);
+          const envelope = Math.sin(t * Math.PI);
+          const wave = Math.sin(t * Math.PI * 2.15 - phase);
+          const snap = Math.sin((t * 0.9 + progress * 0.55) * Math.PI) * localAttack;
+          pts.push({
+            x: anchorX + whipDir * length * ease * (0.82 + localAttack * 0.18),
+            y: anchorY + wave * amplitude * envelope + sweep * t * (1 - t * 0.32) - snap * 5 * scale,
           });
         }
+        return pts;
       }
-      function drawSmoothCrv(pts: { x: number; y: number }[]) {
+
+      function drawSmoothCurve(pts: { x: number; y: number }[]) {
         if (pts.length < 2) return;
         ctx.moveTo(pts[0].x, pts[0].y);
         for (let i = 1; i < pts.length - 1; i++) {
@@ -1222,118 +1214,91 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         }
         ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
       }
-      // Motion trails
-      for (let trail = 3; trail >= 1; trail--) {
-        const ta = alpha * 0.15 * trail;
-        const dx = trail * swingDir * (isSecondHalf ? -1 : 1) * 8;
-        const dy = -trail * 3;
-        ctx.strokeStyle = `rgba(255,180,80,${ta})`;
-        ctx.lineWidth = 14 - trail * 3;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(knots[0].x + dx * 0.3, knots[0].y + dy * 0.3);
-        for (let i = 1; i < knots.length; i++) {
-          const ratio = i / knots.length;
-          ctx.lineTo(knots[i].x + dx * ratio, knots[i].y + dy * ratio);
-        }
-        ctx.stroke();
-      }
-      // Outer glow
-      ctx.strokeStyle = `rgba(255,120,20,${alpha * 0.4})`;
-      ctx.lineWidth = 22;
+
+      const mainCurve = buildWhipCurve(0, 0);
+      const tip = mainCurve[mainCurve.length - 1];
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.beginPath();
-      drawSmoothCrv(knots);
-      ctx.stroke();
-      // Warm body
-      ctx.strokeStyle = `rgba(230,140,40,${alpha * 0.9})`;
-      ctx.lineWidth = 7;
-      ctx.beginPath();
-      drawSmoothCrv(knots);
-      ctx.stroke();
-      // Bright core
-      ctx.strokeStyle = `rgba(255,225,130,${alpha})`;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      drawSmoothCrv(knots);
-      ctx.stroke();
-      // Knot joints
-      const jointStep = Math.max(1, Math.floor(knots.length / segCount));
-      for (let i = jointStep; i < knots.length - 1; i += jointStep) {
-        const k = knots[i];
-        const t = i / knots.length;
-        const ja = alpha * (0.5 + t * 0.5);
-        const jr = 2.5 + t * 3;
-        ctx.fillStyle = `rgba(120,70,20,${ja})`;
+
+      for (let ghost = 2; ghost >= 1; ghost--) {
+        const ghostCurve = buildWhipCurve(ghost * 0.42, ghost * 0.18);
+        ctx.strokeStyle = `rgba(80,220,255,${alpha * (0.13 + ghost * 0.04)})`;
+        ctx.lineWidth = 8 - ghost * 2;
         ctx.beginPath();
-        ctx.arc(k.x, k.y, jr, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = `rgba(255,210,100,${ja * 0.7})`;
-        ctx.beginPath();
-        ctx.arc(k.x, k.y, jr * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Energy particles
-      for (let i = 1; i < knots.length; i += 2) {
-        const t = i / knots.length;
-        const sparkleA = alpha * t * 0.8;
-        const sparkleR = 1 + t * 3;
-        const flicker = 0.7 + Math.sin(p.animTimer * 8 + i * 0.5) * 0.3;
-        ctx.fillStyle = `rgba(255,240,180,${sparkleA * flicker})`;
-        ctx.beginPath();
-        ctx.arc(knots[i].x, knots[i].y, sparkleR, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // Tip glow & impact
-      const tip = knots[knots.length - 1];
-      const glowI = Math.max(0, Math.min(1, swingPhase * 1.5));
-      const tipGlowR = 16 + glowI * whipLen * 0.08;
-      const tipGrad = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, tipGlowR);
-      tipGrad.addColorStop(0, `rgba(255,230,120,${alpha * glowI * 0.75})`);
-      tipGrad.addColorStop(0.3, `rgba(255,140,30,${alpha * glowI * 0.35})`);
-      tipGrad.addColorStop(1, 'rgba(255,60,0,0)');
-      ctx.fillStyle = tipGrad;
-      ctx.beginPath();
-      ctx.arc(tip.x, tip.y, tipGlowR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,255,220,${alpha * glowI})`;
-      ctx.beginPath();
-      ctx.arc(tip.x, tip.y, 3 + glowI * 5, 0, Math.PI * 2);
-      ctx.fill();
-      if (glowI > 0.6) {
-        const burstA = (glowI - 0.6) / 0.4 * alpha;
-        const burstR = 8 + whipLen * 0.06;
-        ctx.strokeStyle = `rgba(255,200,80,${burstA * 0.6})`;
-        ctx.lineWidth = 2;
-        for (let i = 0; i < 8; i++) {
-          const a = (i / 8) * Math.PI * 2 + p.animTimer * 0.5;
-          ctx.beginPath();
-          ctx.moveTo(tip.x + Math.cos(a) * burstR * 0.3, tip.y + Math.sin(a) * burstR * 0.3);
-          ctx.lineTo(tip.x + Math.cos(a) * burstR, tip.y + Math.sin(a) * burstR);
-          ctx.stroke();
-        }
-        ctx.strokeStyle = `rgba(255,255,180,${burstA * 0.45})`;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(tip.x, tip.y, burstR * 0.7, 0, Math.PI * 2);
+        drawSmoothCurve(ghostCurve);
         ctx.stroke();
       }
-      // Handle knot
-      ctx.fillStyle = `rgba(160,100,40,${alpha})`;
+
+      ctx.strokeStyle = `rgba(75,210,255,${alpha * 0.34})`;
+      ctx.lineWidth = 15;
       ctx.beginPath();
-      ctx.arc(originX, originY, 5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(230,180,80,${alpha * 0.6})`;
+      drawSmoothCurve(mainCurve);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(155,110,255,${alpha * 0.38})`;
+      ctx.lineWidth = 8;
       ctx.beginPath();
-      ctx.arc(originX, originY, 2.5, 0, Math.PI * 2);
+      drawSmoothCurve(mainCurve);
+      ctx.stroke();
+
+      const core = ctx.createLinearGradient(anchorX, anchorY, tip.x, tip.y);
+      core.addColorStop(0, `rgba(245,255,255,${alpha * 0.35})`);
+      core.addColorStop(0.45, `rgba(130,245,255,${alpha})`);
+      core.addColorStop(1, `rgba(255,255,210,${alpha})`);
+      ctx.strokeStyle = core;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      drawSmoothCurve(mainCurve);
+      ctx.stroke();
+
+      for (let i = 3; i < mainCurve.length - 1; i += 4) {
+        const t = i / mainCurve.length;
+        const flicker = 0.72 + Math.sin(p.animTimer * 9 + i) * 0.28;
+        ctx.fillStyle = `rgba(230,255,255,${alpha * attack * flicker * (0.18 + t * 0.36)})`;
+        ctx.beginPath();
+        ctx.arc(mainCurve[i].x, mainCurve[i].y, 1.2 + t * 1.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const tipGlow = 9 + attack * 13;
+      const tipGrad = ctx.createRadialGradient(tip.x, tip.y, 0, tip.x, tip.y, tipGlow);
+      tipGrad.addColorStop(0, `rgba(255,255,230,${alpha * (0.55 + attack * 0.35)})`);
+      tipGrad.addColorStop(0.45, `rgba(110,235,255,${alpha * 0.35})`);
+      tipGrad.addColorStop(1, 'rgba(70,160,255,0)');
+      ctx.fillStyle = tipGrad;
+      ctx.beginPath();
+      ctx.arc(tip.x, tip.y, tipGlow, 0, Math.PI * 2);
       ctx.fill();
-      weaponSpriteRegistry.drawWeapon(ctx, WeaponType.WHIP, originX, originY, 34, {
-        alpha: alpha * 0.88,
-        rotation: swingDir > 0 ? -0.5 : Math.PI + 0.5,
-        glow: false,
-      });
+
+      ctx.fillStyle = `rgba(235,255,255,${alpha})`;
+      ctx.beginPath();
+      ctx.arc(tip.x, tip.y, 2.4 + attack * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(155,235,255,${alpha * 0.45})`;
+      ctx.lineWidth = 1.5;
+      for (let i = 0; i < 3; i++) {
+        const t = (i + 1) / 4;
+        const x = anchorX + whipDir * length * t * 0.22;
+        const y = anchorY + Math.sin(progress * Math.PI * 4 + i) * 2.5;
+        ctx.beginPath();
+        ctx.moveTo(x - whipDir * 4, y - 2);
+        ctx.lineTo(x + whipDir * 7, y + 2);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = `rgba(170,245,255,${alpha * 0.45})`;
+      ctx.beginPath();
+      ctx.arc(anchorX, anchorY, 4.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${alpha * 0.8})`;
+      ctx.beginPath();
+      ctx.arc(anchorX, anchorY, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
       break;
     }
 

@@ -49,6 +49,7 @@ function resetProjectile(p: Projectile) {
   p.splitDone = false;
   p.chainDone = false;
   p.pulseDone = false;
+  p.reflectRemaining = undefined;
   p.gravY = undefined;
   p.animTimer = 0;
   p.orbitAngle = undefined;

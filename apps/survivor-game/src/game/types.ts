@@ -141,6 +141,7 @@ export interface Projectile {
   splitDone?: boolean;
   chainDone?: boolean;
   pulseDone?: boolean;
+  reflectRemaining?: number;
   gravY?: number;
   animTimer: number;
   orbitAngle?: number;
@@ -254,6 +255,7 @@ export type WeaponFamily = 'projectile' | 'strike' | 'aura' | 'orbit' | 'zone' |
 export const GenericModifierType = {
   DOUBLE_CAST: 'double_cast',
   SPLIT_CORE: 'split_core',
+  REFLECTION_PRISM: 'reflection_prism',
   CHAIN_CONDUCTOR: 'chain_conductor',
   IMPACT_PULSE: 'impact_pulse',
   REPULSION_FIELD: 'repulsion_field',
@@ -268,6 +270,7 @@ export type ModifierTrigger = 'onFire' | 'onHit' | 'onKill' | 'onTick';
 export type ModifierEffect =
   | 'extraCast'
   | 'split'
+  | 'reflect'
   | 'chain'
   | 'pulse'
   | 'knockback'

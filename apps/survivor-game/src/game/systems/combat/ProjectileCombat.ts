@@ -12,6 +12,8 @@ import type { EnemyQuery } from '../enemy/EnemyQuery';
 
 const MODIFIERS = Object.values(GENERIC_MODIFIER_DATA);
 const PROJECTILE_COLLISION_LOOKUP_PADDING = 64;
+const REFLECTION_TARGET_RADIUS = 340;
+const REFLECTION_DAMAGE_RATIO = 0.72;
 
 export interface ProjectileCombatContext {
   projectiles: Projectile[];
@@ -158,6 +160,11 @@ export class ProjectileCombat {
             this.spawnSplitProjectiles(ctx, projectile);
           }
           break;
+        case 'reflect':
+          if (this.spawnReflectionProjectile(ctx, projectile, enemy, modifier.id)) {
+            this.triggerModifierFeedback(ctx, modifier.id, enemy.x, enemy.y);
+          }
+          break;
       }
     }
   }
@@ -300,6 +307,86 @@ export class ProjectileCombat {
            projectile.type === WeaponType.AXE;
   }
 
+  private canReflectProjectile(projectile: Projectile): boolean {
+    return projectile.type === WeaponType.MAGIC_WAND ||
+           projectile.type === WeaponType.FIRE_WAND ||
+           projectile.type === WeaponType.AXE;
+  }
+
+  private clearProjectileMotionExtras(projectile: Projectile) {
+    projectile.gravY = undefined;
+    projectile.orbitAngle = undefined;
+    projectile.orbitRadius = undefined;
+    projectile.orbitSpeed = undefined;
+    projectile.originX = undefined;
+    projectile.originY = undefined;
+    projectile.count = undefined;
+    projectile.segScale = undefined;
+    projectile.lightningSeed = undefined;
+  }
+
+  private spawnReflectionProjectile(
+    ctx: ProjectileCombatContext,
+    projectile: Projectile,
+    source: Enemy,
+    modifierType: GenericModifierType
+  ): boolean {
+    const remaining = projectile.reflectRemaining ?? 0;
+    if (remaining <= 0 || !this.canReflectProjectile(projectile)) return false;
+    if (ctx.projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) return false;
+
+    let best: Enemy | undefined;
+    let bestDistSq = REFLECTION_TARGET_RADIUS * REFLECTION_TARGET_RADIUS;
+    ctx.enemyQuery.forNearby(source.x, source.y, REFLECTION_TARGET_RADIUS, (target) => {
+      if (target.hp <= 0 || target.id === source.id || projectile.hitEnemies.has(target.id)) return;
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const dSq = dx * dx + dy * dy;
+      if (dSq < bestDistSq) {
+        best = target;
+        bestDistSq = dSq;
+      }
+    });
+    if (!best) return false;
+
+    const nextRemaining = remaining - 1;
+    projectile.reflectRemaining = nextRemaining;
+
+    const dx = best.x - source.x;
+    const dy = best.y - source.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const speed = Math.max(260, Math.min(620, Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) || 360));
+    const child = pools.projectiles.acquire();
+    child.x = source.x;
+    child.y = source.y;
+    child.vx = (dx / len) * speed;
+    child.vy = (dy / len) * speed;
+    child.damage = projectile.damage * REFLECTION_DAMAGE_RATIO;
+    child.radius = Math.max(4, projectile.radius * 0.85);
+    child.life = Math.min(1.15, Math.max(0.55, Math.sqrt(bestDistSq) / speed + 0.22));
+    child.maxLife = child.life;
+    child.pierce = 0;
+    child.pierceCount = 0;
+    child.type = projectile.type;
+    child.hitEnemies.clear();
+    for (const enemyId of projectile.hitEnemies) child.hitEnemies.add(enemyId);
+    child.hitEnemies.add(source.id);
+    child.knockback = projectile.knockback * 0.75;
+    child.animTimer = 0;
+    child.modifierMask = projectile.modifierMask;
+    child.splitDone = projectile.splitDone;
+    child.chainDone = false;
+    child.pulseDone = false;
+    child.reflectRemaining = nextRemaining;
+    this.clearProjectileMotionExtras(child);
+    ctx.projectiles.push(child);
+
+    spawnHitParticles(ctx.particles, source.x, source.y, GENERIC_MODIFIER_DATA[modifierType].visual.accent, 5, {
+      speed: 115, life: 0.28, radius: 2.2, type: 'star', glow: true,
+    });
+    return true;
+  }
+
   private spawnSplitProjectiles(ctx: ProjectileCombatContext, projectile: Projectile) {
     const speed = Math.max(220, Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) || 320);
     const baseAngle = Math.atan2(projectile.vy, projectile.vx || 1);
@@ -325,6 +412,7 @@ export class ProjectileCombat {
       child.splitDone = true;
       child.chainDone = false;
       child.pulseDone = false;
+      child.reflectRemaining = projectile.reflectRemaining;
       if (projectile.type === WeaponType.AXE) child.gravY = projectile.gravY;
       ctx.projectiles.push(child);
     }

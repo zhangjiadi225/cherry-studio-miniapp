@@ -166,6 +166,32 @@ describe('generateUpgradeOptions', () => {
     expect(modifierOptions.every((option) => option.modifierType === GenericModifierType.SPLIT_CORE)).toBe(true);
   });
 
+  it('allows stackable modifier cards up to their max stacks', () => {
+    const player = createPlayer();
+    const weapon = createWeapon(WeaponType.MAGIC_WAND);
+    weapon.level = 5;
+    player.weapons.push(weapon);
+
+    const option = {
+      title: '反射棱镜 · 魔法弹',
+      description: '',
+      icon: '◇↝',
+      type: 'modifier' as const,
+      weaponType: WeaponType.MAGIC_WAND,
+      modifierType: GenericModifierType.REFLECTION_PRISM,
+      rarity: 'rare' as const,
+      cost: 1,
+      isMaxed: false,
+    };
+
+    applyUpgrade(player, option);
+    applyUpgrade(player, option);
+    applyUpgrade(player, option);
+    applyUpgrade(player, option);
+
+    expect(weapon.modifiers.filter((m) => m === GenericModifierType.REFLECTION_PRISM)).toHaveLength(3);
+  });
+
   it('applies supply effects immediately', () => {
     const player = createPlayer();
     player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));

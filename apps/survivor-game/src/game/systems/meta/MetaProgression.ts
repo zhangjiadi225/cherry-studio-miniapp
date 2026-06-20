@@ -13,6 +13,7 @@ export type MetaUpgradeId =
   | 'projectile_split'
   | 'mechanism_path'
   | 'chain_conductor'
+  | 'reflection_prism'
   | 'chain_burst'
   | 'area_path'
   | 'impact_pulse'
@@ -232,6 +233,20 @@ export const META_UPGRADES: MetaUpgradeNode[] = [
     y: -0.48,
     requires: ['mechanism_path'],
     grantsModifier: GenericModifierType.CHAIN_CONDUCTOR,
+  },
+  {
+    id: 'reflection_prism',
+    name: '反射棱镜',
+    icon: '◇↝',
+    branch: 'mechanism',
+    kind: 'notable',
+    cost: 36,
+    desc: '反射棱镜进入模块池，命中后折射到附近未命中过的敌人。',
+    effect: '解锁：多次反射',
+    x: 0.7,
+    y: -0.34,
+    requires: ['chain_conductor'],
+    grantsModifier: GenericModifierType.REFLECTION_PRISM,
   },
   {
     id: 'chain_burst',

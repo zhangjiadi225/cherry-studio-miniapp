@@ -138,6 +138,10 @@ function hasModifier(w: Weapon, modifier: GenericModifierType): boolean {
   return (w.modifierMask & GENERIC_MODIFIER_MASK[modifier]) !== 0;
 }
 
+function getModifierStackCount(w: Weapon, modifier: GenericModifierType): number {
+  return w.modifiers.filter((item) => item === modifier).length;
+}
+
 function hasModifierEffect(w: Weapon, trigger: 'onFire', effect: 'extraCast' | 'projectileSpeed'): boolean {
   return Object.values(GENERIC_MODIFIER_DATA).some((modifier) =>
     modifier.trigger === trigger &&
@@ -167,6 +171,7 @@ function attachWeaponModifiers(p: Projectile, w: Weapon) {
   p.splitDone = false;
   p.chainDone = false;
   p.pulseDone = false;
+  p.reflectRemaining = getModifierStackCount(w, GenericModifierType.REFLECTION_PRISM);
 }
 
 type ProjectileConfig = {
@@ -337,11 +342,11 @@ function fireWhip(
 ): boolean {
   const dir = player.facingLeft ? -1 : 1;
   const segments = w.level;
-  const reachRadius = (40 + segments * 30) * area;
-  const offset = 30 + segments * 12;
+  const reachRadius = (44 + segments * 7) * area;
+  const offset = 24 + reachRadius * 0.42;
   const p = spawnWeaponProjectile(w, projectiles, {
     x: player.x + dir * offset,
-    y: player.y,
+    y: player.y - 2,
     vx: dir,
     vy: 0,
     damage,
@@ -457,11 +462,11 @@ export function updateBiblePositions(projectiles: Projectile[], player: Player) 
     }
     if (p.type === WeaponType.WHIP) {
       const swingDir = p.vx >= 0 ? 1 : -1;
-      const isSecondHalf = p.life < p.maxLife / 2;
-      const offsetDir = isSecondHalf ? -swingDir : swingDir;
-      const off = 30 + (p.count ?? 1) * 12;
-      p.x = player.x + offsetDir * off;
-      p.y = player.y;
+      const off = 24 + p.radius * 0.42;
+      p.originX = player.x;
+      p.originY = player.y - 4;
+      p.x = player.x + swingDir * off;
+      p.y = player.y - 2;
     }
   }
 }
