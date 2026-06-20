@@ -261,7 +261,8 @@ type EquippedWeaponVisual = {
   priority: number;
 };
 
-const SIDE_WEAPON_DISPLAY_MODES = new Set<WeaponDisplayMode>(['stowed', 'orbit', 'aura_source', 'relic']);
+const SIDE_WEAPON_DISPLAY_MODES = new Set<WeaponDisplayMode>(['stowed', 'aura_source', 'relic']);
+const ORBIT_WEAPON_DISPLAY_MODES = new Set<WeaponDisplayMode>(['orbit']);
 
 function getEquippedWeaponVisuals(player: Player, modes?: Set<WeaponDisplayMode>): EquippedWeaponVisual[] {
   const visuals: EquippedWeaponVisual[] = [];
@@ -397,6 +398,31 @@ function drawEquippedWeaponAssets(ctx: CanvasRenderingContext2D, player: Player,
   }
 }
 
+function drawOrbitingWeaponAssets(ctx: CanvasRenderingContext2D, player: Player, bob: number) {
+  const orbitTypes = getEquippedWeaponVisuals(player, ORBIT_WEAPON_DISPLAY_MODES)
+    .slice(0, 3)
+    .map((visual) => visual.type);
+  if (orbitTypes.length === 0) return;
+
+  const baseRadius = player.radius * 2.45;
+  const baseAngle = player.animTimer * 0.45;
+  for (let i = 0; i < orbitTypes.length; i++) {
+    const type = orbitTypes[i];
+    const angle = baseAngle + (i / orbitTypes.length) * Math.PI * 2;
+    const pulse = Math.sin(player.animTimer * 0.9 + i) * player.radius * 0.12;
+    const orbitRadius = baseRadius + pulse;
+    const x = player.x + Math.cos(angle) * orbitRadius;
+    const y = player.y + bob + Math.sin(angle) * orbitRadius * 0.62;
+    const size = player.radius * (type === WeaponType.BIBLE ? 1.18 : 1.05);
+    const drew = weaponSpriteRegistry.drawWeapon(ctx, type, x, y, size, {
+      alpha: 0.82,
+      rotation: angle + player.animTimer * 0.18,
+      glow: true,
+    });
+    if (!drew) drawWeaponFallbackIcon(ctx, type, x, y, size, 0.82);
+  }
+}
+
 function drawLightningBodyMark(ctx: CanvasRenderingContext2D, player: Player, bob: number) {
   const x = player.x;
   const y = player.y + bob;
@@ -480,6 +506,7 @@ export function drawPlayer(rc: RenderContext, p: Player) {
   ctx.ellipse(p.x, p.y + p.radius + 4, p.radius * 0.8, p.radius * 0.25, 0, 0, Math.PI * 2);
   ctx.fill();
 
+  drawOrbitingWeaponAssets(ctx, p, bob);
   drawEquippedWeaponAssets(ctx, p, bob);
 
   const skinId = skin?.id ?? 'wanderer';
@@ -1343,65 +1370,87 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       break;
 
     case WeaponType.FIRE_WAND:
-      ctx.fillStyle = `rgba(255,80,0,${alpha * 0.25})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.radius * 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,120,0,${alpha})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,200,0,${alpha * 0.9})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.radius * 0.7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = `rgba(255,255,200,${alpha})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.radius * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      for (let i = 0; i < 3; i++) {
-        const angle = p.animTimer * 5 + i * 2.1;
-        const dist = p.radius * 0.8;
-        ctx.fillStyle = `rgba(255,150,0,${alpha * 0.7})`;
+      if (p.originX !== undefined && p.originY !== undefined) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = `rgba(255,145,70,${alpha * 0.2})`;
+        ctx.lineWidth = Math.max(1.2, p.radius * 0.08);
+        ctx.setLineDash([4, 8]);
         ctx.beginPath();
-        ctx.arc(p.x + Math.cos(angle) * dist, p.y + Math.sin(angle) * dist, 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      weaponSpriteRegistry.drawWeapon(ctx, WeaponType.FIRE_WAND, p.x, p.y, p.radius * 3.2, {
-        alpha,
-        rotation: getProjectileAngle(p) + Math.PI / 4,
-        glow: false,
-      });
-      break;
-
-    case WeaponType.AXE:
-      if (weaponSpriteRegistry.drawWeapon(ctx, WeaponType.AXE, p.x, p.y, p.radius * 3.2, {
-        alpha,
-        rotation: p.animTimer * 3,
-        glow: false,
-      })) {
-        break;
+        ctx.moveTo(p.originX, p.originY);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        ctx.restore();
       }
       ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.animTimer * 3);
-      ctx.fillStyle = `rgba(139,90,43,${alpha})`;
-      ctx.fillRect(-p.radius * 0.15, -p.radius * 0.8, p.radius * 0.3, p.radius * 1.6);
-      ctx.fillStyle = `rgba(192,192,192,${alpha})`;
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(255,75,20,${alpha * 0.18})`;
       ctx.beginPath();
-      ctx.moveTo(p.radius * 0.15, -p.radius * 0.6);
-      ctx.quadraticCurveTo(p.radius * 0.8, -p.radius * 0.3, p.radius * 0.6, 0);
-      ctx.quadraticCurveTo(p.radius * 0.8, p.radius * 0.3, p.radius * 0.15, p.radius * 0.6);
-      ctx.closePath();
+      ctx.ellipse(p.x, p.y, p.radius * 1.35, p.radius * 0.78, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.5})`;
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = `rgba(255,170,65,${alpha * 0.72})`;
+      ctx.lineWidth = Math.max(2, p.radius * 0.12);
       ctx.beginPath();
-      ctx.moveTo(p.radius * 0.2, -p.radius * 0.5);
-      ctx.quadraticCurveTo(p.radius * 0.7, -p.radius * 0.2, p.radius * 0.5, 0);
+      ctx.ellipse(p.x, p.y, p.radius * 1.08, p.radius * 0.58, 0, 0, Math.PI * 2);
       ctx.stroke();
+      for (let i = 0; i < 7; i++) {
+        const angle = p.animTimer * 1.8 + i * 0.9;
+        const dist = p.radius * (0.22 + (i % 3) * 0.18);
+        const flameHeight = p.radius * (0.56 + (i % 2) * 0.26) * alpha;
+        const x = p.x + Math.cos(angle) * dist;
+        const y = p.y + Math.sin(angle) * dist * 0.46;
+        ctx.fillStyle = `rgba(255,${120 + i * 12},35,${alpha * 0.74})`;
+        ctx.beginPath();
+        ctx.moveTo(x, y - flameHeight);
+        ctx.quadraticCurveTo(x + p.radius * 0.22, y - flameHeight * 0.38, x, y + p.radius * 0.26);
+        ctx.quadraticCurveTo(x - p.radius * 0.2, y - flameHeight * 0.32, x, y - flameHeight);
+        ctx.fill();
+      }
+      ctx.fillStyle = `rgba(255,235,160,${alpha * 0.76})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(2, p.radius * 0.16), 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
       break;
+
+    case WeaponType.AXE: {
+      const angle = getProjectileAngle(p);
+      const reach = p.beamLength ?? p.radius * 8;
+      const arc = p.arcAngle ?? Math.PI * 2 / 3;
+      const originX = p.originX ?? p.x - Math.cos(angle) * reach * 0.5;
+      const originY = p.originY ?? p.y - Math.sin(angle) * reach * 0.5;
+      const progress = 1 - lifeRatio;
+      const sweepAlpha = alpha * (0.78 - progress * 0.22);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const grad = ctx.createRadialGradient(originX, originY, 0, originX, originY, reach);
+      grad.addColorStop(0, `rgba(255,220,150,${sweepAlpha * 0.1})`);
+      grad.addColorStop(0.62, `rgba(255,190,95,${sweepAlpha * 0.18})`);
+      grad.addColorStop(1, 'rgba(255,190,95,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(originX, originY);
+      ctx.arc(originX, originY, reach, angle - arc * 0.5, angle + arc * 0.5);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(255,232,174,${alpha * 0.84})`;
+      ctx.lineWidth = Math.max(3, p.radius * 0.34);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(originX, originY, reach * (0.72 + progress * 0.12), angle - arc * 0.42, angle + arc * 0.42);
+      ctx.stroke();
+
+      const headX = originX + Math.cos(angle + (progress - 0.5) * arc * 0.42) * reach * 0.82;
+      const headY = originY + Math.sin(angle + (progress - 0.5) * arc * 0.42) * reach * 0.82;
+      weaponSpriteRegistry.drawWeapon(ctx, WeaponType.AXE, headX, headY, p.radius * 3.6, {
+        alpha: Math.min(1, alpha + 0.12),
+        rotation: angle + Math.PI * 0.32,
+        glow: true,
+      });
+      ctx.restore();
+      break;
+    }
 
     case WeaponType.RUNE_LANCE: {
       const angle = getProjectileAngle(p);
@@ -1409,8 +1458,8 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       ctx.translate(p.x, p.y);
       ctx.rotate(angle);
       ctx.globalCompositeOperation = 'lighter';
-      const lanceLen = p.radius * 7.2;
-      const trail = ctx.createLinearGradient(-lanceLen * 0.62, 0, lanceLen * 0.45, 0);
+      const lanceLen = p.beamLength ?? p.radius * 7.2;
+      const trail = ctx.createLinearGradient(-lanceLen * 0.5, 0, lanceLen * 0.5, 0);
       trail.addColorStop(0, `rgba(60,210,255,0)`);
       trail.addColorStop(0.45, `rgba(60,220,255,${alpha * 0.36})`);
       trail.addColorStop(1, `rgba(245,255,255,${alpha})`);
@@ -1418,33 +1467,33 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       ctx.lineWidth = p.radius * 1.35;
       ctx.lineCap = 'round';
       ctx.beginPath();
-      ctx.moveTo(-lanceLen * 0.58, 0);
-      ctx.lineTo(lanceLen * 0.42, 0);
+      ctx.moveTo(-lanceLen * 0.5, 0);
+      ctx.lineTo(lanceLen * 0.5, 0);
       ctx.stroke();
 
       ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
       ctx.lineWidth = Math.max(2, p.radius * 0.34);
       ctx.beginPath();
-      ctx.moveTo(-lanceLen * 0.3, 0);
-      ctx.lineTo(lanceLen * 0.5, 0);
+      ctx.moveTo(-lanceLen * 0.42, 0);
+      ctx.lineTo(lanceLen * 0.52, 0);
       ctx.stroke();
 
       ctx.fillStyle = `rgba(160,250,255,${alpha})`;
       ctx.beginPath();
-      ctx.moveTo(lanceLen * 0.58, 0);
-      ctx.lineTo(lanceLen * 0.18, -p.radius * 0.9);
-      ctx.lineTo(lanceLen * 0.28, 0);
-      ctx.lineTo(lanceLen * 0.18, p.radius * 0.9);
+      ctx.moveTo(lanceLen * 0.56, 0);
+      ctx.lineTo(lanceLen * 0.46, -p.radius * 1.2);
+      ctx.lineTo(lanceLen * 0.49, 0);
+      ctx.lineTo(lanceLen * 0.46, p.radius * 1.2);
       ctx.closePath();
       ctx.fill();
 
       ctx.strokeStyle = `rgba(115,230,255,${alpha * 0.8})`;
       ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(-p.radius * 1.2, -p.radius * 0.7);
-      ctx.lineTo(p.radius * 1.2, -p.radius * 0.18);
-      ctx.moveTo(-p.radius * 1.2, p.radius * 0.7);
-      ctx.lineTo(p.radius * 1.2, p.radius * 0.18);
+      ctx.moveTo(-lanceLen * 0.28, -p.radius * 0.75);
+      ctx.lineTo(lanceLen * 0.12, -p.radius * 0.18);
+      ctx.moveTo(-lanceLen * 0.28, p.radius * 0.75);
+      ctx.lineTo(lanceLen * 0.12, p.radius * 0.18);
       ctx.stroke();
       ctx.restore();
       break;

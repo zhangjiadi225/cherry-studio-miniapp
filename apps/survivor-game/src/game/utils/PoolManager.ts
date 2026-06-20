@@ -61,6 +61,8 @@ function resetProjectile(p: Projectile) {
   p.count = undefined;
   p.segScale = undefined;
   p.lightningSeed = undefined;
+  p.beamLength = undefined;
+  p.arcAngle = undefined;
 }
 
 function resetEnemyProjectile(p: EnemyProjectile) {

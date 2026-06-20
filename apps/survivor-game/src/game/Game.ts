@@ -575,6 +575,7 @@ export class Game {
       mapSystem: this.mapSystem,
       particles: this.particles,
       damageNumbers: this.damageNumbers,
+      enemyProjectiles: this.enemyProjectiles,
     }, dt);
     this.cleanupMapObstacles(dt);
 

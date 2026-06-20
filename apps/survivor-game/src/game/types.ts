@@ -160,6 +160,8 @@ export interface Projectile {
   count?: number;
   segScale?: number;
   lightningSeed?: number;
+  beamLength?: number;
+  arcAngle?: number;
 }
 
 export type EnemyProjectileKind = 'cultist_bolt' | 'demon_fire' | 'wraith_orb';
@@ -263,8 +265,19 @@ export type WeaponType = typeof WeaponType[keyof typeof WeaponType];
 export type WeaponFamily = 'projectile' | 'strike' | 'aura' | 'orbit' | 'zone' | 'swing';
 export type WeaponTag = 'melee' | 'ranged' | 'piercing';
 export type WeaponDisplayMode = 'none' | 'stowed' | 'orbit' | 'aura_source' | 'relic' | 'body_mark';
+export type WeaponBehavior =
+  | 'persistent_melee'
+  | 'cleave_melee'
+  | 'focus_cast'
+  | 'true_projectile'
+  | 'line_piercer'
+  | 'orbit_summon'
+  | 'damage_aura'
+  | 'area_control'
+  | 'body_enhancement';
 
 export interface WeaponMetadata {
+  behavior: WeaponBehavior;
   displayMode: WeaponDisplayMode;
   displayPriority: number;
   tags: WeaponTag[];

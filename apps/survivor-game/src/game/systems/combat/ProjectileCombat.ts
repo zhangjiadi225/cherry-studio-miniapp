@@ -1,4 +1,4 @@
-import { Enemy, Projectile, Particle, DamageNumber, WeaponType, type GenericModifierType, type Player } from '../../types';
+import { Enemy, Projectile, Particle, DamageNumber, WeaponType, type EnemyProjectile, type GenericModifierType, type Player } from '../../types';
 import { ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ACTIVE_PLAYER_PROJECTILES } from '../../constants';
 import { damageEnemy } from '../enemy/Enemy';
 import type { MapSystem } from '../map/MapSystem';
@@ -14,6 +14,8 @@ const MODIFIERS = Object.values(GENERIC_MODIFIER_DATA);
 const PROJECTILE_COLLISION_LOOKUP_PADDING = 64;
 const REFLECTION_TARGET_RADIUS = 340;
 const REFLECTION_DAMAGE_RATIO = 0.72;
+const RUNE_REFLECTION_BEAM_MAX_LENGTH = 360;
+const RUNE_SPLIT_BEAM_LENGTH = 260;
 
 export interface ProjectileCombatContext {
   player: Player;
@@ -22,6 +24,7 @@ export interface ProjectileCombatContext {
   mapSystem: MapSystem;
   particles: Particle[];
   damageNumbers: DamageNumber[];
+  enemyProjectiles?: EnemyProjectile[];
 }
 
 export class ProjectileCombat {
@@ -35,22 +38,23 @@ export class ProjectileCombat {
         continue;
       }
       if (
-        projectile.orbitAngle === undefined &&
+        this.shouldUseMapProjectileCollision(projectile) &&
         ctx.mapSystem.handleProjectileCollision(projectile.x, projectile.y, projectile.radius)
       ) {
         projectile.life = 0;
         continue;
       }
+      this.clearEnemyProjectilesWithAxe(projectile, ctx);
 
       let projectileExpired = false;
       ctx.enemyQuery.forNearby(
         projectile.x,
         projectile.y,
-        projectile.radius + PROJECTILE_COLLISION_LOOKUP_PADDING,
+        this.getProjectileLookupRadius(projectile),
         (enemy) => {
           if (projectileExpired || enemy.hp <= 0) return;
           if (projectile.hitEnemies.has(enemy.id)) return;
-          if (!circlesOverlap(projectile.x, projectile.y, projectile.radius, enemy.x, enemy.y, enemy.radius)) return;
+          if (!this.projectileOverlapsEnemy(projectile, enemy)) return;
 
           const isDead = this.applyProjectileHit(ctx, projectile, enemy);
           projectile.pierceCount++;
@@ -70,6 +74,93 @@ export class ProjectileCombat {
     this.releaseDeadProjectiles(ctx.projectiles);
   }
 
+  private shouldUseMapProjectileCollision(projectile: Projectile): boolean {
+    return projectile.orbitAngle === undefined &&
+      projectile.type !== WeaponType.FIRE_WAND &&
+      projectile.type !== WeaponType.RUNE_LANCE &&
+      projectile.type !== WeaponType.AXE;
+  }
+
+  private getProjectileLookupRadius(projectile: Projectile): number {
+    if (this.isRuneBeam(projectile) || this.isAxeCleave(projectile)) {
+      return projectile.beamLength! * 0.5 + projectile.radius + PROJECTILE_COLLISION_LOOKUP_PADDING;
+    }
+    return projectile.radius + PROJECTILE_COLLISION_LOOKUP_PADDING;
+  }
+
+  private isRuneBeam(projectile: Projectile): boolean {
+    return projectile.type === WeaponType.RUNE_LANCE &&
+      projectile.beamLength !== undefined &&
+      projectile.originX !== undefined &&
+      projectile.originY !== undefined;
+  }
+
+  private isAxeCleave(projectile: Projectile): boolean {
+    return projectile.type === WeaponType.AXE &&
+      projectile.beamLength !== undefined &&
+      projectile.arcAngle !== undefined &&
+      projectile.originX !== undefined &&
+      projectile.originY !== undefined;
+  }
+
+  private projectileOverlapsEnemy(projectile: Projectile, enemy: Enemy): boolean {
+    if (this.isAxeCleave(projectile)) {
+      return this.arcOverlapsCircle(projectile, enemy.x, enemy.y, enemy.radius);
+    }
+    if (!this.isRuneBeam(projectile)) {
+      return circlesOverlap(projectile.x, projectile.y, projectile.radius, enemy.x, enemy.y, enemy.radius);
+    }
+
+    const startX = projectile.originX!;
+    const startY = projectile.originY!;
+    const len = projectile.beamLength!;
+    const dirLen = Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) || 1;
+    const dirX = projectile.vx / dirLen;
+    const dirY = projectile.vy / dirLen;
+    const relX = enemy.x - startX;
+    const relY = enemy.y - startY;
+    const t = Math.max(0, Math.min(len, relX * dirX + relY * dirY));
+    const closestX = startX + dirX * t;
+    const closestY = startY + dirY * t;
+    const dx = enemy.x - closestX;
+    const dy = enemy.y - closestY;
+    const hitRadius = projectile.radius + enemy.radius;
+    return dx * dx + dy * dy <= hitRadius * hitRadius;
+  }
+
+  private arcOverlapsCircle(projectile: Projectile, x: number, y: number, radius: number): boolean {
+    const startX = projectile.originX!;
+    const startY = projectile.originY!;
+    const reach = projectile.beamLength!;
+    const arcAngle = projectile.arcAngle!;
+    const relX = x - startX;
+    const relY = y - startY;
+    const distSq = relX * relX + relY * relY;
+    const reachWithRadius = reach + radius;
+    if (distSq > reachWithRadius * reachWithRadius) return false;
+    const dist = Math.sqrt(distSq) || 1;
+    const dirLen = Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) || 1;
+    const dot = (relX / dist) * (projectile.vx / dirLen) + (relY / dist) * (projectile.vy / dirLen);
+    const radiusPadding = Math.min(0.36, radius / Math.max(36, dist));
+    return dot >= Math.cos(arcAngle * 0.5 + radiusPadding);
+  }
+
+  private clearEnemyProjectilesWithAxe(projectile: Projectile, ctx: ProjectileCombatContext) {
+    if (!ctx.enemyProjectiles || !this.isAxeCleave(projectile)) return;
+    let cleared = 0;
+    for (const enemyProjectile of ctx.enemyProjectiles) {
+      if (enemyProjectile.life <= 0) continue;
+      if (!this.arcOverlapsCircle(projectile, enemyProjectile.x, enemyProjectile.y, enemyProjectile.radius)) continue;
+      enemyProjectile.life = 0;
+      if (cleared < 5) {
+        spawnHitParticles(ctx.particles, enemyProjectile.x, enemyProjectile.y, '#ffd18a', 4, {
+          speed: 95, life: 0.26, radius: 2.2, type: 'spark', glow: true,
+        });
+      }
+      cleared++;
+    }
+  }
+
   private releaseDeadProjectiles(projectiles: Projectile[]) {
     let write = 0;
     for (let read = 0; read < projectiles.length; read++) {
@@ -86,7 +177,9 @@ export class ProjectileCombat {
 
   private applyProjectileHit(ctx: ProjectileCombatContext, projectile: Projectile, enemy: Enemy): boolean {
     projectile.hitEnemies.add(enemy.id);
-    const dir = { x: enemy.x - projectile.x, y: enemy.y - projectile.y };
+    const knockbackSourceX = projectile.type === WeaponType.AXE && projectile.originX !== undefined ? projectile.originX : projectile.x;
+    const knockbackSourceY = projectile.type === WeaponType.AXE && projectile.originY !== undefined ? projectile.originY : projectile.y;
+    const dir = { x: enemy.x - knockbackSourceX, y: enemy.y - knockbackSourceY };
     const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
     const knockbackModifier = this.getProjectileModifierByEffect(projectile, 'knockback');
     const knockback = projectile.knockback + (knockbackModifier ? 120 : 0);
@@ -210,6 +303,7 @@ export class ProjectileCombat {
            projectile.type === WeaponType.LIGHTNING ? '#ffff88' :
            projectile.type === WeaponType.RUNE_LANCE ? '#9ff5ff' :
            projectile.type === WeaponType.MOON_BLADE ? '#d8b7ff' :
+           projectile.type === WeaponType.AXE ? '#ffcf8a' :
            projectile.type === WeaponType.HOLY_WATER ? '#88ccff' : '#ffffff';
   }
 
@@ -307,7 +401,6 @@ export class ProjectileCombat {
   private canSplitProjectile(projectile: Projectile): boolean {
     return projectile.type === WeaponType.MAGIC_WAND ||
            projectile.type === WeaponType.FIRE_WAND ||
-           projectile.type === WeaponType.AXE ||
            projectile.type === WeaponType.RUNE_LANCE ||
            projectile.type === WeaponType.MOON_BLADE;
   }
@@ -315,7 +408,6 @@ export class ProjectileCombat {
   private canReflectProjectile(projectile: Projectile): boolean {
     return projectile.type === WeaponType.MAGIC_WAND ||
            projectile.type === WeaponType.FIRE_WAND ||
-           projectile.type === WeaponType.AXE ||
            projectile.type === WeaponType.RUNE_LANCE ||
            projectile.type === WeaponType.MOON_BLADE;
   }
@@ -331,6 +423,76 @@ export class ProjectileCombat {
     projectile.count = undefined;
     projectile.segScale = undefined;
     projectile.lightningSeed = undefined;
+    projectile.beamLength = undefined;
+    projectile.arcAngle = undefined;
+  }
+
+  private configureStationaryFirePatch(
+    child: Projectile,
+    source: Projectile,
+    x: number,
+    y: number,
+    damageRatio: number,
+    radiusRatio: number
+  ) {
+    child.x = x;
+    child.y = y;
+    child.vx = 0;
+    child.vy = 0;
+    child.damage = source.damage * damageRatio;
+    child.radius = Math.max(8, source.radius * radiusRatio);
+    child.life = Math.min(0.85, Math.max(0.45, source.maxLife * 0.72));
+    child.maxLife = child.life;
+    child.pierce = 999;
+    child.pierceCount = 0;
+    child.type = WeaponType.FIRE_WAND;
+    child.hitEnemies.clear();
+    child.knockback = source.knockback * 0.7;
+    child.animTimer = 0;
+    child.modifierMask = source.modifierMask;
+    child.splitDone = true;
+    child.chainDone = false;
+    child.pulseDone = false;
+    child.reflectRemaining = source.reflectRemaining;
+    this.clearProjectileMotionExtras(child);
+    child.originX = source.x;
+    child.originY = source.y;
+  }
+
+  private configureRuneBeam(
+    child: Projectile,
+    source: Projectile,
+    startX: number,
+    startY: number,
+    dirX: number,
+    dirY: number,
+    length: number,
+    damageRatio: number,
+    radiusRatio: number
+  ) {
+    child.x = startX + dirX * length * 0.5;
+    child.y = startY + dirY * length * 0.5;
+    child.vx = dirX;
+    child.vy = dirY;
+    child.damage = source.damage * damageRatio;
+    child.radius = Math.max(4, source.radius * radiusRatio);
+    child.life = Math.min(0.18, Math.max(0.12, source.maxLife * 0.9));
+    child.maxLife = child.life;
+    child.pierce = source.pierce;
+    child.pierceCount = 0;
+    child.type = WeaponType.RUNE_LANCE;
+    child.hitEnemies.clear();
+    child.knockback = source.knockback * 0.75;
+    child.animTimer = 0;
+    child.modifierMask = source.modifierMask;
+    child.splitDone = true;
+    child.chainDone = false;
+    child.pulseDone = false;
+    child.reflectRemaining = source.reflectRemaining;
+    this.clearProjectileMotionExtras(child);
+    child.originX = startX;
+    child.originY = startY;
+    child.beamLength = length;
   }
 
   private spawnReflectionProjectile(
@@ -363,6 +525,45 @@ export class ProjectileCombat {
     const dx = best.x - source.x;
     const dy = best.y - source.y;
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    if (projectile.type === WeaponType.FIRE_WAND) {
+      const child = pools.projectiles.acquire();
+      this.configureStationaryFirePatch(child, projectile, best.x, best.y, REFLECTION_DAMAGE_RATIO, 0.85);
+      child.reflectRemaining = nextRemaining;
+      for (const enemyId of projectile.hitEnemies) child.hitEnemies.add(enemyId);
+      child.hitEnemies.add(source.id);
+      ctx.projectiles.push(child);
+
+      spawnHitParticles(ctx.particles, source.x, source.y, GENERIC_MODIFIER_DATA[modifierType].visual.accent, 5, {
+        speed: 115, life: 0.28, radius: 2.2, type: 'star', glow: true,
+      });
+      return true;
+    }
+
+    if (projectile.type === WeaponType.RUNE_LANCE) {
+      const child = pools.projectiles.acquire();
+      const beamLength = Math.min(RUNE_REFLECTION_BEAM_MAX_LENGTH, Math.max(180, Math.sqrt(bestDistSq) + best.radius * 2));
+      this.configureRuneBeam(
+        child,
+        projectile,
+        source.x,
+        source.y,
+        dx / len,
+        dy / len,
+        beamLength,
+        REFLECTION_DAMAGE_RATIO,
+        0.85
+      );
+      child.reflectRemaining = nextRemaining;
+      for (const enemyId of projectile.hitEnemies) child.hitEnemies.add(enemyId);
+      child.hitEnemies.add(source.id);
+      ctx.projectiles.push(child);
+
+      spawnHitParticles(ctx.particles, source.x, source.y, GENERIC_MODIFIER_DATA[modifierType].visual.accent, 5, {
+        speed: 115, life: 0.28, radius: 2.2, type: 'star', glow: true,
+      });
+      return true;
+    }
+
     const speed = Math.max(260, Math.min(620, Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) || 360));
     const child = pools.projectiles.acquire();
     child.x = source.x;
@@ -396,6 +597,48 @@ export class ProjectileCombat {
   }
 
   private spawnSplitProjectiles(ctx: ProjectileCombatContext, projectile: Projectile) {
+    if (projectile.type === WeaponType.FIRE_WAND) {
+      for (const offset of [-1, 1]) {
+        if (ctx.projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) break;
+        const child = pools.projectiles.acquire();
+        const angle = projectile.animTimer + offset * 1.05;
+        this.configureStationaryFirePatch(
+          child,
+          projectile,
+          projectile.x + Math.cos(angle) * projectile.radius * 1.25,
+          projectile.y + Math.sin(angle) * projectile.radius * 1.25,
+          0.4,
+          0.72
+        );
+        ctx.projectiles.push(child);
+      }
+      return;
+    }
+
+    if (projectile.type === WeaponType.RUNE_LANCE) {
+      const baseAngle = Math.atan2(projectile.vy, projectile.vx || 1);
+      const startX = projectile.originX ?? projectile.x;
+      const startY = projectile.originY ?? projectile.y;
+      for (const offset of [-0.36, 0.36]) {
+        if (ctx.projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) break;
+        const child = pools.projectiles.acquire();
+        const angle = baseAngle + offset;
+        this.configureRuneBeam(
+          child,
+          projectile,
+          startX,
+          startY,
+          Math.cos(angle),
+          Math.sin(angle),
+          Math.min(RUNE_SPLIT_BEAM_LENGTH, Math.max(180, projectile.beamLength ?? RUNE_SPLIT_BEAM_LENGTH)),
+          0.4,
+          0.72
+        );
+        ctx.projectiles.push(child);
+      }
+      return;
+    }
+
     const speed = Math.max(220, Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) || 320);
     const baseAngle = Math.atan2(projectile.vy, projectile.vx || 1);
     for (const offset of [-0.45, 0.45]) {

@@ -1,4 +1,4 @@
-import { Weapon, WeaponType, Player, Enemy, Projectile, GenericModifierType, type ModifierEffect } from '../../types';
+import { Weapon, WeaponType, Player, Enemy, Projectile, GenericModifierType, type ModifierEffect, type Vec2 } from '../../types';
 import {
   WEAPON_DATA, FIND_ENEMY_RANGE, LIGHTNING_RANGE, HOLY_WATER_RANGE,
   GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ACTIVE_PLAYER_PROJECTILES,
@@ -15,6 +15,14 @@ const ORBITAL_PROJECTILE_RADIUS_MAX = 132;
 const ORBITAL_PROJECTILE_RADIUS_PADDING = 34;
 const ORBITAL_PROJECTILE_RADIUS_SCALE = 2.6;
 const ORBITAL_PROJECTILE_SPEED = 3.7;
+const FIRE_ERUPTION_DURATION = 0.85;
+const AXE_CLEAVE_ARC = Math.PI * 2 / 3;
+const AXE_CLEAVE_BASE_REACH = 118;
+const AXE_CLEAVE_REACH_PER_LEVEL = 7;
+const RUNE_LANCE_MIN_LENGTH = 420;
+const RUNE_LANCE_MAX_LENGTH = 680;
+const RUNE_LANCE_DURATION = 0.18;
+const MOON_BLADE_ORBIT_SPEED = 4.8;
 
 export function createWeapon(type: WeaponType): Weapon {
   const d = WEAPON_DATA[type];
@@ -78,7 +86,7 @@ export function updateWeapon(
       for (const damage of castDamages) fired = fireFireWand(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
       break;
     case WeaponType.AXE:
-      for (const damage of castDamages) fired = fireAxe(w, player, projectiles, damage, effectiveArea) || fired;
+      for (const damage of castDamages) fired = fireAxe(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
       break;
     case WeaponType.RUNE_LANCE:
       for (const damage of castDamages) fired = fireRuneLance(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
@@ -178,8 +186,12 @@ function getProjectileSpeed(w: Weapon): number {
 }
 
 function canApplyProjectileOrbit(w: Weapon, config: ProjectileConfig): boolean {
+  const speed = Math.sqrt(config.vx * config.vx + config.vy * config.vy);
   return w.family === 'projectile' &&
+    speed > 0.1 &&
     config.gravY === undefined &&
+    config.beamLength === undefined &&
+    config.arcAngle === undefined &&
     hasModifierEffect(w, 'onFire', 'projectileOrbit');
 }
 
@@ -223,6 +235,37 @@ function attachWeaponModifiers(p: Projectile, w: Weapon) {
   p.reflectRemaining = getModifierStackCount(w, GenericModifierType.REFLECTION_PRISM);
 }
 
+function getWeaponCastOrigin(player: Player, w: Weapon, index = 0, total = 1): Vec2 {
+  const behavior = WEAPON_DATA[w.type].metadata.behavior;
+  const side = player.facingLeft ? 1 : -1;
+  const radius = player.radius;
+
+  if (behavior === 'focus_cast') {
+    return {
+      x: player.x + side * radius * 1.55,
+      y: player.y - radius * 0.58 + (index - (total - 1) / 2) * radius * 0.22,
+    };
+  }
+
+  if (behavior === 'line_piercer') {
+    return {
+      x: player.x + side * radius * 1.7,
+      y: player.y - radius * 0.18 + (index - (total - 1) / 2) * radius * 0.18,
+    };
+  }
+
+  if (behavior === 'orbit_summon') {
+    const angle = player.animTimer * 0.45 + (index / Math.max(1, total)) * Math.PI * 2;
+    const orbitRadius = radius * 2.25;
+    return {
+      x: player.x + Math.cos(angle) * orbitRadius,
+      y: player.y + Math.sin(angle) * orbitRadius,
+    };
+  }
+
+  return { x: player.x, y: player.y };
+}
+
 type ProjectileConfig = {
   x: number;
   y: number;
@@ -236,6 +279,12 @@ type ProjectileConfig = {
   knockback: number;
   animTimer?: number;
   gravY?: number;
+  beamLength?: number;
+  arcAngle?: number;
+};
+
+type TargetedProjectileConfig = Omit<ProjectileConfig, 'x' | 'y' | 'vx' | 'vy' | 'life' | 'pierce' | 'knockback'> & {
+  origin?: Vec2;
 };
 
 function spawnWeaponProjectile(w: Weapon, projectiles: Projectile[], config: ProjectileConfig): Projectile | undefined {
@@ -256,6 +305,8 @@ function spawnWeaponProjectile(w: Weapon, projectiles: Projectile[], config: Pro
   p.knockback = config.knockback;
   p.animTimer = config.animTimer ?? 0;
   p.gravY = config.gravY;
+  p.beamLength = config.beamLength;
+  p.arcAngle = config.arcAngle;
   attachWeaponModifiers(p, w);
   if (canApplyProjectileOrbit(w, config)) {
     attachProjectileOrbit(p, config, projectileIndex);
@@ -270,13 +321,14 @@ function fireTargetedProjectile(
   target: Enemy | undefined,
   fallbackAngle: number,
   projectiles: Projectile[],
-  config: Omit<ProjectileConfig, 'x' | 'y' | 'vx' | 'vy' | 'life' | 'pierce' | 'knockback'>
+  config: TargetedProjectileConfig
 ): boolean {
   const speed = getProjectileSpeed(w);
+  const origin = config.origin ?? { x: player.x, y: player.y };
   let vx: number;
   let vy: number;
   if (target) {
-    const dir = normalize({ x: target.x - player.x, y: target.y - player.y });
+    const dir = normalize({ x: target.x - origin.x, y: target.y - origin.y });
     vx = dir.x * speed;
     vy = dir.y * speed;
   } else {
@@ -284,14 +336,18 @@ function fireTargetedProjectile(
     vy = Math.sin(fallbackAngle) * speed;
   }
   return spawnWeaponProjectile(w, projectiles, {
-    ...config,
-    x: player.x,
-    y: player.y,
+    x: origin.x,
+    y: origin.y,
     vx,
     vy,
+    damage: config.damage,
+    radius: config.radius,
     life: w.duration,
     pierce: w.pierce,
+    type: config.type,
     knockback: w.knockback,
+    animTimer: config.animTimer,
+    gravY: config.gravY,
   }) !== undefined;
 }
 
@@ -306,6 +362,7 @@ function fireMagicWand(
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
     const angle = (i / w.count) * Math.PI * 2 + player.animTimer * 0.1;
     fired = fireTargetedProjectile(w, player, target, angle, projectiles, {
+      origin: getWeaponCastOrigin(player, w, i, w.count),
       damage,
       radius: 8 * area,
       type: WeaponType.MAGIC_WAND,
@@ -323,39 +380,67 @@ function fireFireWand(
   let fired = false;
   for (let i = 0; i < w.count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
-    fired = fireTargetedProjectile(w, player, target, Math.random() * Math.PI * 2, projectiles, {
+    const origin = getWeaponCastOrigin(player, w, i, w.count);
+    const fallbackAngle = Math.random() * Math.PI * 2;
+    const aimAngle = target ? Math.atan2(target.y - origin.y, target.x - origin.x) : fallbackAngle;
+    const splashOffset = target ? (i === 0 ? 0 : 18 + i * 5) * area : 180 + i * 26;
+    const splashAngle = aimAngle + (target ? i * 2.399963 : 0);
+    const x = (target?.x ?? origin.x + Math.cos(aimAngle) * splashOffset) + Math.cos(splashAngle) * splashOffset * 0.35;
+    const y = (target?.y ?? origin.y + Math.sin(aimAngle) * splashOffset) + Math.sin(splashAngle) * splashOffset * 0.35;
+    const p = spawnWeaponProjectile(w, projectiles, {
+      x,
+      y,
+      vx: 0,
+      vy: 0,
       damage,
-      radius: 12 * area,
+      radius: 24 * area,
+      life: FIRE_ERUPTION_DURATION,
+      pierce: 999,
       type: WeaponType.FIRE_WAND,
-    }) || fired;
+      knockback: w.knockback,
+      animTimer: i * 0.73,
+    });
+    if (p) {
+      p.originX = origin.x;
+      p.originY = origin.y;
+      fired = true;
+    }
   }
   return fired;
 }
 
 function fireAxe(
   w: Weapon, player: Player,
-  projectiles: Projectile[], damage: number, area: number
+  projectiles: Projectile[], damage: number, area: number,
+  enemyQuery: EnemyQuery
 ): boolean {
-  let fired = false;
-  for (let i = 0; i < w.count; i++) {
-    const angle = randFloat(-Math.PI * 0.8, -Math.PI * 0.2) + (i * 0.3);
-    const speed = getProjectileSpeed(w) * randFloat(0.8, 1.2);
-    fired = spawnWeaponProjectile(w, projectiles, {
-      x: player.x + randFloat(-20, 20),
-      y: player.y,
-      vx: Math.cos(angle) * speed * 0.5,
-      vy: Math.sin(angle) * speed,
-      damage,
-      radius: 14 * area,
-      life: w.duration,
-      pierce: w.pierce,
-      type: WeaponType.AXE,
-      knockback: w.knockback,
-      animTimer: Math.random() * Math.PI * 2,
-      gravY: 400,
-    }) !== undefined || fired;
-  }
-  return fired;
+  const target = findNearestEnemies(player, enemyQuery, 1, FIND_ENEMY_RANGE)[0];
+  const originX = player.x;
+  const originY = player.y - player.radius * 0.12;
+  const fallbackX = player.facingLeft ? -1 : 1;
+  const dir = target
+    ? normalize({ x: target.x - originX, y: target.y - originY })
+    : { x: fallbackX, y: 0 };
+  const reach = (AXE_CLEAVE_BASE_REACH + w.level * AXE_CLEAVE_REACH_PER_LEVEL) * area;
+  const p = spawnWeaponProjectile(w, projectiles, {
+    x: originX + dir.x * reach * 0.5,
+    y: originY + dir.y * reach * 0.5,
+    vx: dir.x,
+    vy: dir.y,
+    damage,
+    radius: 14 * area,
+    life: w.duration,
+    pierce: w.pierce,
+    type: WeaponType.AXE,
+    knockback: w.knockback,
+    animTimer: 0,
+    beamLength: reach,
+    arcAngle: AXE_CLEAVE_ARC,
+  });
+  if (!p) return false;
+  p.originX = originX;
+  p.originY = originY;
+  return true;
 }
 
 function fireRuneLance(
@@ -365,14 +450,39 @@ function fireRuneLance(
 ): boolean {
   const targets = findNearestEnemies(player, enemyQuery, Math.max(1, w.count), FIND_ENEMY_RANGE);
   let fired = false;
-  for (let i = 0; i < Math.max(1, w.count); i++) {
+  const count = Math.max(1, w.count);
+  const spread = Math.min(0.42, 0.1 * (count - 1));
+  for (let i = 0; i < count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
+    const origin = getWeaponCastOrigin(player, w, i, count);
     const fallbackAngle = player.facingLeft ? Math.PI : 0;
-    fired = fireTargetedProjectile(w, player, target, fallbackAngle, projectiles, {
+    const t = count === 1 ? 0.5 : i / (count - 1);
+    const aimAngle = target ? Math.atan2(target.y - origin.y, target.x - origin.x) : fallbackAngle;
+    const angle = aimAngle - spread / 2 + spread * t;
+    const dirX = Math.cos(angle);
+    const dirY = Math.sin(angle);
+    const beamLength = Math.max(
+      RUNE_LANCE_MIN_LENGTH,
+      Math.min(RUNE_LANCE_MAX_LENGTH, getProjectileSpeed(w) * w.duration * 0.82)
+    );
+    const p = spawnWeaponProjectile(w, projectiles, {
+      x: origin.x + dirX * beamLength * 0.5,
+      y: origin.y + dirY * beamLength * 0.5,
+      vx: dirX,
+      vy: dirY,
       damage,
-      radius: 6 * area,
+      radius: 7 * area,
+      life: RUNE_LANCE_DURATION,
+      pierce: w.pierce,
       type: WeaponType.RUNE_LANCE,
-    }) || fired;
+      knockback: w.knockback,
+      beamLength,
+    });
+    if (p) {
+      p.originX = origin.x;
+      p.originY = origin.y;
+      fired = true;
+    }
   }
   return fired;
 }
@@ -386,16 +496,20 @@ function fireMoonBlade(
   const baseAngle = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.random() * Math.PI * 2;
   const count = Math.max(1, w.count);
   const spread = Math.min(1.1, 0.18 * (count - 1));
-  const speed = getProjectileSpeed(w);
+  const orbitRadius = (68 + Math.min(36, w.level * 4)) * area;
+  const orbitSpeed = MOON_BLADE_ORBIT_SPEED + Math.min(1.4, w.level * 0.12);
+  const hasProjectileOrbit = hasModifierEffect(w, 'onFire', 'projectileOrbit');
   let fired = false;
   for (let i = 0; i < count; i++) {
     const t = count === 1 ? 0.5 : i / (count - 1);
-    const angle = baseAngle - spread / 2 + spread * t;
-    fired = spawnWeaponProjectile(w, projectiles, {
-      x: player.x,
-      y: player.y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
+    const origin = getWeaponCastOrigin(player, w, i, count);
+    const aimAngle = target ? Math.atan2(target.y - origin.y, target.x - origin.x) : baseAngle;
+    const angle = aimAngle - spread / 2 + spread * t;
+    const p = spawnWeaponProjectile(w, projectiles, {
+      x: origin.x,
+      y: origin.y,
+      vx: 0,
+      vy: 0,
       damage,
       radius: 10 * area,
       life: w.duration,
@@ -403,7 +517,16 @@ function fireMoonBlade(
       type: WeaponType.MOON_BLADE,
       knockback: w.knockback,
       animTimer: i * 0.7,
-    }) !== undefined || fired;
+    });
+    if (!p) continue;
+    p.orbitFollowPlayer = true;
+    p.orbitAngle = angle;
+    p.orbitRadius = orbitRadius + (hasProjectileOrbit ? 24 : 0);
+    p.orbitSpeed = orbitSpeed * (i % 2 === 0 ? 1 : -1);
+    p.originX = player.x;
+    p.originY = player.y;
+    setProjectileOrbitPosition(p, player.x, player.y);
+    fired = true;
   }
   return fired;
 }
@@ -561,6 +684,9 @@ export function updateProjectile(p: Projectile, dt: number, player?: Player): bo
     case WeaponType.LIGHTNING:
     case WeaponType.WHIP:
     case WeaponType.HOLY_WATER:
+    case WeaponType.FIRE_WAND:
+    case WeaponType.RUNE_LANCE:
+    case WeaponType.AXE:
       break;
     default:
       p.x += p.vx * dt;
