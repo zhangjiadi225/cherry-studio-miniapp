@@ -154,6 +154,7 @@ export interface Projectile {
   orbitAngle?: number;
   orbitRadius?: number;
   orbitSpeed?: number;
+  orbitFollowPlayer?: boolean;
   originX?: number;
   originY?: number;
   count?: number;
@@ -261,9 +262,11 @@ export type WeaponType = typeof WeaponType[keyof typeof WeaponType];
 
 export type WeaponFamily = 'projectile' | 'strike' | 'aura' | 'orbit' | 'zone' | 'swing';
 export type WeaponTag = 'melee' | 'ranged' | 'piercing';
+export type WeaponDisplayMode = 'none' | 'stowed' | 'orbit' | 'aura_source' | 'relic' | 'body_mark';
 
 export interface WeaponMetadata {
-  showWhenEquipped: boolean;
+  displayMode: WeaponDisplayMode;
+  displayPriority: number;
   tags: WeaponTag[];
 }
 
@@ -275,6 +278,7 @@ export const GenericModifierType = {
   IMPACT_PULSE: 'impact_pulse',
   REPULSION_FIELD: 'repulsion_field',
   VELOCITY_RUNE: 'velocity_rune',
+  ORBITAL_CORE: 'orbital_core',
   DEATH_BURST: 'death_burst',
   LIGHTNING_BURST: 'lightning_burst',
   CHAIN_BURST: 'chain_burst',
@@ -290,6 +294,7 @@ export type ModifierEffect =
   | 'pulse'
   | 'knockback'
   | 'projectileSpeed'
+  | 'projectileOrbit'
   | 'deathExplosion'
   | 'lightningExplosion'
   | 'chainExplosion';

@@ -558,6 +558,7 @@ export class Game {
 
     updateBiblePositions(this.projectiles, this.player);
     this.projectileCombat.update({
+      player: this.player,
       projectiles: this.projectiles,
       enemyQuery: this.enemyQuery,
       mapSystem: this.mapSystem,

@@ -15,6 +15,7 @@ export type MetaUpgradeId =
   | 'opening_gold'
   | 'ranged_path'
   | 'projectile_velocity'
+  | 'orbital_core'
   | 'multi_shot'
   | 'projectile_split'
   | 'mechanism_path'
@@ -200,6 +201,20 @@ export const META_UPGRADES: MetaUpgradeNode[] = [
     y: -0.34,
     requires: ['projectile_velocity'],
     grantsModifier: GenericModifierType.DOUBLE_CAST,
+  },
+  {
+    id: 'orbital_core',
+    name: '环绕核心',
+    icon: '◎↻',
+    branch: 'ranged',
+    kind: 'notable',
+    cost: 36,
+    desc: '环绕核心进入模块池，让飞行投射物贴近角色做圆周运动。',
+    effect: '解锁：子弹环绕',
+    x: -0.62,
+    y: -0.68,
+    requires: ['projectile_velocity'],
+    grantsModifier: GenericModifierType.ORBITAL_CORE,
   },
   {
     id: 'projectile_split',

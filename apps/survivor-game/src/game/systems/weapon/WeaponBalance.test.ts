@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { EnemyType, WeaponType, type Enemy, type Projectile, type Weapon } from '../../types';
-import { WEAPON_DATA } from '../../constants';
+import { EnemyType, GenericModifierType, WeaponType, type Enemy, type Projectile, type Weapon } from '../../types';
+import { GENERIC_MODIFIER_MASK, WEAPON_DATA } from '../../constants';
 import type { EnemyQuery } from '../enemy/EnemyQuery';
 import { createPlayer } from '../player/Player';
-import { createWeapon, updateWeapon, upgradeWeapon } from './Weapon';
+import { createWeapon, updateProjectile, updateWeapon, upgradeWeapon } from './Weapon';
 
 const VALID_WEAPON_TAGS = new Set(['melee', 'ranged', 'piercing']);
+const VALID_WEAPON_DISPLAY_MODES = new Set(['none', 'stowed', 'orbit', 'aura_source', 'relic', 'body_mark']);
 
 function makeEnemy(x: number, y: number): Enemy {
   return {
@@ -54,6 +55,11 @@ function weaponAtLevel(type: WeaponType, level: number): Weapon {
   return weapon;
 }
 
+function addModifier(weapon: Weapon, modifier: GenericModifierType) {
+  weapon.modifiers.push(modifier);
+  weapon.modifierMask |= GENERIC_MODIFIER_MASK[modifier];
+}
+
 function projectedOutput(type: WeaponType, level: number): number {
   const weapon = weaponAtLevel(type, level);
   const effectiveCount = type === WeaponType.WHIP ? weapon.level : weapon.count;
@@ -68,15 +74,18 @@ function projectedOutput(type: WeaponType, level: number): number {
 describe('weapon output model', () => {
   it('keeps every weapon classified with lightweight metadata', () => {
     for (const data of Object.values(WEAPON_DATA)) {
-      expect(typeof data.metadata.showWhenEquipped).toBe('boolean');
+      expect(VALID_WEAPON_DISPLAY_MODES.has(data.metadata.displayMode)).toBe(true);
+      expect(Number.isInteger(data.metadata.displayPriority)).toBe(true);
+      if (data.metadata.displayMode === 'none') expect(data.metadata.displayPriority).toBe(0);
       expect(data.metadata.tags.length).toBeGreaterThan(0);
       expect(data.metadata.tags.every((tag) => VALID_WEAPON_TAGS.has(tag))).toBe(true);
     }
   });
 
-  it('uses metadata to identify stowed equipped weapon assets', () => {
+  it('uses display metadata to identify side-slot equipped weapon assets', () => {
     const displayTypes = Object.entries(WEAPON_DATA)
-      .filter(([, data]) => data.metadata.showWhenEquipped)
+      .filter(([, data]) => ['stowed', 'orbit', 'aura_source', 'relic'].includes(data.metadata.displayMode))
+      .sort(([, a], [, b]) => b.metadata.displayPriority - a.metadata.displayPriority)
       .map(([type]) => type);
 
     expect(displayTypes).toEqual([
@@ -84,8 +93,14 @@ describe('weapon output model', () => {
       WeaponType.BIBLE,
       WeaponType.GARLIC,
       WeaponType.HOLY_WATER,
-      WeaponType.LIGHTNING,
     ]);
+  });
+
+  it('treats lightning as a player body mark instead of a side-slot weapon', () => {
+    expect(WEAPON_DATA[WeaponType.LIGHTNING].metadata.displayMode).toBe('body_mark');
+    expect(WEAPON_DATA[WeaponType.LIGHTNING].metadata.displayPriority).toBeGreaterThan(
+      WEAPON_DATA[WeaponType.GARLIC].metadata.displayPriority
+    );
   });
 
   it('tags current piercing projectile weapons for later build rules', () => {
@@ -157,5 +172,48 @@ describe('weapon output model', () => {
     expect(projectiles).toHaveLength(2);
     expect(projectiles.every((projectile) => projectile.type === WeaponType.MOON_BLADE)).toBe(true);
     expect(projectiles.every((projectile) => projectile.pierce >= 2)).toBe(true);
+  });
+
+  it('makes each double-cast projectile orbit around the moving player with orbital core', () => {
+    const player = createPlayer();
+    player.x = 20;
+    player.y = 30;
+    const weapon = createWeapon(WeaponType.MAGIC_WAND);
+    weapon.timer = weapon.cooldown;
+    addModifier(weapon, GenericModifierType.DOUBLE_CAST);
+    addModifier(weapon, GenericModifierType.ORBITAL_CORE);
+    const projectiles: Projectile[] = [];
+
+    updateWeapon(weapon, player, projectiles, 0, enemyQuery([makeEnemy(160, 30)]));
+
+    expect(projectiles).toHaveLength(2);
+    expect(projectiles.every((projectile) => projectile.orbitFollowPlayer)).toBe(true);
+    expect(projectiles.every((projectile) => projectile.orbitRadius! > 48)).toBe(true);
+
+    const projectile = projectiles[0];
+    const radius = projectile.orbitRadius!;
+    const startAngle = projectile.orbitAngle!;
+    player.x = 80;
+    player.y = -10;
+
+    updateProjectile(projectile, 0.25, player);
+
+    expect(projectile.orbitAngle).not.toBe(startAngle);
+    expect(Math.hypot(projectile.x - player.x, projectile.y - player.y)).toBeCloseTo(radius, 5);
+  });
+
+  it('keeps arcing axe throws out of orbital core movement', () => {
+    const player = createPlayer();
+    const weapon = createWeapon(WeaponType.AXE);
+    weapon.timer = weapon.cooldown;
+    addModifier(weapon, GenericModifierType.ORBITAL_CORE);
+    const projectiles: Projectile[] = [];
+
+    updateWeapon(weapon, player, projectiles, 0, enemyQuery([]));
+
+    expect(projectiles).toHaveLength(1);
+    expect(projectiles[0].orbitFollowPlayer).not.toBe(true);
+    expect(projectiles[0].orbitAngle).toBeUndefined();
+    expect(projectiles[0].gravY).toBeGreaterThan(0);
   });
 });

@@ -1,4 +1,4 @@
-import { Enemy, Projectile, Particle, DamageNumber, WeaponType, type GenericModifierType } from '../../types';
+import { Enemy, Projectile, Particle, DamageNumber, WeaponType, type GenericModifierType, type Player } from '../../types';
 import { ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ACTIVE_PLAYER_PROJECTILES } from '../../constants';
 import { damageEnemy } from '../enemy/Enemy';
 import type { MapSystem } from '../map/MapSystem';
@@ -16,6 +16,7 @@ const REFLECTION_TARGET_RADIUS = 340;
 const REFLECTION_DAMAGE_RATIO = 0.72;
 
 export interface ProjectileCombatContext {
+  player: Player;
   projectiles: Projectile[];
   enemyQuery: EnemyQuery;
   mapSystem: MapSystem;
@@ -29,7 +30,7 @@ export class ProjectileCombat {
     for (let i = 0; i < projectileCount; i++) {
       const projectile = ctx.projectiles[i];
       if (projectile.life <= 0) continue;
-      if (!updateProjectile(projectile, dt)) {
+      if (!updateProjectile(projectile, dt, ctx.player)) {
         projectile.life = 0;
         continue;
       }
@@ -324,6 +325,7 @@ export class ProjectileCombat {
     projectile.orbitAngle = undefined;
     projectile.orbitRadius = undefined;
     projectile.orbitSpeed = undefined;
+    projectile.orbitFollowPlayer = undefined;
     projectile.originX = undefined;
     projectile.originY = undefined;
     projectile.count = undefined;
@@ -419,6 +421,7 @@ export class ProjectileCombat {
       child.chainDone = false;
       child.pulseDone = false;
       child.reflectRemaining = projectile.reflectRemaining;
+      this.clearProjectileMotionExtras(child);
       if (projectile.type === WeaponType.AXE) child.gravY = projectile.gravY;
       ctx.projectiles.push(child);
     }

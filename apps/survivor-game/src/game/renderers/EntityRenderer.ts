@@ -1,5 +1,5 @@
 import type { RenderContext } from './WorldRenderer';
-import type { Player, Enemy, Projectile, XPGem, GenericModifierVisual, EnemyProjectile } from '../types';
+import type { Player, Enemy, Projectile, XPGem, GenericModifierVisual, EnemyProjectile, WeaponDisplayMode } from '../types';
 import { WeaponType, EnemyType } from '../types';
 import { COLORS, ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, WEAPON_DATA } from '../constants';
 import { getSkinById } from '../systems/meta/MetaProgression';
@@ -255,14 +255,33 @@ export function drawXPGem(rc: RenderContext, gem: XPGem) {
 
 // ──────────────────────────── Player ────────────────────────────
 
-function getEquippedDisplayWeaponTypes(player: Player): WeaponType[] {
-  const types: WeaponType[] = [];
+type EquippedWeaponVisual = {
+  type: WeaponType;
+  mode: WeaponDisplayMode;
+  priority: number;
+};
+
+const SIDE_WEAPON_DISPLAY_MODES = new Set<WeaponDisplayMode>(['stowed', 'orbit', 'aura_source', 'relic']);
+
+function getEquippedWeaponVisuals(player: Player, modes?: Set<WeaponDisplayMode>): EquippedWeaponVisual[] {
+  const visuals: EquippedWeaponVisual[] = [];
+  const seen = new Set<WeaponType>();
   for (const weapon of player.weapons) {
-    if (!WEAPON_DATA[weapon.type].metadata.showWhenEquipped || types.includes(weapon.type)) continue;
-    types.push(weapon.type);
-    if (types.length >= 4) break;
+    const metadata = WEAPON_DATA[weapon.type].metadata;
+    if (metadata.displayMode === 'none' || seen.has(weapon.type)) continue;
+    if (modes && !modes.has(metadata.displayMode)) continue;
+    seen.add(weapon.type);
+    visuals.push({
+      type: weapon.type,
+      mode: metadata.displayMode,
+      priority: metadata.displayPriority,
+    });
   }
-  return types;
+  return visuals.sort((a, b) => b.priority - a.priority);
+}
+
+function hasEquippedWeaponDisplayMode(player: Player, mode: WeaponDisplayMode): boolean {
+  return player.weapons.some((weapon) => WEAPON_DATA[weapon.type].metadata.displayMode === mode);
 }
 
 function drawWeaponFallbackIcon(
@@ -324,7 +343,9 @@ function drawStowedWhipFallback(
 }
 
 function drawEquippedWeaponAssets(ctx: CanvasRenderingContext2D, player: Player, bob: number) {
-  const types = getEquippedDisplayWeaponTypes(player);
+  const types = getEquippedWeaponVisuals(player, SIDE_WEAPON_DISPLAY_MODES)
+    .slice(0, 4)
+    .map((visual) => visual.type);
   if (types.length === 0) return;
 
   const side = player.facingLeft ? 1 : -1;
@@ -376,6 +397,62 @@ function drawEquippedWeaponAssets(ctx: CanvasRenderingContext2D, player: Player,
   }
 }
 
+function drawLightningBodyMark(ctx: CanvasRenderingContext2D, player: Player, bob: number) {
+  const x = player.x;
+  const y = player.y + bob;
+  const r = player.radius;
+  const pulse = 0.68 + Math.sin(player.animTimer * 3.8) * 0.16;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(128,235,255,0.55)';
+  ctx.shadowBlur = r * 0.45;
+
+  ctx.strokeStyle = `rgba(135,230,255,${0.48 + pulse * 0.22})`;
+  ctx.lineWidth = Math.max(1.2, r * 0.12);
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.88, y - r * 1.16);
+  ctx.lineTo(x - r * 0.38, y - r * 1.54);
+  ctx.lineTo(x, y - r * 1.23);
+  ctx.lineTo(x + r * 0.38, y - r * 1.54);
+  ctx.lineTo(x + r * 0.88, y - r * 1.16);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(255,238,120,${0.46 + pulse * 0.24})`;
+  ctx.lineWidth = Math.max(1.4, r * 0.14);
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.18, y - r * 1.42);
+  ctx.lineTo(x + r * 0.08, y - r * 1.82);
+  ctx.lineTo(x + r * 0.02, y - r * 1.54);
+  ctx.lineTo(x + r * 0.34, y - r * 1.86);
+  ctx.stroke();
+
+  ctx.shadowBlur = r * 0.3;
+  ctx.strokeStyle = `rgba(155,240,255,${0.45 + pulse * 0.24})`;
+  ctx.lineWidth = Math.max(1.6, r * 0.16);
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.12, y + r * 0.05);
+  ctx.lineTo(x + r * 0.22, y + r * 0.05);
+  ctx.lineTo(x - r * 0.02, y + r * 0.46);
+  ctx.lineTo(x + r * 0.3, y + r * 0.46);
+  ctx.lineTo(x - r * 0.16, y + r * 0.9);
+  ctx.stroke();
+
+  ctx.fillStyle = `rgba(255,245,150,${0.18 + pulse * 0.1})`;
+  ctx.beginPath();
+  ctx.arc(x + r * 0.02, y + r * 0.42, r * 0.48, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawWeaponBodyMarks(ctx: CanvasRenderingContext2D, player: Player, bob: number) {
+  if (hasEquippedWeaponDisplayMode(player, 'body_mark')) {
+    drawLightningBodyMark(ctx, player, bob);
+  }
+}
+
 export function drawPlayer(rc: RenderContext, p: Player) {
   const { ctx } = rc;
   const blink = p.invTime > 0 && Math.sin(p.invTime * 20) > 0;
@@ -414,6 +491,7 @@ export function drawPlayer(rc: RenderContext, p: Player) {
     drawWandererPlayer(ctx, p, bob, isMoving, bodyColor, outlineColor);
   }
 
+  drawWeaponBodyMarks(ctx, p, bob);
   drawHPBar(rc, p.x, p.y - p.radius - 14, p.radius * 2.5, p.hp, p.maxHp, 5);
 }
 

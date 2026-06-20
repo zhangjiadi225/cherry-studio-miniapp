@@ -148,6 +148,27 @@ export const GENERIC_MODIFIER_DATA: Record<GenericModifierType, GenericModifierD
       audio: 'rush',
     },
   },
+  [GenericModifierType.ORBITAL_CORE]: {
+    id: GenericModifierType.ORBITAL_CORE,
+    name: '环绕核心',
+    icon: '◎↻',
+    desc: '飞行投射物生成后围绕角色圆周运动，环绕半径随范围提升',
+    compatibleFamilies: ['projectile'],
+    trigger: 'onFire',
+    effect: 'projectileOrbit',
+    maxStacks: 1,
+    priceTier: 2,
+    unlockLevel: 3,
+    visual: {
+      glyph: '@',
+      color: '#c7f4ff',
+      accent: '#5ec8ff',
+      glow: 'rgba(112,210,255,',
+      layer: 'control',
+      particle: 'circle',
+      audio: 'pulse',
+    },
+  },
   [GenericModifierType.DEATH_BURST]: {
     id: GenericModifierType.DEATH_BURST,
     name: '亡语爆破',
@@ -224,4 +245,5 @@ export const GENERIC_MODIFIER_MASK: Record<GenericModifierType, number> = {
   [GenericModifierType.LIGHTNING_BURST]: 1 << 7,
   [GenericModifierType.CHAIN_BURST]: 1 << 8,
   [GenericModifierType.REFLECTION_PRISM]: 1 << 9,
+  [GenericModifierType.ORBITAL_CORE]: 1 << 10,
 };

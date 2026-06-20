@@ -1,4 +1,4 @@
-import { Weapon, WeaponType, Player, Enemy, Projectile, GenericModifierType } from '../../types';
+import { Weapon, WeaponType, Player, Enemy, Projectile, GenericModifierType, type ModifierEffect } from '../../types';
 import {
   WEAPON_DATA, FIND_ENEMY_RANGE, LIGHTNING_RANGE, HOLY_WATER_RANGE,
   GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ACTIVE_PLAYER_PROJECTILES,
@@ -10,6 +10,11 @@ import type { EnemyQuery } from '../enemy/EnemyQuery';
 
 const nearestEnemiesScratch: Enemy[] = [];
 const nearestDistancesScratch: number[] = [];
+const ORBITAL_PROJECTILE_RADIUS_MIN = 48;
+const ORBITAL_PROJECTILE_RADIUS_MAX = 132;
+const ORBITAL_PROJECTILE_RADIUS_PADDING = 34;
+const ORBITAL_PROJECTILE_RADIUS_SCALE = 2.6;
+const ORBITAL_PROJECTILE_SPEED = 3.7;
 
 export function createWeapon(type: WeaponType): Weapon {
   const d = WEAPON_DATA[type];
@@ -148,7 +153,7 @@ function getModifierStackCount(w: Weapon, modifier: GenericModifierType): number
   return w.modifiers.filter((item) => item === modifier).length;
 }
 
-function hasModifierEffect(w: Weapon, trigger: 'onFire', effect: 'extraCast' | 'projectileSpeed'): boolean {
+function hasModifierEffect(w: Weapon, trigger: 'onFire', effect: ModifierEffect): boolean {
   return Object.values(GENERIC_MODIFIER_DATA).some((modifier) =>
     modifier.trigger === trigger &&
     modifier.effect === effect &&
@@ -170,6 +175,44 @@ function getCastDamages(w: Weapon, damage: number): number[] {
 
 function getProjectileSpeed(w: Weapon): number {
   return hasModifierEffect(w, 'onFire', 'projectileSpeed') ? w.speed * 1.28 : w.speed;
+}
+
+function canApplyProjectileOrbit(w: Weapon, config: ProjectileConfig): boolean {
+  return w.family === 'projectile' &&
+    config.gravY === undefined &&
+    hasModifierEffect(w, 'onFire', 'projectileOrbit');
+}
+
+function clampOrbitRadius(radius: number): number {
+  return Math.max(
+    ORBITAL_PROJECTILE_RADIUS_MIN,
+    Math.min(ORBITAL_PROJECTILE_RADIUS_MAX, radius)
+  );
+}
+
+function setProjectileOrbitPosition(p: Projectile, originX: number, originY: number) {
+  const angle = p.orbitAngle ?? 0;
+  const radius = p.orbitRadius ?? 0;
+  const angularSpeed = p.orbitSpeed ?? 0;
+  p.x = originX + Math.cos(angle) * radius;
+  p.y = originY + Math.sin(angle) * radius;
+  p.vx = -Math.sin(angle) * radius * angularSpeed;
+  p.vy = Math.cos(angle) * radius * angularSpeed;
+}
+
+function attachProjectileOrbit(p: Projectile, config: ProjectileConfig, index: number) {
+  const speed = Math.sqrt(config.vx * config.vx + config.vy * config.vy);
+  const baseAngle = speed > 0.1 ? Math.atan2(config.vy, config.vx) : index * 2.399963;
+  const radius = clampOrbitRadius(ORBITAL_PROJECTILE_RADIUS_PADDING + config.radius * ORBITAL_PROJECTILE_RADIUS_SCALE);
+  const direction = index % 2 === 0 ? 1 : -1;
+
+  p.orbitFollowPlayer = true;
+  p.orbitAngle = baseAngle + index * 0.55;
+  p.orbitRadius = radius;
+  p.orbitSpeed = ORBITAL_PROJECTILE_SPEED * direction;
+  p.originX = config.x;
+  p.originY = config.y;
+  setProjectileOrbitPosition(p, config.x, config.y);
 }
 
 function attachWeaponModifiers(p: Projectile, w: Weapon) {
@@ -197,6 +240,7 @@ type ProjectileConfig = {
 
 function spawnWeaponProjectile(w: Weapon, projectiles: Projectile[], config: ProjectileConfig): Projectile | undefined {
   if (projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) return undefined;
+  const projectileIndex = projectiles.length;
   const p = acquireProjectile();
   p.x = config.x;
   p.y = config.y;
@@ -213,6 +257,9 @@ function spawnWeaponProjectile(w: Weapon, projectiles: Projectile[], config: Pro
   p.animTimer = config.animTimer ?? 0;
   p.gravY = config.gravY;
   attachWeaponModifiers(p, w);
+  if (canApplyProjectileOrbit(w, config)) {
+    attachProjectileOrbit(p, config, projectileIndex);
+  }
   projectiles.push(p);
   return p;
 }
@@ -490,10 +537,18 @@ export function getGarlicRadius(w: Weapon, player: Player): number {
   return 60 * w.area * player.area;
 }
 
-export function updateProjectile(p: Projectile, dt: number): boolean {
+export function updateProjectile(p: Projectile, dt: number, player?: Player): boolean {
   p.animTimer += dt * 5;
   p.life -= dt;
   if (p.life <= 0) return false;
+
+  if (p.orbitFollowPlayer && p.orbitAngle !== undefined && p.orbitRadius !== undefined && p.orbitSpeed !== undefined) {
+    p.orbitAngle += p.orbitSpeed * dt;
+    p.originX = player?.x ?? p.originX ?? p.x;
+    p.originY = player?.y ?? p.originY ?? p.y;
+    setProjectileOrbitPosition(p, p.originX, p.originY);
+    return true;
+  }
 
   switch (p.type) {
     case WeaponType.BIBLE:

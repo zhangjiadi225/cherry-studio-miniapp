@@ -86,14 +86,23 @@ describe('meta star chart', () => {
   it('unlocks only the modifiers granted by lit star nodes', () => {
     const meta = {
       ...createDefaultMetaState(),
-      unlockedUpgrades: ['star_core', 'ranged_path', 'projectile_velocity', 'multi_shot'] as MetaUpgradeId[],
+      unlockedUpgrades: ['star_core', 'ranged_path', 'projectile_velocity', 'multi_shot', 'orbital_core'] as MetaUpgradeId[],
     };
 
     expect(areModifierCardsUnlocked(meta)).toBe(true);
     expect(getUnlockedModifierTypes(meta)).toEqual([
       GenericModifierType.VELOCITY_RUNE,
       GenericModifierType.DOUBLE_CAST,
+      GenericModifierType.ORBITAL_CORE,
     ]);
+  });
+
+  it('places orbital core behind the ranged projectile path', () => {
+    const orbitalCore = META_UPGRADES.find((node) => node.id === 'orbital_core')!;
+
+    expect(orbitalCore.grantsModifier).toBe(GenericModifierType.ORBITAL_CORE);
+    expect(orbitalCore.requires).toEqual(['projectile_velocity']);
+    expect(canBuyMetaUpgrade({ ...createDefaultMetaState(), soulFire: 99 }, orbitalCore)).toBe(false);
   });
 
   it('does not migrate removed legacy upgrade ids into the star chart', () => {

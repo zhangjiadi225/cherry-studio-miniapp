@@ -55,6 +55,7 @@ function resetProjectile(p: Projectile) {
   p.orbitAngle = undefined;
   p.orbitRadius = undefined;
   p.orbitSpeed = undefined;
+  p.orbitFollowPlayer = undefined;
   p.originX = undefined;
   p.originY = undefined;
   p.count = undefined;
