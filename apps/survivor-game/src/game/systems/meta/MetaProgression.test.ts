@@ -3,6 +3,7 @@ import { GenericModifierType } from '../../types';
 import { RUN_DIFFICULTY_PRESETS } from '../../data/runDifficulties';
 import {
   areModifierCardsUnlocked,
+  applyRunReward,
   canBuyMetaUpgrade,
   calculateSoulFireReward,
   createDefaultMetaState,
@@ -36,6 +37,39 @@ describe('calculateSoulFireReward', () => {
 
     expect(easyVictory).toBeLessThan(hardVictory);
     expect(nightmareVictory).toBeGreaterThan(hardVictory);
+  });
+});
+
+describe('applyRunReward', () => {
+  it('can settle only endless reward delta without counting a second run', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+    });
+    const meta = createDefaultMetaState();
+    const firstReward = calculateSoulFireReward(
+      { time: 720, kills: 800, level: 20 },
+      RUN_DIFFICULTY_PRESETS.nightmare
+    );
+
+    const afterClear = applyRunReward(
+      meta,
+      { time: 720, kills: 800, level: 20 },
+      RUN_DIFFICULTY_PRESETS.nightmare
+    );
+    const afterEndless = applyRunReward(
+      afterClear,
+      { time: 900, kills: 1200, level: 28 },
+      RUN_DIFFICULTY_PRESETS.nightmare,
+      { previousSoulFireReward: firstReward, countRun: false }
+    );
+
+    expect(afterClear.runs).toBe(1);
+    expect(afterEndless.runs).toBe(1);
+    expect(afterEndless.soulFire - afterClear.soulFire).toBe(
+      calculateSoulFireReward({ time: 900, kills: 1200, level: 28 }, RUN_DIFFICULTY_PRESETS.nightmare) - firstReward
+    );
   });
 });
 

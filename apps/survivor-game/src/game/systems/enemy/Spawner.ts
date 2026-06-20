@@ -39,7 +39,7 @@ export class Spawner {
 
     for (let i = 0; i < count; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
-      const type = this.pickEnemyType(available, elapsed, difficulty, runDifficulty);
+      const type = this.pickEnemyType(available, elapsed, difficultyParams);
       const pos = this.getSpawnPosition(player);
       enemies.push(createEnemy(
         type,
@@ -103,7 +103,7 @@ export class Spawner {
     for (let i = 0; i < count; i++) {
       if (enemies.length >= MAX_ENEMIES) break;
 
-      const type = this.pickEnemyType(available, elapsed, difficulty, runDifficulty);
+      const type = this.pickEnemyType(available, elapsed, difficultyParams);
       const pos = this.getSpawnPosition(player);
       const isElite = Math.random() < difficultyParams.eliteChance;
       enemies.push(createEnemy(
@@ -202,8 +202,7 @@ export class Spawner {
   private pickEnemyType(
     available: EnemyType[],
     elapsed: number,
-    difficulty: number,
-    runDifficulty: RunDifficultyPreset
+    difficultyParams: DifficultyParams
   ): EnemyType {
     const weights = available.map(type => {
       const data = ENEMY_DATA[type];
@@ -217,7 +216,7 @@ export class Spawner {
         w *= Math.min(3, elapsed / 300);
       }
       if (type === EnemyType.CULTIST || type === EnemyType.DEMON || type === EnemyType.WRAITH) {
-        w *= runDifficulty.complexEnemyWeightMult;
+        w *= difficultyParams.complexEnemyWeightMultiplier;
       }
 
       return w;

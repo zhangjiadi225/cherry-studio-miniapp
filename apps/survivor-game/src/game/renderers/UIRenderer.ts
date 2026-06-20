@@ -2032,11 +2032,17 @@ export function drawGameOver(rc: RenderContext, stats: {
   runDuration?: number;
   deathCause?: string;
   advice?: string;
-}, player?: Player) {
+}, player?: Player, canContinueEndless = false, endlessMode = false) {
   const { ctx, w, h } = rc;
   const mobile = isMobileViewport(w, h);
   const runDuration = stats.runDuration ?? GAME_DURATION;
   const isVictory = stats.time >= runDuration;
+  const title = endlessMode ? '无尽终结' : isVictory ? '胜利完成' : '本局结束';
+  const subtitle = endlessMode
+    ? `已进入无尽 · 存活至 ${formatRunTime(stats.time)}`
+    : isVictory
+      ? `成功存活 ${formatRunTime(runDuration)}`
+      : '本局成长记录';
 
   ctx.fillStyle = cachedRadialGradient(ctx, `gameover-bg-${w}-${h}`, w / 2, h / 2, 0, w / 2, h / 2, w * 0.7, [
     [0, 'rgba(0,0,20,0.9)'],
@@ -2050,17 +2056,13 @@ export function drawGameOver(rc: RenderContext, stats: {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = isVictory ? '#ffd700' : COLORS.danger;
-  ctx.fillText(isVictory ? '胜利完成' : '本局结束', w / 2, mobile ? 38 : 56);
+  ctx.fillText(title, w / 2, mobile ? 38 : 56);
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
 
   ctx.font = `800 ${mobile ? 13 : 16}px ${DESKTOP_FONT}`;
   ctx.fillStyle = isVictory ? '#88ff88' : COLORS.uiDim;
-  ctx.fillText(
-    isVictory ? `成功存活 ${formatRunTime(runDuration)}` : '本局成长记录',
-    w / 2,
-    mobile ? 68 : 86
-  );
+  ctx.fillText(subtitle, w / 2, mobile ? 68 : 86);
 
   const panelW = Math.min(w - 24, mobile ? w - 20 : 980);
   const panelX = w / 2 - panelW / 2;
@@ -2108,26 +2110,69 @@ export function drawGameOver(rc: RenderContext, stats: {
     drawWrappedText(ctx, stats.advice, panelX + pad, footerY + (stats.deathCause ? 20 : 0), panelW - pad * 2, 17, 2);
   }
 
+  const buttons = getGameOverButtonRects(w, h, canContinueEndless);
+  if (buttons.endless) {
+    drawGameOverActionButton(ctx, buttons.endless, '进入无尽模式', '#ffd166', 'rgba(160,96,20,0.88)');
+  }
+  drawGameOverActionButton(ctx, buttons.desktop, '返回桌面', '#6666ff', 'rgba(60,60,160,0.8)');
+}
+
+export function getGameOverButtonRects(w: number, h: number, showEndless = false): {
+  endless?: Rect;
+  desktop: Rect;
+} {
+  const mobile = isMobileViewport(w, h);
+  const panelW = Math.min(w - 24, mobile ? w - 20 : 980);
+  const panelY = mobile ? 88 : 104;
+  const panelH = Math.min(h - panelY - 16, mobile ? 548 : 620);
   const btnW = mobile ? Math.min(210, panelW - 48) : 220;
   const btnH = mobile ? 40 : 44;
-  const btnX = w / 2 - btnW / 2;
+  const gap = mobile ? 10 : 14;
+  const totalW = showEndless && !mobile ? btnW * 2 + gap : btnW;
+  const baseX = w / 2 - totalW / 2;
   const btnY = panelY + panelH - btnH - 16;
 
-  ctx.fillStyle = 'rgba(60,60,160,0.8)';
+  if (!showEndless) {
+    return {
+      desktop: { x: w / 2 - btnW / 2, y: btnY, w: btnW, h: btnH },
+    };
+  }
+
+  if (mobile) {
+    return {
+      endless: { x: w / 2 - btnW / 2, y: btnY - btnH - gap, w: btnW, h: btnH },
+      desktop: { x: w / 2 - btnW / 2, y: btnY, w: btnW, h: btnH },
+    };
+  }
+
+  return {
+    endless: { x: baseX, y: btnY, w: btnW, h: btnH },
+    desktop: { x: baseX + btnW + gap, y: btnY, w: btnW, h: btnH },
+  };
+}
+
+function drawGameOverActionButton(
+  ctx: CanvasRenderingContext2D,
+  rect: Rect,
+  label: string,
+  stroke: string,
+  fill: string
+) {
+  ctx.fillStyle = fill;
   ctx.beginPath();
-  ctx.roundRect(btnX, btnY, btnW, btnH, 8);
+  ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 8);
   ctx.fill();
-  ctx.strokeStyle = '#6666ff';
+  ctx.strokeStyle = stroke;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.roundRect(btnX, btnY, btnW, btnH, 8);
+  ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 8);
   ctx.stroke();
 
-  ctx.font = `900 ${mobile ? 15 : 17}px ${DESKTOP_FONT}`;
+  ctx.font = `900 ${rect.h < 42 ? 15 : 17}px ${DESKTOP_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('点击返回桌面', w / 2, btnY + btnH / 2);
+  ctx.fillText(label, rect.x + rect.w / 2, rect.y + rect.h / 2);
 }
 
 export function drawPerformanceOverlay(rc: RenderContext, stats: PerformanceStats) {

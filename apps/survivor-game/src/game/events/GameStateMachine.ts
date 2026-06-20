@@ -15,6 +15,7 @@ const TRANSITIONS: Record<string, Transition> = {
   finishUpgrade: { from: ['upgrading'], to: 'playing' },
   die: { from: ['playing'], to: 'gameover' },
   timeout: { from: ['playing'], to: 'gameover' },
+  continueEndless: { from: ['gameover'], to: 'playing' },
 };
 
 export class GameStateMachine {

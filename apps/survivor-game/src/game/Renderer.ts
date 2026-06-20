@@ -12,16 +12,17 @@ import { drawParticle, drawDamageNumber, drawDamageFlash, drawLevelUpFlash, draw
 import {
   drawUI, drawMinimap, drawBossBar, drawVirtualJoystick,
   drawAudioButton as drawAudioBtn, drawPauseButton as drawPauseBtn,
-	  getAudioButtonRect as getAudioRect,
-	  getDesktopStartButtonRect as getStartButtonRect,
-	  getMetaStarNodeRects as getStarNodeRects,
-	  getSkinCardRects as getSkinRects,
-	  getCodexTabRects as getCodexRects,
-	  getRunDifficultyCardRects as getDifficultyRects,
-	  getDesktopTabRects as getTabRects,
-	  getPauseButtonRect as getPauseRect,
-		  drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver, drawPerformanceOverlay,
-		} from './renderers/UIRenderer';
+  getAudioButtonRect as getAudioRect,
+  getDesktopStartButtonRect as getStartButtonRect,
+  getMetaStarNodeRects as getStarNodeRects,
+  getSkinCardRects as getSkinRects,
+  getCodexTabRects as getCodexRects,
+  getRunDifficultyCardRects as getDifficultyRects,
+  getGameOverButtonRects as getGameOverRects,
+  getDesktopTabRects as getTabRects,
+  getPauseButtonRect as getPauseRect,
+  drawDesktop, drawPaused, drawUpgradeScreen, drawGameOver, drawPerformanceOverlay,
+} from './renderers/UIRenderer';
 
 /**
  * Renderer：总入口，持有 Canvas 上下文和子渲染器
@@ -104,6 +105,7 @@ export class Renderer {
   getRunDifficultyCardRects(): Array<{ x: number; y: number; w: number; h: number; id: RunDifficultyId }> {
     return getDifficultyRects(this.w, this.h);
   }
+  getGameOverButtonRects(showEndless = false) { return getGameOverRects(this.w, this.h, showEndless); }
 
   // ─── World ───
   drawGround(cam: Camera) { this.worldRenderer.drawGround(this.rc, cam); }
@@ -156,6 +158,8 @@ export class Renderer {
     runDuration?: number;
     deathCause?: string;
     advice?: string;
-  }, player?: Player) { drawGameOver(this.rc, stats, player); }
+  }, player?: Player, canContinueEndless = false, endlessMode = false) {
+    drawGameOver(this.rc, stats, player, canContinueEndless, endlessMode);
+  }
   drawPerformanceOverlay(stats: PerformanceStats) { drawPerformanceOverlay(this.rc, stats); }
 }

@@ -4,6 +4,7 @@ import {
   ELITE_RADIUS_MULT,
   ELITE_SPEED_MULT,
   ELITE_STAT_MULT,
+  ELITE_DAMAGE_MULT,
   ELITE_XP_MULT,
   ENEMY_DATA,
   ENEMY_FALLBACK_HP_DIFFICULTY_STEP,
@@ -55,7 +56,8 @@ export function createEnemy(
   const hpMult = (difficultyParams?.enemyHpMultiplier ?? (1 + difficulty * ENEMY_FALLBACK_HP_DIFFICULTY_STEP)) * curseMult;
   const spdMult = difficultyParams?.enemySpeedMultiplier ?? (1 + difficulty * ENEMY_FALLBACK_SPEED_DIFFICULTY_STEP);
   const dmgMult = curseMult * (difficultyParams?.enemyDamageMultiplier ?? 1);
-  const eliteMult = isElite ? ELITE_STAT_MULT : 1;
+  const eliteHpMult = isElite ? ELITE_STAT_MULT : 1;
+  const eliteDamageMult = isElite && !isBoss ? ELITE_DAMAGE_MULT : 1;
   const enhancedHpMult = enhancement?.hpMult ?? 1;
   const enhancedSpeedMult = enhancement?.speedMult ?? 1;
   const enhancedDamageMult = enhancement?.damageMult ?? 1;
@@ -65,10 +67,10 @@ export function createEnemy(
   enemy.x = x;
   enemy.y = y;
   enemy.radius = data.radius * (isElite ? ELITE_RADIUS_MULT : 1);
-  enemy.hp = data.baseHp * hpMult * eliteMult * enhancedHpMult;
+  enemy.hp = data.baseHp * hpMult * eliteHpMult * enhancedHpMult;
   enemy.maxHp = enemy.hp;
   enemy.speed = data.baseSpeed * spdMult * (isElite ? ELITE_SPEED_MULT : 1) * enhancedSpeedMult;
-  enemy.damage = data.baseDamage * dmgMult * eliteMult * enhancedDamageMult;
+  enemy.damage = data.baseDamage * dmgMult * eliteDamageMult * enhancedDamageMult;
   enemy.type = type;
   enemy.isElite = isElite;
   enemy.isBoss = isBoss;

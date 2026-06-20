@@ -114,6 +114,7 @@ export const HOLY_WATER_RANGE = 500;
 export const ELITE_RADIUS_MULT = 1.5;
 export const ELITE_SPEED_MULT = 0.8;
 export const ELITE_STAT_MULT = 3;
+export const ELITE_DAMAGE_MULT = 1.35;
 export const ELITE_XP_MULT = 5;
 export const ELITE_BASE_CHANCE = 0.02;
 export const ELITE_DIFF_CHANCE = 0.005;

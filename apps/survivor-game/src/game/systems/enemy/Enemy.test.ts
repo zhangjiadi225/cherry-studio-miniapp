@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { ENEMY_DATA } from '../../constants';
+import { BOSS_DMG_MULT, ELITE_DAMAGE_MULT, ENEMY_DATA } from '../../constants';
+import { getDifficultyParams } from '../../data/difficulty';
+import { RUN_DIFFICULTY_PRESETS } from '../../data/runDifficulties';
 import { EnemyType } from '../../types';
 import { createEnemy, damageEnemy, getEnemyEnhancementUnlockAt, updateEnemy } from './Enemy';
 import { createPlayer } from '../player/Player';
@@ -31,6 +33,49 @@ describe('createEnemy', () => {
     expect(before.isEmpowered).toBe(false);
     expect(after.isEmpowered).toBe(true);
     expect(after.trait).toBe('phase');
+  });
+
+  it('keeps elite contact damage separate from elite hp scaling', () => {
+    const params = getDifficultyParams(540, RUN_DIFFICULTY_PRESETS.nightmare);
+    const enemy = createEnemy(
+      EnemyType.DEMON,
+      0,
+      0,
+      params.difficulty,
+      1,
+      true,
+      false,
+      params,
+      540,
+      RUN_DIFFICULTY_PRESETS.nightmare.enemyUnlockTimeMult
+    );
+
+    expect(enemy.hp).toBeGreaterThan(ENEMY_DATA[EnemyType.DEMON].baseHp * params.enemyHpMultiplier * 3);
+    expect(enemy.damage).toBeCloseTo(
+      ENEMY_DATA[EnemyType.DEMON].baseDamage * params.enemyDamageMultiplier * ELITE_DAMAGE_MULT * 1.1
+    );
+    expect(enemy.damage).toBeLessThanOrEqual(45);
+  });
+
+  it('does not stack elite damage onto nightmare boss contact damage', () => {
+    const params = getDifficultyParams(540, RUN_DIFFICULTY_PRESETS.nightmare);
+    const boss = createEnemy(
+      EnemyType.WRAITH,
+      0,
+      0,
+      params.difficulty,
+      1,
+      true,
+      true,
+      params,
+      540,
+      RUN_DIFFICULTY_PRESETS.nightmare.enemyUnlockTimeMult
+    );
+    const bossContactDamage = boss.damage * BOSS_DMG_MULT;
+
+    expect(boss.damage).toBeCloseTo(ENEMY_DATA[EnemyType.WRAITH].baseDamage * params.enemyDamageMultiplier);
+    expect(bossContactDamage).toBeCloseTo(57.5);
+    expect(bossContactDamage).toBeLessThanOrEqual(75);
   });
 
   it('reduces damage and knockback for empowered shield skeletons', () => {

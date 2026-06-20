@@ -8,10 +8,13 @@ describe('getDifficultyParams', () => {
       difficulty: 0,
       enemyHpMultiplier: 1,
       enemySpeedMultiplier: 0.98,
+      enemyDamageMultiplier: 1,
       spawnInterval: 1.8,
       waveBaseCount: 2,
       activeEnemyCap: 18,
       eliteChance: 0.005,
+      complexEnemyWeightMultiplier: 1,
+      endlessCycle: 0,
     });
   });
 
@@ -22,9 +25,11 @@ describe('getDifficultyParams', () => {
     expect(params.spawnInterval).toBeCloseTo(1.4);
     expect(params.enemyHpMultiplier).toBeCloseTo(1.09);
     expect(params.enemySpeedMultiplier).toBeCloseTo(1.03);
+    expect(params.enemyDamageMultiplier).toBeCloseTo(1);
     expect(params.waveBaseCount).toBe(3);
     expect(params.activeEnemyCap).toBe(39);
     expect(params.eliteChance).toBeCloseTo(0.02);
+    expect(params.complexEnemyWeightMultiplier).toBeCloseTo(1);
   });
 
   it('ramps into late-game pressure without exceeding the final curve', () => {
@@ -49,5 +54,31 @@ describe('getDifficultyParams', () => {
     expect(nightmare.spawnInterval).toBeLessThan(hard.spawnInterval);
     expect(nightmare.waveBaseCount).toBeGreaterThan(hard.waveBaseCount);
     expect(nightmare.activeEnemyCap).toBeGreaterThan(hard.activeEnemyCap);
+  });
+
+  it('uses a nightmare clear curve that favors pressure over damage spikes', () => {
+    const params = getDifficultyParams(720, RUN_DIFFICULTY_PRESETS.nightmare);
+
+    expect(params.enemyHpMultiplier).toBeCloseTo(2.35);
+    expect(params.enemyDamageMultiplier).toBeCloseTo(1.15);
+    expect(params.spawnInterval).toBeCloseTo(0.56);
+    expect(params.waveBaseCount).toBe(12);
+    expect(params.activeEnemyCap).toBe(285);
+    expect(params.eliteChance).toBeCloseTo(0.16);
+    expect(params.complexEnemyWeightMultiplier).toBeCloseTo(2.1);
+    expect(params.endlessCycle).toBe(0);
+  });
+
+  it('projects nightmare endless scaling without relying on one-shot damage', () => {
+    const clear = getDifficultyParams(720, RUN_DIFFICULTY_PRESETS.nightmare);
+    const endless = getDifficultyParams(900, RUN_DIFFICULTY_PRESETS.nightmare);
+
+    expect(endless.endlessCycle).toBe(2);
+    expect(endless.enemyHpMultiplier).toBeGreaterThan(clear.enemyHpMultiplier);
+    expect(endless.spawnInterval).toBeLessThan(clear.spawnInterval);
+    expect(endless.waveBaseCount).toBeGreaterThan(clear.waveBaseCount);
+    expect(endless.complexEnemyWeightMultiplier).toBeGreaterThan(clear.complexEnemyWeightMultiplier);
+    expect(endless.enemyDamageMultiplier).toBeCloseTo(1.25);
+    expect(endless.enemyDamageMultiplier).toBeLessThanOrEqual(RUN_DIFFICULTY_PRESETS.nightmare.endless!.damageCap);
   });
 });

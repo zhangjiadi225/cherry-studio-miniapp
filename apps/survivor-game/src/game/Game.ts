@@ -129,6 +129,8 @@ export class Game {
   private garlicWeapon?: Weapon;
   private activeBoss?: Enemy;
   private lastDamageSource?: { enemyName: string; damage: number; time: number };
+  private endlessModeActive = false;
+  private paidSoulFireReward = 0;
   private gameOverStats?: {
     time: number;
     kills: number;
@@ -209,7 +211,12 @@ export class Game {
         if (e.code === 'Escape' || e.code === 'KeyP') gameState.transition('pause');
         break;
       case 'gameover':
-        if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') gameState.reset();
+        if ((e.code === 'Enter' || e.code === 'Space') && this.canContinueEndless()) {
+          e.preventDefault();
+          this.continueEndlessRun();
+        } else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') {
+          gameState.reset();
+        }
         break;
       case 'menu':
         this.handleDesktopKey(e);
@@ -221,7 +228,7 @@ export class Game {
     if (gameState.is('menu')) {
       this.handleDesktopClick(e);
     } else if (gameState.is('gameover')) {
-      gameState.reset();
+      this.handleGameOverPointer(e.clientX, e.clientY);
     } else if (gameState.is('upgrading')) {
       this.handleClickUpgrade(e);
     } else if (gameState.is('playing')) {
@@ -241,7 +248,8 @@ export class Game {
     if (gameState.is('menu')) {
       this.handleDesktopClick(e);
     } else if (gameState.is('gameover')) {
-      gameState.reset();
+      const rect = this.canvas.getBoundingClientRect();
+      this.handleGameOverCanvasPoint(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
     } else if (gameState.is('upgrading')) {
       this.handleClickUpgrade(e);
     } else if (gameState.is('paused')) {
@@ -272,6 +280,28 @@ export class Game {
       return true;
     }
     return false;
+  }
+
+  private handleGameOverPointer(clientX: number, clientY: number) {
+    const rect = this.canvas.getBoundingClientRect();
+    this.handleGameOverCanvasPoint(clientX - rect.left, clientY - rect.top);
+  }
+
+  private handleGameOverCanvasPoint(x: number, y: number) {
+    const canContinueEndless = this.canContinueEndless();
+    const buttons = this.renderer.getGameOverButtonRects(canContinueEndless);
+    const endlessButton = buttons.endless;
+    if (endlessButton && this.isPointInRect(x, y, endlessButton)) {
+      this.continueEndlessRun();
+      return;
+    }
+    if (this.isPointInRect(x, y, buttons.desktop) || !canContinueEndless) {
+      gameState.reset();
+    }
+  }
+
+  private isPointInRect(x: number, y: number, rect: { x: number; y: number; w: number; h: number }): boolean {
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
   }
 
   private handleDesktopKey(e: KeyboardEvent) {
@@ -416,6 +446,8 @@ export class Game {
     this.minimapRefreshTimer = 0;
     this.lastDamageSource = undefined;
     this.gameOverStats = undefined;
+    this.endlessModeActive = false;
+    this.paidSoulFireReward = 0;
     this.spawner.reset();
     this.mapSystem.generate();
     this.camera.x = this.player.x;
@@ -553,7 +585,7 @@ export class Game {
 
     this.checkPlayerDeath();
 
-    if (this.elapsed >= this.runDifficulty.duration && gameState.is('playing')) {
+    if (!this.endlessModeActive && this.elapsed >= this.runDifficulty.duration && gameState.is('playing')) {
       gameState.transition('timeout');
       this.recordRunEnd();
       eventBus.emit(GameEvent.GAME_OVER, {
@@ -832,7 +864,11 @@ export class Game {
       time: this.elapsed,
       kills: this.killCount,
       level: this.player.level,
-    }, this.runDifficulty);
+    }, this.runDifficulty, {
+      previousSoulFireReward: this.paidSoulFireReward,
+      countRun: !this.endlessModeActive,
+    });
+    this.paidSoulFireReward += this.meta.soulFire - previousSoulFire;
     this.gameOverStats = {
       time: this.elapsed,
       kills: this.killCount,
@@ -844,6 +880,23 @@ export class Game {
       deathCause: this.getDeathCause(),
       advice: this.getRunAdvice(),
     };
+  }
+
+  private canContinueEndless(): boolean {
+    return !!this.gameOverStats
+      && this.runDifficulty.id === 'nightmare'
+      && !this.endlessModeActive
+      && this.gameOverStats.time >= this.runDifficulty.duration;
+  }
+
+  private continueEndlessRun() {
+    if (!this.canContinueEndless()) return;
+    if (!gameState.transition('continueEndless')) return;
+    this.endlessModeActive = true;
+    this.gameOverStats = undefined;
+    this.objectiveMessage = '无尽模式：继续推进夜潮，尽可能活得更久。';
+    this.objectiveTimer = 4;
+    this.lastDamageSource = undefined;
   }
 
   private updateObjectiveBeats(dt: number) {
@@ -872,13 +925,14 @@ export class Game {
   }
 
   private getDeathCause(): string | undefined {
-    if (this.elapsed >= this.runDifficulty.duration) return undefined;
+    if (!this.endlessModeActive && this.elapsed >= this.runDifficulty.duration) return undefined;
     if (!this.lastDamageSource) return '被夜潮包围';
     const secondsAgo = Math.max(0, Math.floor(this.elapsed - this.lastDamageSource.time));
     return `${this.lastDamageSource.enemyName}造成${this.lastDamageSource.damage}伤害 (${secondsAgo}s前)`;
   }
 
   private getRunAdvice(): string {
+    if (this.endlessModeActive) return '无尽模式已记录，后续会继续抬高血量、密度和复杂怪权重。';
     if (this.elapsed >= this.runDifficulty.duration) return '胜利完成，下一局尝试更高难度或模块构筑。';
     if (this.elapsed < 180) return '前3分钟优先买低成本武器升级，保留魂晶给战地口粮。';
     if (this.player.shards < 10) return '魂晶见底时少刷新商店，优先买能立即提升清怪的牌。';
@@ -1045,7 +1099,7 @@ export class Game {
         runDuration: this.runDifficulty.duration,
         deathCause: this.getDeathCause(),
         advice: this.getRunAdvice(),
-      }, this.player);
+      }, this.player, this.canContinueEndless(), this.endlessModeActive);
     }
   }
 }

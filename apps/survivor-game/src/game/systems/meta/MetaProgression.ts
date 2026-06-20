@@ -528,13 +528,15 @@ export function calculateSoulFireReward(
 export function applyRunReward(
   meta: MetaState,
   stats: { time: number; kills: number; level: number },
-  runDifficulty: RunDifficultyPreset = getRunDifficultyPreset(meta.selectedDifficulty)
+  runDifficulty: RunDifficultyPreset = getRunDifficultyPreset(meta.selectedDifficulty),
+  options: { previousSoulFireReward?: number; countRun?: boolean } = {}
 ): MetaState {
-  const soulFireEarned = calculateSoulFireReward(stats, runDifficulty);
+  const totalSoulFireReward = calculateSoulFireReward(stats, runDifficulty);
+  const soulFireEarned = Math.max(0, totalSoulFireReward - (options.previousSoulFireReward ?? 0));
   const next: MetaState = {
     ...meta,
     soulFire: meta.soulFire + soulFireEarned,
-    runs: meta.runs + 1,
+    runs: meta.runs + (options.countRun === false ? 0 : 1),
     bestTime: Math.max(meta.bestTime, stats.time),
     bestKills: Math.max(meta.bestKills, stats.kills),
     bestLevel: Math.max(meta.bestLevel, stats.level),
