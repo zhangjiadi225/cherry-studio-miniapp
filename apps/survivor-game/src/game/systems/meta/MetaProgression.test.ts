@@ -7,6 +7,8 @@ import {
   canBuyMetaUpgrade,
   calculateSoulFireReward,
   createDefaultMetaState,
+  getInitialShards,
+  hasOpeningCardDraft,
   getUnlockedModifierTypes,
   loadMetaState,
   META_UPGRADES,
@@ -101,8 +103,37 @@ describe('meta star chart', () => {
     const orbitalCore = META_UPGRADES.find((node) => node.id === 'orbital_core')!;
 
     expect(orbitalCore.grantsModifier).toBe(GenericModifierType.ORBITAL_CORE);
-    expect(orbitalCore.requires).toEqual(['projectile_velocity']);
+    expect(orbitalCore.requires).toEqual(['projectile_velocity', 'mechanism_path']);
     expect(canBuyMetaUpgrade({ ...createDefaultMetaState(), soulFire: 99 }, orbitalCore)).toBe(false);
+  });
+
+  it('uses cross-branch prerequisites for advanced star routes', () => {
+    const mechanismPath = META_UPGRADES.find((node) => node.id === 'mechanism_path')!;
+    const chainBurst = META_UPGRADES.find((node) => node.id === 'chain_burst')!;
+    const lightningBurst = META_UPGRADES.find((node) => node.id === 'lightning_burst')!;
+
+    expect(mechanismPath.requires).toEqual(['ranged_path', 'damage_path']);
+    expect(chainBurst.requires).toEqual(['chain_conductor', 'death_burst']);
+    expect(lightningBurst.requires).toEqual(['death_burst', 'reflection_prism']);
+  });
+
+  it('unlocks start-run mechanisms without granting permanent player stats', () => {
+    const meta = {
+      ...createDefaultMetaState(),
+      unlockedUpgrades: [
+        'star_core',
+        'paid_reroll',
+        'opening_gold',
+        'opening_choice',
+      ] as MetaUpgradeId[],
+    };
+    const openingChoice = META_UPGRADES.find((node) => node.id === 'opening_choice')!;
+    const firstShopSlot = META_UPGRADES.find((node) => node.id === 'shop_slot_1')!;
+
+    expect(getInitialShards(meta)).toBe(50);
+    expect(hasOpeningCardDraft(meta)).toBe(true);
+    expect(openingChoice.requires).toEqual(['opening_gold']);
+    expect(firstShopSlot.requires).toEqual(['opening_choice']);
   });
 
   it('does not migrate removed legacy upgrade ids into the star chart', () => {

@@ -10,7 +10,10 @@ import {
 } from './constants';
 import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
-import { createPlayer, updatePlayer, damagePlayer, collectShards, hasPassive, tryBloodZoneHeal } from './systems/player/Player';
+import {
+  createPlayer, updatePlayer, damagePlayer, collectShards, hasPassive,
+  tryBloodZoneHeal,
+} from './systems/player/Player';
 import { createEnemy, updateEnemy, isCollidingWithPlayer, resetEnemyIds, shouldSplitOnDeath } from './systems/enemy/Enemy';
 import { updateEnemyAttacks, updateEnemyProjectile } from './systems/enemy/EnemyAttack';
 import { Spawner } from './systems/enemy/Spawner';
@@ -31,7 +34,7 @@ import { pushDamageNumber, updateDamageNumber } from './effects/DamageNumber';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   loadMetaState, applyRunReward, getInitialShards,
-  buyMetaUpgrade, selectSkin, selectRunDifficulty, CHARACTER_SKINS,
+  hasOpeningCardDraft, buyMetaUpgrade, selectSkin, selectRunDifficulty, CHARACTER_SKINS,
 } from './systems/meta/MetaProgression';
 import { getRunDifficultyPreset, type RunDifficultyPreset } from './data/runDifficulties';
 import { getDifficultyParams } from './data/difficulty';
@@ -131,6 +134,7 @@ export class Game {
   private lastDamageSource?: { enemyName: string; damage: number; time: number };
   private endlessModeActive = false;
   private paidSoulFireReward = 0;
+  private openingDraftActive = false;
   private gameOverStats?: {
     time: number;
     kills: number;
@@ -448,6 +452,7 @@ export class Game {
     this.gameOverStats = undefined;
     this.endlessModeActive = false;
     this.paidSoulFireReward = 0;
+    this.openingDraftActive = false;
     this.spawner.reset();
     this.mapSystem.generate();
     this.camera.x = this.player.x;
@@ -459,6 +464,8 @@ export class Game {
     this.camera.shakeDuration = 0;
     this.camera.shakeIntensity = 0;
     eventBus.emit(GameEvent.GAME_START);
+    this.openingDraftActive = hasOpeningCardDraft(this.meta);
+    if (this.openingDraftActive) this.showUpgradeScreen();
   }
 
   // ──────────────────────────── Game Loop ────────────────────────────
@@ -953,6 +960,7 @@ export class Game {
     if (!option) return;
     this.refreshWeaponRefs();
     eventBus.emit(GameEvent.UPGRADE_SELECT, option);
+    if (this.openingDraftActive) this.finishShop();
   }
 
   private rerollShop() {
@@ -960,6 +968,7 @@ export class Game {
   }
 
   private finishShop() {
+    this.openingDraftActive = false;
     gameState.transition('finishUpgrade');
     if (this.levelUpQueue > 0) {
       setTimeout(() => this.showUpgradeScreen(), 100);
