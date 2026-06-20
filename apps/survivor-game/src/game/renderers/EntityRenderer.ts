@@ -1,7 +1,7 @@
 import type { RenderContext } from './WorldRenderer';
 import type { Player, Enemy, Projectile, XPGem, GenericModifierVisual, EnemyProjectile } from '../types';
 import { WeaponType, EnemyType } from '../types';
-import { COLORS, ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from '../constants';
+import { COLORS, ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, WEAPON_DATA } from '../constants';
 import { getSkinById } from '../systems/meta/MetaProgression';
 import { spriteRegistry } from './SpriteRegistry';
 import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
@@ -255,6 +255,135 @@ export function drawXPGem(rc: RenderContext, gem: XPGem) {
 
 // ──────────────────────────── Player ────────────────────────────
 
+const EQUIPPED_DISPLAY_WEAPONS = new Set<WeaponType>([
+  WeaponType.WHIP,
+  WeaponType.BIBLE,
+  WeaponType.GARLIC,
+  WeaponType.HOLY_WATER,
+  WeaponType.LIGHTNING,
+]);
+
+function getEquippedDisplayWeaponTypes(player: Player): WeaponType[] {
+  const types: WeaponType[] = [];
+  for (const weapon of player.weapons) {
+    if (!EQUIPPED_DISPLAY_WEAPONS.has(weapon.type) || types.includes(weapon.type)) continue;
+    types.push(weapon.type);
+    if (types.length >= 4) break;
+  }
+  return types;
+}
+
+function drawWeaponFallbackIcon(
+  ctx: CanvasRenderingContext2D,
+  type: WeaponType,
+  x: number,
+  y: number,
+  size: number,
+  alpha: number
+) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.fillStyle = 'rgba(12,16,28,0.68)';
+  ctx.beginPath();
+  ctx.arc(x, y, size * 0.42, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(180,225,255,0.45)';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.font = `${Math.round(size * 0.5)}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(245,250,255,0.9)';
+  ctx.fillText(WEAPON_DATA[type].icon, x, y + size * 0.02);
+  ctx.restore();
+}
+
+function drawStowedWhipFallback(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  side: number,
+  alpha: number
+) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(42,18,9,0.85)';
+  ctx.lineWidth = size * 0.2;
+  ctx.beginPath();
+  ctx.moveTo(x - side * size * 0.34, y + size * 0.22);
+  ctx.quadraticCurveTo(x + side * size * 0.18, y + size * 0.36, x + side * size * 0.08, y - size * 0.02);
+  ctx.quadraticCurveTo(x - side * size * 0.03, y - size * 0.36, x + side * size * 0.38, y - size * 0.34);
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,194,100,0.9)';
+  ctx.lineWidth = size * 0.12;
+  ctx.beginPath();
+  ctx.moveTo(x - side * size * 0.34, y + size * 0.22);
+  ctx.quadraticCurveTo(x + side * size * 0.18, y + size * 0.36, x + side * size * 0.08, y - size * 0.02);
+  ctx.quadraticCurveTo(x - side * size * 0.03, y - size * 0.36, x + side * size * 0.38, y - size * 0.34);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,228,166,0.95)';
+  ctx.beginPath();
+  ctx.arc(x - side * size * 0.36, y + size * 0.22, size * 0.11, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawEquippedWeaponAssets(ctx: CanvasRenderingContext2D, player: Player, bob: number) {
+  const types = getEquippedDisplayWeaponTypes(player);
+  if (types.length === 0) return;
+
+  const side = player.facingLeft ? 1 : -1;
+  const r = player.radius;
+  const baseY = player.y + bob;
+  const hasWhip = types.includes(WeaponType.WHIP);
+
+  if (hasWhip) {
+    const x = player.x + side * r * 1.45;
+    const y = baseY + r * 0.4;
+    const size = r * 2.15;
+    const rotation = side > 0 ? -0.78 : 0.78;
+    const drewWhip = weaponSpriteRegistry.drawWeapon(ctx, WeaponType.WHIP, x, y, size, {
+      alpha: 0.92,
+      rotation,
+      glow: true,
+    });
+    if (!drewWhip) drawStowedWhipFallback(ctx, x, y, size, side, 0.92);
+  }
+
+  const sideTypes = types.filter((type) => type !== WeaponType.WHIP).slice(0, hasWhip ? 3 : 4);
+  const slots = hasWhip
+    ? [
+      { ox: side * r * 1.52, oy: -r * 0.95, size: r * 1.32 },
+      { ox: side * r * 1.34, oy: r * 1.16, size: r * 1.08 },
+      { ox: side * r * 2.04, oy: -r * 0.18, size: r * 1.04 },
+    ]
+    : [
+      { ox: side * r * 1.48, oy: -r * 0.92, size: r * 1.32 },
+      { ox: side * r * 1.58, oy: r * 0.18, size: r * 1.22 },
+      { ox: side * r * 1.34, oy: r * 1.12, size: r * 1.06 },
+      { ox: side * r * 2.06, oy: -r * 0.18, size: r * 1.0 },
+    ];
+
+  for (let i = 0; i < sideTypes.length; i++) {
+    const type = sideTypes[i];
+    const slot = slots[i];
+    const x = player.x + slot.ox;
+    const y = baseY + slot.oy + Math.sin(player.animTimer * 0.9 + i) * 1.2;
+    const rotation = type === WeaponType.BIBLE
+      ? Math.sin(player.animTimer * 0.8) * 0.08
+      : side * (0.22 + i * 0.08);
+    const drew = weaponSpriteRegistry.drawWeapon(ctx, type, x, y, slot.size, {
+      alpha: 0.88,
+      rotation,
+      glow: true,
+    });
+    if (!drew) drawWeaponFallbackIcon(ctx, type, x, y, slot.size, 0.88);
+  }
+}
+
 export function drawPlayer(rc: RenderContext, p: Player) {
   const { ctx } = rc;
   const blink = p.invTime > 0 && Math.sin(p.invTime * 20) > 0;
@@ -281,6 +410,8 @@ export function drawPlayer(rc: RenderContext, p: Player) {
   ctx.beginPath();
   ctx.ellipse(p.x, p.y + p.radius + 4, p.radius * 0.8, p.radius * 0.25, 0, 0, Math.PI * 2);
   ctx.fill();
+
+  drawEquippedWeaponAssets(ctx, p, bob);
 
   const skinId = skin?.id ?? 'wanderer';
   if (skinId === 'ember') {
@@ -1123,6 +1254,94 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       ctx.stroke();
       ctx.restore();
       break;
+
+    case WeaponType.RUNE_LANCE: {
+      const angle = getProjectileAngle(p);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(angle);
+      ctx.globalCompositeOperation = 'lighter';
+      const lanceLen = p.radius * 7.2;
+      const trail = ctx.createLinearGradient(-lanceLen * 0.62, 0, lanceLen * 0.45, 0);
+      trail.addColorStop(0, `rgba(60,210,255,0)`);
+      trail.addColorStop(0.45, `rgba(60,220,255,${alpha * 0.36})`);
+      trail.addColorStop(1, `rgba(245,255,255,${alpha})`);
+      ctx.strokeStyle = trail;
+      ctx.lineWidth = p.radius * 1.35;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-lanceLen * 0.58, 0);
+      ctx.lineTo(lanceLen * 0.42, 0);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+      ctx.lineWidth = Math.max(2, p.radius * 0.34);
+      ctx.beginPath();
+      ctx.moveTo(-lanceLen * 0.3, 0);
+      ctx.lineTo(lanceLen * 0.5, 0);
+      ctx.stroke();
+
+      ctx.fillStyle = `rgba(160,250,255,${alpha})`;
+      ctx.beginPath();
+      ctx.moveTo(lanceLen * 0.58, 0);
+      ctx.lineTo(lanceLen * 0.18, -p.radius * 0.9);
+      ctx.lineTo(lanceLen * 0.28, 0);
+      ctx.lineTo(lanceLen * 0.18, p.radius * 0.9);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(115,230,255,${alpha * 0.8})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-p.radius * 1.2, -p.radius * 0.7);
+      ctx.lineTo(p.radius * 1.2, -p.radius * 0.18);
+      ctx.moveTo(-p.radius * 1.2, p.radius * 0.7);
+      ctx.lineTo(p.radius * 1.2, p.radius * 0.18);
+      ctx.stroke();
+      ctx.restore();
+      break;
+    }
+
+    case WeaponType.MOON_BLADE: {
+      const angle = getProjectileAngle(p) + p.animTimer * 2.4;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(angle);
+      ctx.globalCompositeOperation = 'lighter';
+
+      const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, p.radius * 2.4);
+      glow.addColorStop(0, `rgba(235,220,255,${alpha * 0.18})`);
+      glow.addColorStop(0.55, `rgba(150,110,255,${alpha * 0.22})`);
+      glow.addColorStop(1, 'rgba(120,80,255,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(0, 0, p.radius * 2.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(178,130,255,${alpha * 0.82})`;
+      ctx.lineWidth = Math.max(3, p.radius * 0.72);
+      ctx.beginPath();
+      ctx.arc(0, 0, p.radius * 1.16, -2.25, 1.2);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(245,250,255,${alpha})`;
+      ctx.lineWidth = Math.max(1.5, p.radius * 0.26);
+      ctx.beginPath();
+      ctx.arc(0, 0, p.radius * 1.16, -2.05, 1.0);
+      ctx.stroke();
+
+      for (const tipAngle of [-2.25, 1.2]) {
+        const tx = Math.cos(tipAngle) * p.radius * 1.16;
+        const ty = Math.sin(tipAngle) * p.radius * 1.16;
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        ctx.beginPath();
+        ctx.arc(tx, ty, Math.max(1.8, p.radius * 0.24), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      break;
+    }
 
     case WeaponType.LIGHTNING: {
       const progress = 1 - lifeRatio;

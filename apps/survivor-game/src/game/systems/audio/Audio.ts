@@ -76,6 +76,12 @@ export class AudioSystem {
       case WeaponType.AXE:
         this.playSweep(190, 90, 0.09, 'square', 0.06);
         break;
+      case WeaponType.RUNE_LANCE:
+        this.playSweep(760, 420, 0.06, 'triangle', 0.055);
+        break;
+      case WeaponType.MOON_BLADE:
+        this.playSweep(520, 700, 0.07, 'sine', 0.05);
+        break;
       case WeaponType.LIGHTNING:
         this.playTone(900, 0.04, 'square', 0.07);
         this.playTone(1220, 0.035, 'square', 0.05, 0.025);

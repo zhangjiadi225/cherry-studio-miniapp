@@ -247,6 +247,8 @@ export const WeaponType = {
   HOLY_WATER: 'holy_water',
   LIGHTNING: 'lightning',
   AXE: 'axe',
+  RUNE_LANCE: 'rune_lance',
+  MOON_BLADE: 'moon_blade',
 } as const;
 export type WeaponType = typeof WeaponType[keyof typeof WeaponType];
 

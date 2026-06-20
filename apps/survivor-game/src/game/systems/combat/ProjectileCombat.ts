@@ -207,6 +207,8 @@ export class ProjectileCombat {
   private getProjectileDamageColor(projectile: Projectile): string {
     return projectile.type === WeaponType.FIRE_WAND ? '#ff8844' :
            projectile.type === WeaponType.LIGHTNING ? '#ffff88' :
+           projectile.type === WeaponType.RUNE_LANCE ? '#9ff5ff' :
+           projectile.type === WeaponType.MOON_BLADE ? '#d8b7ff' :
            projectile.type === WeaponType.HOLY_WATER ? '#88ccff' : '#ffffff';
   }
 
@@ -304,13 +306,17 @@ export class ProjectileCombat {
   private canSplitProjectile(projectile: Projectile): boolean {
     return projectile.type === WeaponType.MAGIC_WAND ||
            projectile.type === WeaponType.FIRE_WAND ||
-           projectile.type === WeaponType.AXE;
+           projectile.type === WeaponType.AXE ||
+           projectile.type === WeaponType.RUNE_LANCE ||
+           projectile.type === WeaponType.MOON_BLADE;
   }
 
   private canReflectProjectile(projectile: Projectile): boolean {
     return projectile.type === WeaponType.MAGIC_WAND ||
            projectile.type === WeaponType.FIRE_WAND ||
-           projectile.type === WeaponType.AXE;
+           projectile.type === WeaponType.AXE ||
+           projectile.type === WeaponType.RUNE_LANCE ||
+           projectile.type === WeaponType.MOON_BLADE;
   }
 
   private clearProjectileMotionExtras(projectile: Projectile) {

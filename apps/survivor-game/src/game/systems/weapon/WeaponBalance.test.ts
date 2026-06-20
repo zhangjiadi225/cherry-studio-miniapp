@@ -93,4 +93,31 @@ describe('weapon output model', () => {
     expect(projectiles[0].vy).toBeLessThan(-0.99);
     expect(projectiles[0].y).toBeLessThan(player.y - 20);
   });
+
+  it('fires rune lances as high-speed piercing projectiles', () => {
+    const player = createPlayer();
+    const weapon = createWeapon(WeaponType.RUNE_LANCE);
+    weapon.timer = weapon.cooldown;
+    const projectiles: Projectile[] = [];
+
+    updateWeapon(weapon, player, projectiles, 0, enemyQuery([makeEnemy(120, 0)]));
+
+    expect(projectiles).toHaveLength(1);
+    expect(projectiles[0].type).toBe(WeaponType.RUNE_LANCE);
+    expect(projectiles[0].pierce).toBeGreaterThanOrEqual(4);
+    expect(projectiles[0].vx).toBeGreaterThan(500);
+  });
+
+  it('fires moon blades as multiple piercing blades', () => {
+    const player = createPlayer();
+    const weapon = createWeapon(WeaponType.MOON_BLADE);
+    weapon.timer = weapon.cooldown;
+    const projectiles: Projectile[] = [];
+
+    updateWeapon(weapon, player, projectiles, 0, enemyQuery([makeEnemy(120, 0)]));
+
+    expect(projectiles).toHaveLength(2);
+    expect(projectiles.every((projectile) => projectile.type === WeaponType.MOON_BLADE)).toBe(true);
+    expect(projectiles.every((projectile) => projectile.pierce >= 2)).toBe(true);
+  });
 });

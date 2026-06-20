@@ -64,6 +64,16 @@ export const WEAPON_ASSETS: Record<WeaponType, WeaponAssetSpec> = {
     url: `${WEAPON_ROOT}/axe.svg`,
     glow: 'rgba(190,222,255,0.68)',
   },
+  [WeaponType.RUNE_LANCE]: {
+    id: 'weapon-rune-lance',
+    url: `${WEAPON_ROOT}/rune_lance.svg`,
+    glow: 'rgba(118,244,255,0.78)',
+  },
+  [WeaponType.MOON_BLADE]: {
+    id: 'weapon-moon-blade',
+    url: `${WEAPON_ROOT}/moon_blade.svg`,
+    glow: 'rgba(196,160,255,0.76)',
+  },
 };
 
 class WeaponSpriteRegistry {

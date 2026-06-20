@@ -75,6 +75,12 @@ export function updateWeapon(
     case WeaponType.AXE:
       for (const damage of castDamages) fired = fireAxe(w, player, projectiles, damage, effectiveArea) || fired;
       break;
+    case WeaponType.RUNE_LANCE:
+      for (const damage of castDamages) fired = fireRuneLance(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
+      break;
+    case WeaponType.MOON_BLADE:
+      for (const damage of castDamages) fired = fireMoonBlade(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
+      break;
     case WeaponType.LIGHTNING:
       for (const damage of castDamages) fired = fireLightning(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
       break;
@@ -300,6 +306,56 @@ function fireAxe(
       knockback: w.knockback,
       animTimer: Math.random() * Math.PI * 2,
       gravY: 400,
+    }) !== undefined || fired;
+  }
+  return fired;
+}
+
+function fireRuneLance(
+  w: Weapon, player: Player,
+  projectiles: Projectile[], damage: number, area: number,
+  enemyQuery: EnemyQuery
+): boolean {
+  const targets = findNearestEnemies(player, enemyQuery, Math.max(1, w.count), FIND_ENEMY_RANGE);
+  let fired = false;
+  for (let i = 0; i < Math.max(1, w.count); i++) {
+    const target = targets.length > 0 ? targets[i % targets.length] : undefined;
+    const fallbackAngle = player.facingLeft ? Math.PI : 0;
+    fired = fireTargetedProjectile(w, player, target, fallbackAngle, projectiles, {
+      damage,
+      radius: 6 * area,
+      type: WeaponType.RUNE_LANCE,
+    }) || fired;
+  }
+  return fired;
+}
+
+function fireMoonBlade(
+  w: Weapon, player: Player,
+  projectiles: Projectile[], damage: number, area: number,
+  enemyQuery: EnemyQuery
+): boolean {
+  const target = findNearestEnemies(player, enemyQuery, 1, FIND_ENEMY_RANGE)[0];
+  const baseAngle = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.random() * Math.PI * 2;
+  const count = Math.max(1, w.count);
+  const spread = Math.min(1.1, 0.18 * (count - 1));
+  const speed = getProjectileSpeed(w);
+  let fired = false;
+  for (let i = 0; i < count; i++) {
+    const t = count === 1 ? 0.5 : i / (count - 1);
+    const angle = baseAngle - spread / 2 + spread * t;
+    fired = spawnWeaponProjectile(w, projectiles, {
+      x: player.x,
+      y: player.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      damage,
+      radius: 10 * area,
+      life: w.duration,
+      pierce: w.pierce,
+      type: WeaponType.MOON_BLADE,
+      knockback: w.knockback,
+      animTimer: i * 0.7,
     }) !== undefined || fired;
   }
   return fired;
