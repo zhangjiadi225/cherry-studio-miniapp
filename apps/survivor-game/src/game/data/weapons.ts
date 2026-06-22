@@ -71,7 +71,7 @@ export const WEAPON_DATA: Record<WeaponType, {
   [WeaponType.WHIP]: {
     name: '鞭子',
     icon: '🪄',
-    desc: '每升1级多一节鞭身，最高8级',
+    desc: '短线光鞭自动朝附近敌人抽击，形态由进化决定',
     family: 'swing',
     metadata: { behavior: 'persistent_melee', displayMode: 'stowed', displayPriority: 100, tags: ['melee', 'piercing'] },
     baseDamage: 15,
@@ -82,7 +82,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     basePierce: 999,
     baseDuration: 0.5,
     baseKnockback: 50,
-    perLevel: { damage: 5, count: 0, growthLabel: '鞭身+1' },
+    perLevel: { damage: 5, cooldown: -0.04 },
     maxLevel: 8,
   },
   [WeaponType.MAGIC_WAND]: {
@@ -99,7 +99,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     basePierce: 0,
     baseDuration: 2,
     baseKnockback: 30,
-    perLevel: { damage: 5, count: 1, speed: 30 },
+    perLevel: { damage: 5, speed: 25, cooldown: -0.04 },
     maxLevel: 8,
   },
   [WeaponType.BIBLE]: {
@@ -112,11 +112,11 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseCooldown: 8,
     baseSpeed: 200,
     baseArea: 1.0,
-    baseCount: 1,
+    baseCount: 2,
     basePierce: 999,
     baseDuration: 4,
     baseKnockback: 60,
-    perLevel: { damage: 7, count: 1, duration: 0.5, area: 0.1, cooldown: -0.15 },
+    perLevel: { damage: 8, cooldown: -0.28 },
     maxLevel: 8,
   },
   [WeaponType.GARLIC]: {
@@ -133,7 +133,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     basePierce: 999,
     baseDuration: 999,
     baseKnockback: 20,
-    perLevel: { damage: 2, area: 0.15 },
+    perLevel: { damage: 2 },
     maxLevel: 8,
   },
   [WeaponType.FIRE_WAND]: {
@@ -150,7 +150,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     basePierce: 0,
     baseDuration: 2,
     baseKnockback: 80,
-    perLevel: { damage: 10, area: 0.2, count: 1 },
+    perLevel: { damage: 10, cooldown: -0.04 },
     maxLevel: 8,
   },
   [WeaponType.HOLY_WATER]: {
@@ -163,11 +163,11 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseCooldown: 5,
     baseSpeed: 0,
     baseArea: 1.0,
-    baseCount: 1,
+    baseCount: 2,
     basePierce: 999,
     baseDuration: 3,
     baseKnockback: 0,
-    perLevel: { damage: 5, count: 1, area: 0.15, duration: 0.5 },
+    perLevel: { damage: 5, cooldown: -0.18 },
     maxLevel: 8,
   },
   [WeaponType.LIGHTNING]: {
@@ -180,11 +180,11 @@ export const WEAPON_DATA: Record<WeaponType, {
     baseCooldown: 3,
     baseSpeed: 0,
     baseArea: 1.0,
-    baseCount: 1,
+    baseCount: 2,
     basePierce: 1,
     baseDuration: 0.1,
     baseKnockback: 100,
-    perLevel: { damage: 8, count: 1, cooldown: -0.15 },
+    perLevel: { damage: 8, cooldown: -0.16 },
     maxLevel: 8,
   },
   [WeaponType.AXE]: {
@@ -201,7 +201,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     basePierce: 999,
     baseDuration: 0.24,
     baseKnockback: 105,
-    perLevel: { damage: 9, area: 0.07, cooldown: -0.04 },
+    perLevel: { damage: 9, cooldown: -0.04, knockback: 4 },
     maxLevel: 8,
   },
   [WeaponType.RUNE_LANCE]: {
@@ -218,7 +218,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     basePierce: 4,
     baseDuration: 1.15,
     baseKnockback: 45,
-    perLevel: { damage: 4, speed: 15, pierce: 1, cooldown: -0.04 },
+    perLevel: { damage: 4, speed: 10, cooldown: -0.04 },
     maxLevel: 8,
   },
   [WeaponType.MOON_BLADE]: {
@@ -235,7 +235,9 @@ export const WEAPON_DATA: Record<WeaponType, {
     basePierce: 2,
     baseDuration: 1.7,
     baseKnockback: 35,
-    perLevel: { damage: 3, count: 1, pierce: 1, area: 0.05 },
+    perLevel: { damage: 3, speed: 10, cooldown: -0.04 },
     maxLevel: 8,
   },
 };
+
+export const STARTING_WEAPON_TYPES = Object.keys(WEAPON_DATA) as WeaponType[];

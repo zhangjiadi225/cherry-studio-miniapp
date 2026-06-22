@@ -81,7 +81,7 @@ describe('createEnemy', () => {
     const bossContactDamage = boss.damage * BOSS_DMG_MULT;
 
     expect(boss.damage).toBeCloseTo(ENEMY_DATA[EnemyType.WRAITH].baseDamage * params.enemyDamageMultiplier);
-    expect(bossContactDamage).toBeCloseTo(57.5);
+    expect(bossContactDamage).toBeCloseTo(57.0);
     expect(bossContactDamage).toBeLessThanOrEqual(75);
   });
 

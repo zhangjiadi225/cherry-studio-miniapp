@@ -5,7 +5,7 @@ export { ENEMY_DATA } from './data/enemies';
 export { GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from './data/modifiers';
 export { PASSIVE_DATA } from './data/passives';
 export { SUPPLY_DATA } from './data/supplies';
-export { WEAPON_DATA, getWeaponMetadataLabel } from './data/weapons';
+export { WEAPON_DATA, STARTING_WEAPON_TYPES, getWeaponMetadataLabel } from './data/weapons';
 
 // ===== Game =====
 export const GAME_DURATION = 9 * 60; // 9 minutes
@@ -18,9 +18,9 @@ export const SPAWN_INTERVAL_BASE = 1.5; // seconds
 export const SPAWN_INTERVAL_MIN = 0.25;
 export const SPAWN_DISTANCE = 600;
 export const BOSS_TIMES = [180, 360]; // 3min, 6min
-export const MAX_ENEMIES = 800;
+export const MAX_ENEMIES = 520;
 export const MAX_ACTIVE_PLAYER_PROJECTILES = 420;
-export const MAX_ACTIVE_ENEMY_PROJECTILES = 300;
+export const MAX_ACTIVE_ENEMY_PROJECTILES = 180;
 export const MAX_ACTIVE_PARTICLES = 800;
 export const MAX_ACTIVE_DAMAGE_NUMBERS = 220;
 
@@ -29,6 +29,7 @@ export const PLAYER_RADIUS = 14;
 export const PLAYER_BASE_HP = 100;
 export const PLAYER_BASE_SPEED = 200;
 export const PLAYER_BASE_PICKUP_RANGE = 60;
+export const PLAYER_WEAPON_SLOT_LIMIT = 3;
 export const PLAYER_INV_DURATION = 0.8;
 export const PLAYER_REGEN_INTERVAL = 1;
 export const PLAYER_ANIM_SPEED = 8;
@@ -55,6 +56,7 @@ export const SHOP_PASSIVE_XP_SURCHARGE = 0.12;
 export const SHOP_HEAL_XP_SURCHARGE = 0.08;
 export const SHOP_PASSIVE_OPTION_CHANCE = 0.35;
 export const SHOP_FIELD_RATION_OPTION_CHANCE = 0.3;
+export const SHOP_SELL_REFUND_RATE = 0.8;
 
 export const UPGRADE_RARITY_DATA: Record<UpgradeRarity, {
   label: string;

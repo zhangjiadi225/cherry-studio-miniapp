@@ -1,18 +1,18 @@
 import {
   GameState, Enemy, Projectile, XPGem, Particle, DamageNumber, EnemyProjectile,
-  Camera, WeaponType, PassiveType, Weapon, PerformanceStats, MapObstacle, EnemyType
+  Camera, WeaponType, PassiveType, Weapon, PerformanceStats, MapObstacle, EnemyType, GenericModifierType
 } from './types';
 import {
   SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
   CONTACT_COOLDOWN,
   MAGIC_CIRCLE_HEAL_RATE, MAGIC_CIRCLE_RADIUS,
-  MAX_ENEMIES,
+  MAX_ENEMIES, STARTING_WEAPON_TYPES,
 } from './constants';
 import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
 import {
   createPlayer, updatePlayer, damagePlayer, collectShards, hasPassive,
-  tryBloodZoneHeal,
+  tryBloodZoneHeal, removePassive,
 } from './systems/player/Player';
 import { createEnemy, updateEnemy, isCollidingWithPlayer, resetEnemyIds, shouldSplitOnDeath } from './systems/enemy/Enemy';
 import { updateEnemyAttacks, updateEnemyProjectile } from './systems/enemy/EnemyAttack';
@@ -21,6 +21,7 @@ import {
   updateWeapon, updateBiblePositions, getGarlicRadius,
   createWeapon, updateGarlicAura,
 } from './systems/weapon/Weapon';
+import { getWeaponEvolutionIds } from './data/weaponEvolutions';
 import { AudioSystem } from './systems/audio/Audio';
 import { ProjectileCombat } from './systems/combat/ProjectileCombat';
 import { ShopSystem } from './systems/upgrade/ShopSystem';
@@ -43,6 +44,7 @@ import { SpatialEnemyQuery } from './systems/enemy/EnemyQuery';
 import { pools, clearAllPools } from './utils/PoolManager';
 import { SpatialGrid } from './utils/SpatialGrid';
 import { eventBus, gameState, GameEvent } from './events';
+import { GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from './data/modifiers';
 
 type ObjectiveBeat = {
   time: number;
@@ -89,6 +91,7 @@ export class Game {
   private objectiveBeats: ObjectiveBeat[] = getObjectiveBeats(this.runDifficulty);
   private desktopTab: DesktopTab = 'start';
   private codexTab: CodexTab = 'weapons';
+  private selectedStartingWeapon: WeaponType = WeaponType.MAGIC_WAND;
   private hoveredStarId?: MetaUpgradeNode['id'];
   private player = createPlayer();
   private enemies: Enemy[] = [];
@@ -317,6 +320,8 @@ export class Game {
     else if (e.code === 'Digit4') this.setDesktopTab('codex');
     else if (this.desktopTab === 'codex' && e.code === 'KeyQ') this.shiftCodexTab(-1);
     else if (this.desktopTab === 'codex' && e.code === 'KeyE') this.shiftCodexTab(1);
+    else if (this.desktopTab === 'start' && e.code === 'KeyQ') this.shiftStartingWeapon(-1);
+    else if (this.desktopTab === 'start' && e.code === 'KeyE') this.shiftStartingWeapon(1);
     else if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.shiftDesktopTab(-1);
     else if (e.code === 'ArrowRight' || e.code === 'KeyD') this.shiftDesktopTab(1);
     else if (e.code === 'Enter' || e.code === 'Space') this.startGame();
@@ -337,6 +342,12 @@ export class Game {
     const tabs: CodexTab[] = ['weapons', 'passives', 'enemies', 'modules'];
     const index = tabs.indexOf(this.codexTab);
     this.codexTab = tabs[(index + dir + tabs.length) % tabs.length];
+  }
+
+  private shiftStartingWeapon(dir: number) {
+    const index = STARTING_WEAPON_TYPES.indexOf(this.selectedStartingWeapon);
+    const next = STARTING_WEAPON_TYPES[(index + dir + STARTING_WEAPON_TYPES.length) % STARTING_WEAPON_TYPES.length];
+    this.selectedStartingWeapon = next ?? WeaponType.MAGIC_WAND;
   }
 
   private handleDesktopClick(e: MouseEvent | TouchEvent) {
@@ -361,6 +372,13 @@ export class Game {
           this.meta = selectRunDifficulty(this.meta, card.id);
           this.runDifficulty = getRunDifficultyPreset(this.meta.selectedDifficulty);
           this.objectiveBeats = getObjectiveBeats(this.runDifficulty);
+          return;
+        }
+      }
+      const weaponCards = this.renderer.getStartingWeaponCardRects();
+      for (const card of weaponCards) {
+        if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
+          this.selectedStartingWeapon = card.weaponType;
           return;
         }
       }
@@ -425,7 +443,10 @@ export class Game {
     clearAllPools();
     this.player = createPlayer(this.meta.selectedSkin);
     this.player.shards = getInitialShards(this.meta);
-    this.player.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
+    const startingWeapon = STARTING_WEAPON_TYPES.includes(this.selectedStartingWeapon)
+      ? this.selectedStartingWeapon
+      : WeaponType.MAGIC_WAND;
+    this.player.weapons.push(createWeapon(startingWeapon));
     this.refreshWeaponRefs();
     this.activeBoss = undefined;
     this.enemies = [];
@@ -550,12 +571,20 @@ export class Game {
 
     if (this.garlicWeapon) {
       const { hits } = updateGarlicAura(this.garlicWeapon, this.player, dt, this.garlicTickTimer, this.enemyQuery);
+      const hasRepulsion = (this.garlicWeapon.modifierMask & GENERIC_MODIFIER_MASK[GenericModifierType.REPULSION_FIELD]) !== 0;
+      const repulsionVisual = GENERIC_MODIFIER_DATA[GenericModifierType.REPULSION_FIELD].visual;
       for (let i = 0; i < hits.length; i++) {
         const hit = hits[i];
         pushDamageNumber(this.damageNumbers, hit.x, hit.y, hit.dmg, '#cccc66', 14);
         spawnHitParticles(this.particles, hit.x, hit.y, '#cccc66', 3, {
           speed: 60, life: 0.3, radius: 2, type: 'circle', glow: true,
         });
+        if (hasRepulsion && i < 4) {
+          spawnHitParticles(this.particles, hit.x, hit.y, repulsionVisual.accent, 4, {
+            speed: 95, life: 0.28, radius: 2.4, type: repulsionVisual.particle as 'circle' | 'square' | 'star' | 'spark', glow: true,
+          });
+          if (i === 0) eventBus.emit(GameEvent.MODIFIER_TRIGGER, GenericModifierType.REPULSION_FIELD);
+        }
       }
     }
 
@@ -858,8 +887,7 @@ export class Game {
     if (hasPassive(this.player, PassiveType.REVIVE)) {
       this.player.hp = this.player.maxHp * 0.5;
       this.player.invTime = 3;
-      const idx = this.player.passives.findIndex(pa => pa.type === PassiveType.REVIVE);
-      if (idx >= 0) this.player.passives.splice(idx, 1);
+      removePassive(this.player, PassiveType.REVIVE);
       shakeCamera(this.camera, 0.6, 12);
       spawnExplosionParticles(this.particles, this.player.x, this.player.y, '#ffd700', 40, {
         speed: 300, life: 1.2, radius: 6, type: 'star', glow: true,
@@ -1001,13 +1029,16 @@ export class Game {
     const y = clientY - rect.top;
     const w = this.renderer.getWidth();
     const h = this.renderer.getHeight();
-    const action = this.shop.handleClick(x, y, w, h);
-    if (action === 'buy') {
+    const action = this.shop.handleClick(x, y, w, h, this.player);
+    if (action?.type === 'buy') {
       this.buySelectedUpgrade();
-    } else if (action === 'reroll') {
+    } else if (action?.type === 'reroll') {
       this.rerollShop();
-    } else if (action === 'continue') {
+    } else if (action?.type === 'continue') {
       this.finishShop();
+    } else if (action?.type === 'sell') {
+      const sold = this.shop.sellCard(this.player, action.cardId);
+      if (sold) this.refreshWeaponRefs();
     }
   }
 
@@ -1018,7 +1049,7 @@ export class Game {
     this.renderer.clear();
 
     if (gameState.is('menu')) {
-      this.renderer.drawDesktop(this.meta, this.desktopTab, this.codexTab, this.hoveredStarId);
+      this.renderer.drawDesktop(this.meta, this.desktopTab, this.codexTab, this.selectedStartingWeapon, this.hoveredStarId);
       return;
     }
 
@@ -1058,7 +1089,12 @@ export class Game {
     }
 
     if (this.garlicWeapon) {
-      this.renderer.drawGarlicAura(this.player, getGarlicRadius(this.garlicWeapon, this.player), this.garlicWeapon.modifierMask);
+      this.renderer.drawGarlicAura(
+        this.player,
+        getGarlicRadius(this.garlicWeapon, this.player),
+        this.garlicWeapon.modifierMask,
+        getWeaponEvolutionIds(this.garlicWeapon)
+      );
     }
 
     this.renderer.drawPickupRange(this.player);
@@ -1106,6 +1142,7 @@ export class Game {
         this.shop.options,
         this.shop.selectedIndex,
         this.player.shards,
+        this.shop.getSellableCards(this.player),
         this.shop.canFreeReroll(),
         this.shop.getRerollCost(this.meta),
         this.shop.canPaidReroll(this.meta)

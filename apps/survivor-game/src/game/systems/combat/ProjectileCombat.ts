@@ -243,7 +243,9 @@ export class ProjectileCombat {
           }
           break;
         case 'reflect':
-          this.spawnReflectionProjectile(ctx, projectile, enemy);
+          if (this.spawnReflectionProjectile(ctx, projectile, enemy)) {
+            this.emitModifierCue(modifier.id);
+          }
           break;
       }
     }
@@ -394,6 +396,10 @@ export class ProjectileCombat {
     projectile.arcAngle = undefined;
   }
 
+  private copyProjectileEvolutionAssets(child: Projectile, source: Projectile) {
+    child.evolutionIds = source.evolutionIds !== undefined ? [...source.evolutionIds] : undefined;
+  }
+
   private configureStationaryFirePatch(
     child: Projectile,
     source: Projectile,
@@ -417,7 +423,7 @@ export class ProjectileCombat {
     child.knockback = source.knockback * 0.7;
     child.animTimer = 0;
     child.modifierMask = source.modifierMask;
-    child.splitDone = true;
+    this.copyProjectileEvolutionAssets(child, source);
     child.chainDone = false;
     child.pulseDone = false;
     child.reflectRemaining = source.reflectRemaining;
@@ -452,7 +458,7 @@ export class ProjectileCombat {
     child.knockback = source.knockback * 0.75;
     child.animTimer = 0;
     child.modifierMask = source.modifierMask;
-    child.splitDone = true;
+    this.copyProjectileEvolutionAssets(child, source);
     child.chainDone = false;
     child.pulseDone = false;
     child.reflectRemaining = source.reflectRemaining;
@@ -538,7 +544,7 @@ export class ProjectileCombat {
     child.knockback = projectile.knockback * 0.75;
     child.animTimer = 0;
     child.modifierMask = projectile.modifierMask;
-    child.splitDone = projectile.splitDone;
+    this.copyProjectileEvolutionAssets(child, projectile);
     child.chainDone = false;
     child.pulseDone = false;
     child.reflectRemaining = nextRemaining;

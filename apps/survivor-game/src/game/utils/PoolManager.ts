@@ -48,7 +48,7 @@ function resetProjectile(p: Projectile) {
   p.hitEnemies.clear();
   p.knockback = 0;
   p.modifierMask = 0;
-  p.splitDone = false;
+
   p.chainDone = false;
   p.pulseDone = false;
   p.reflectRemaining = undefined;
@@ -65,6 +65,7 @@ function resetProjectile(p: Projectile) {
   p.lightningSeed = undefined;
   p.beamLength = undefined;
   p.arcAngle = undefined;
+  p.evolutionIds = undefined;
 }
 
 function resetEnemyProjectile(p: EnemyProjectile) {

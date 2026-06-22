@@ -1,8 +1,9 @@
 import type { RenderContext } from './WorldRenderer';
-import type { Player, Enemy, Projectile, XPGem, EnemyProjectile, WeaponDisplayMode } from '../types';
+import type { Player, Enemy, Projectile, XPGem, EnemyProjectile, WeaponDisplayMode, WeaponEvolutionId } from '../types';
 import { WeaponType, EnemyType } from '../types';
 import { COLORS, ENEMY_DATA, WEAPON_DATA } from '../constants';
 import { getSkinById } from '../systems/meta/MetaProgression';
+import { getWeaponEvolutionIds } from '../data/weaponEvolutions';
 import { spriteRegistry } from './SpriteRegistry';
 import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
 
@@ -259,6 +260,7 @@ type EquippedWeaponVisual = {
   type: WeaponType;
   mode: WeaponDisplayMode;
   priority: number;
+  evolutionIds: WeaponEvolutionId[];
 };
 
 const SIDE_WEAPON_DISPLAY_MODES = new Set<WeaponDisplayMode>(['stowed', 'aura_source', 'relic']);
@@ -276,6 +278,7 @@ function getEquippedWeaponVisuals(player: Player, modes?: Set<WeaponDisplayMode>
       type: weapon.type,
       mode: metadata.displayMode,
       priority: metadata.displayPriority,
+      evolutionIds: getWeaponEvolutionIds(weapon),
     });
   }
   return visuals.sort((a, b) => b.priority - a.priority);
@@ -344,17 +347,16 @@ function drawStowedWhipFallback(
 }
 
 function drawEquippedWeaponAssets(ctx: CanvasRenderingContext2D, player: Player, bob: number) {
-  const types = getEquippedWeaponVisuals(player, SIDE_WEAPON_DISPLAY_MODES)
-    .slice(0, 4)
-    .map((visual) => visual.type);
-  if (types.length === 0) return;
+  const visuals = getEquippedWeaponVisuals(player, SIDE_WEAPON_DISPLAY_MODES).slice(0, 4);
+  if (visuals.length === 0) return;
 
   const side = player.facingLeft ? 1 : -1;
   const r = player.radius;
   const baseY = player.y + bob;
-  const hasWhip = types.includes(WeaponType.WHIP);
+  const whipVisual = visuals.find((visual) => visual.type === WeaponType.WHIP);
+  const hasWhip = whipVisual !== undefined;
 
-  if (hasWhip) {
+  if (whipVisual) {
     const x = player.x + side * r * 1.45;
     const y = baseY + r * 0.4;
     const size = r * 2.15;
@@ -363,11 +365,18 @@ function drawEquippedWeaponAssets(ctx: CanvasRenderingContext2D, player: Player,
       alpha: 0.92,
       rotation,
       glow: true,
+      evolutionIds: whipVisual.evolutionIds,
     });
-    if (!drewWhip) drawStowedWhipFallback(ctx, x, y, size, side, 0.92);
+    if (!drewWhip) {
+      drawStowedWhipFallback(ctx, x, y, size, side, 0.92);
+      weaponSpriteRegistry.drawEvolutionAssets(ctx, whipVisual.evolutionIds, x, y, size, {
+        alpha: 0.9,
+        rotation,
+      });
+    }
   }
 
-  const sideTypes = types.filter((type) => type !== WeaponType.WHIP).slice(0, hasWhip ? 3 : 4);
+  const sideVisuals = visuals.filter((visual) => visual.type !== WeaponType.WHIP).slice(0, hasWhip ? 3 : 4);
   const slots = hasWhip
     ? [
       { ox: side * r * 1.52, oy: -r * 0.95, size: r * 1.32 },
@@ -381,8 +390,9 @@ function drawEquippedWeaponAssets(ctx: CanvasRenderingContext2D, player: Player,
       { ox: side * r * 2.06, oy: -r * 0.18, size: r * 1.0 },
     ];
 
-  for (let i = 0; i < sideTypes.length; i++) {
-    const type = sideTypes[i];
+  for (let i = 0; i < sideVisuals.length; i++) {
+    const visual = sideVisuals[i];
+    const type = visual.type;
     const slot = slots[i];
     const x = player.x + slot.ox;
     const y = baseY + slot.oy + Math.sin(player.animTimer * 0.9 + i) * 1.2;
@@ -393,22 +403,28 @@ function drawEquippedWeaponAssets(ctx: CanvasRenderingContext2D, player: Player,
       alpha: 0.88,
       rotation,
       glow: true,
+      evolutionIds: visual.evolutionIds,
     });
-    if (!drew) drawWeaponFallbackIcon(ctx, type, x, y, slot.size, 0.88);
+    if (!drew) {
+      drawWeaponFallbackIcon(ctx, type, x, y, slot.size, 0.88);
+      weaponSpriteRegistry.drawEvolutionAssets(ctx, visual.evolutionIds, x, y, slot.size, {
+        alpha: 0.86,
+        rotation,
+      });
+    }
   }
 }
 
 function drawOrbitingWeaponAssets(ctx: CanvasRenderingContext2D, player: Player, bob: number) {
-  const orbitTypes = getEquippedWeaponVisuals(player, ORBIT_WEAPON_DISPLAY_MODES)
-    .slice(0, 3)
-    .map((visual) => visual.type);
-  if (orbitTypes.length === 0) return;
+  const orbitVisuals = getEquippedWeaponVisuals(player, ORBIT_WEAPON_DISPLAY_MODES).slice(0, 3);
+  if (orbitVisuals.length === 0) return;
 
   const baseRadius = player.radius * 2.45;
   const baseAngle = player.animTimer * 0.45;
-  for (let i = 0; i < orbitTypes.length; i++) {
-    const type = orbitTypes[i];
-    const angle = baseAngle + (i / orbitTypes.length) * Math.PI * 2;
+  for (let i = 0; i < orbitVisuals.length; i++) {
+    const visual = orbitVisuals[i];
+    const type = visual.type;
+    const angle = baseAngle + (i / orbitVisuals.length) * Math.PI * 2;
     const pulse = Math.sin(player.animTimer * 0.9 + i) * player.radius * 0.12;
     const orbitRadius = baseRadius + pulse;
     const x = player.x + Math.cos(angle) * orbitRadius;
@@ -418,12 +434,24 @@ function drawOrbitingWeaponAssets(ctx: CanvasRenderingContext2D, player: Player,
       alpha: 0.82,
       rotation: angle + player.animTimer * 0.18,
       glow: true,
+      evolutionIds: visual.evolutionIds,
     });
-    if (!drew) drawWeaponFallbackIcon(ctx, type, x, y, size, 0.82);
+    if (!drew) {
+      drawWeaponFallbackIcon(ctx, type, x, y, size, 0.82);
+      weaponSpriteRegistry.drawEvolutionAssets(ctx, visual.evolutionIds, x, y, size, {
+        alpha: 0.8,
+        rotation: angle + player.animTimer * 0.18,
+      });
+    }
   }
 }
 
-function drawLightningBodyMark(ctx: CanvasRenderingContext2D, player: Player, bob: number) {
+function drawLightningBodyMark(
+  ctx: CanvasRenderingContext2D,
+  player: Player,
+  bob: number,
+  evolutionIds: readonly WeaponEvolutionId[]
+) {
   const x = player.x;
   const y = player.y + bob;
   const r = player.radius;
@@ -470,12 +498,18 @@ function drawLightningBodyMark(ctx: CanvasRenderingContext2D, player: Player, bo
   ctx.beginPath();
   ctx.arc(x + r * 0.02, y + r * 0.42, r * 0.48, 0, Math.PI * 2);
   ctx.fill();
+  weaponSpriteRegistry.drawEvolutionAssets(ctx, evolutionIds, x, y - r * 0.48, r * 2.1, {
+    alpha: 0.72,
+    evolutionIntensity: 0.7,
+  });
   ctx.restore();
 }
 
 function drawWeaponBodyMarks(ctx: CanvasRenderingContext2D, player: Player, bob: number) {
-  if (hasEquippedWeaponDisplayMode(player, 'body_mark')) {
-    drawLightningBodyMark(ctx, player, bob);
+  if (!hasEquippedWeaponDisplayMode(player, 'body_mark')) return;
+  const visual = getEquippedWeaponVisuals(player, new Set<WeaponDisplayMode>(['body_mark']))[0];
+  if (visual) {
+    drawLightningBodyMark(ctx, player, bob, visual.evolutionIds);
   }
 }
 
@@ -1227,6 +1261,8 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         alpha,
         rotation: getProjectileAngle(p) + Math.PI / 4,
         glow: false,
+        evolutionIds: p.evolutionIds,
+        evolutionIntensity: 0.72,
       });
       break;
 
@@ -1287,6 +1323,10 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       ctx.arc(p.x, p.y, fireRadius * 1.08, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+      weaponSpriteRegistry.drawEvolutionAssets(ctx, p.evolutionIds, p.x, p.y, fireRadius * 2.25, {
+        alpha: alpha * 0.78,
+        evolutionIntensity: 0.7,
+      });
       break;
 
     case WeaponType.AXE: {
@@ -1323,6 +1363,8 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         alpha: Math.min(1, alpha + 0.12),
         rotation: angle + Math.PI * 0.32,
         glow: true,
+        evolutionIds: p.evolutionIds,
+        evolutionIntensity: 0.74,
       });
       ctx.restore();
       break;
@@ -1372,6 +1414,11 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       ctx.lineTo(lanceLen * 0.12, p.radius * 0.18);
       ctx.stroke();
       ctx.restore();
+      weaponSpriteRegistry.drawEvolutionAssets(ctx, p.evolutionIds, p.x, p.y, Math.min(84, lanceLen * 0.22), {
+        alpha: alpha * 0.76,
+        rotation: angle,
+        evolutionIntensity: 0.7,
+      });
       break;
     }
 
@@ -1413,6 +1460,11 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         ctx.fill();
       }
       ctx.restore();
+      weaponSpriteRegistry.drawEvolutionAssets(ctx, p.evolutionIds, p.x, p.y, p.radius * 3.4, {
+        alpha: alpha * 0.78,
+        rotation: angle,
+        evolutionIntensity: 0.75,
+      });
       break;
     }
 
@@ -1461,6 +1513,8 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         alpha,
         rotation: Math.sin(p.animTimer * 4) * 0.12,
         glow: false,
+        evolutionIds: p.evolutionIds,
+        evolutionIntensity: 0.72,
       });
       break;
     }
@@ -1598,6 +1652,11 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
       ctx.arc(anchorX, anchorY, 1.8, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+      weaponSpriteRegistry.drawEvolutionAssets(ctx, p.evolutionIds, p.x, p.y, p.radius * 1.2, {
+        alpha: alpha * 0.72,
+        rotation: Math.atan2(dirY, dirX),
+        evolutionIntensity: 0.64,
+      });
       break;
     }
 
@@ -1645,6 +1704,8 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         alpha,
         rotation: p.animTimer,
         glow: false,
+        evolutionIds: p.evolutionIds,
+        evolutionIntensity: 0.7,
       });
       break;
 
@@ -1680,6 +1741,8 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
         alpha,
         rotation: Math.sin(p.animTimer) * 0.12,
         glow: false,
+        evolutionIds: p.evolutionIds,
+        evolutionIntensity: 0.72,
       });
       break;
     }
@@ -1692,7 +1755,13 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
 
 // ──────────────────────────── Garlic Aura ────────────────────────────
 
-export function drawGarlicAura(rc: RenderContext, player: Player, radius: number, _modifierMask: number = 0) {
+export function drawGarlicAura(
+  rc: RenderContext,
+  player: Player,
+  radius: number,
+  _modifierMask: number = 0,
+  evolutionIds?: readonly WeaponEvolutionId[]
+) {
   const { ctx } = rc;
   const time = Date.now() * 0.001;
   const pulse = 0.15 + Math.sin(time * 3) * 0.05;
@@ -1725,6 +1794,11 @@ export function drawGarlicAura(rc: RenderContext, player: Player, radius: number
     ctx.fill();
   }
 
+  weaponSpriteRegistry.drawEvolutionAssets(ctx, evolutionIds, player.x, player.y, radius * 1.04, {
+    alpha: 0.52 + pulse,
+    evolutionIntensity: 0.74,
+  });
+
   for (let i = 0; i < 3; i++) {
     const angle = -time * 0.42 + i * Math.PI * 2 / 3;
     const dist = radius * 0.42;
@@ -1732,6 +1806,8 @@ export function drawGarlicAura(rc: RenderContext, player: Player, radius: number
       alpha: 0.42 + pulse,
       rotation: Math.sin(time + i) * 0.18,
       glow: false,
+      evolutionIds,
+      evolutionIntensity: 0.54,
     });
   }
 }

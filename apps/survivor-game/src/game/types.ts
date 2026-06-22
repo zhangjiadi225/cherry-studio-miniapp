@@ -92,11 +92,14 @@ export interface Weapon {
   knockback: number;
   modifiers: GenericModifierType[];
   modifierMask: number;
+  evolutions: Partial<Record<WeaponEvolutionTier, WeaponEvolutionId>>;
+  purchaseValue?: number;
 }
 
 export interface PassiveUpgrade {
   type: PassiveType;
   level: number;
+  purchaseValue?: number;
 }
 
 export interface Enemy {
@@ -145,7 +148,7 @@ export interface Projectile {
   hitEnemies: Set<number>;
   knockback: number;
   modifierMask: number;
-  splitDone?: boolean;
+
   chainDone?: boolean;
   pulseDone?: boolean;
   reflectRemaining?: number;
@@ -162,6 +165,7 @@ export interface Projectile {
   lightningSeed?: number;
   beamLength?: number;
   arcAngle?: number;
+  evolutionIds?: WeaponEvolutionId[];
 }
 
 export type EnemyProjectileKind = 'cultist_bolt' | 'demon_fire' | 'wraith_orb';
@@ -232,8 +236,9 @@ export interface UpgradeOption {
   title: string;
   description: string;
   icon: string;
-  type: 'weapon' | 'passive' | 'heal' | 'modifier' | 'supply';
+  type: 'weapon' | 'weapon_evolution' | 'passive' | 'heal' | 'modifier' | 'supply';
   weaponType?: WeaponType;
+  evolutionId?: WeaponEvolutionId;
   passiveType?: PassiveType;
   modifierType?: GenericModifierType;
   supplyType?: SupplyType;
@@ -241,6 +246,19 @@ export interface UpgradeOption {
   cost: number;
   isMaxed: boolean;
   purchased?: boolean;
+}
+
+export interface SellableCard {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  type: 'weapon' | 'passive';
+  weaponType?: WeaponType;
+  passiveType?: PassiveType;
+  level: number;
+  refund: number;
+  sellable: boolean;
 }
 
 export interface ScreenShake {
@@ -263,6 +281,61 @@ export const WeaponType = {
   MOON_BLADE: 'moon_blade',
 } as const;
 export type WeaponType = typeof WeaponType[keyof typeof WeaponType];
+
+export type WeaponEvolutionTier = 4 | 8;
+export const WeaponEvolutionId = {
+  WHIP_LONG: 'whip_long',
+  WHIP_QUICK: 'whip_quick',
+  WHIP_RING: 'whip_ring',
+  WHIP_RAZOR: 'whip_razor',
+  MAGIC_TWIN: 'magic_twin',
+  MAGIC_PIERCER: 'magic_piercer',
+  MAGIC_VOLLEY: 'magic_volley',
+  MAGIC_FOCUS: 'magic_focus',
+  BIBLE_TOME: 'bible_tome',
+  BIBLE_ORBIT: 'bible_orbit',
+  BIBLE_SANCTUARY: 'bible_sanctuary',
+  BIBLE_REQUIEM: 'bible_requiem',
+  GARLIC_MIASMA: 'garlic_miasma',
+  GARLIC_THORNS: 'garlic_thorns',
+  GARLIC_CENSER: 'garlic_censer',
+  GARLIC_WARD: 'garlic_ward',
+  FIRE_POOL: 'fire_pool',
+  FIRE_BURST: 'fire_burst',
+  FIRE_STORM: 'fire_storm',
+  FIRE_BRAND: 'fire_brand',
+  HOLY_TIDE: 'holy_tide',
+  HOLY_BASIN: 'holy_basin',
+  HOLY_DELUGE: 'holy_deluge',
+  HOLY_SCOUR: 'holy_scour',
+  LIGHTNING_ROD: 'lightning_rod',
+  LIGHTNING_FIELD: 'lightning_field',
+  LIGHTNING_TEMPEST: 'lightning_tempest',
+  LIGHTNING_JUDGMENT: 'lightning_judgment',
+  AXE_BREAKER: 'axe_breaker',
+  AXE_BULWARK: 'axe_bulwark',
+  AXE_EXECUTIONER: 'axe_executioner',
+  AXE_GUARD: 'axe_guard',
+  RUNE_PIERCER: 'rune_piercer',
+  RUNE_FAN: 'rune_fan',
+  RUNE_FOCUS: 'rune_focus',
+  RUNE_ARRAY: 'rune_array',
+  MOON_TWIN: 'moon_twin',
+  MOON_REACH: 'moon_reach',
+  MOON_RING: 'moon_ring',
+  MOON_REND: 'moon_rend',
+} as const;
+export type WeaponEvolutionId = typeof WeaponEvolutionId[keyof typeof WeaponEvolutionId];
+
+export interface WeaponEvolutionChoice {
+  id: WeaponEvolutionId;
+  weaponType: WeaponType;
+  tier: WeaponEvolutionTier;
+  name: string;
+  icon: string;
+  desc: string;
+  rarity: UpgradeRarity;
+}
 
 export type WeaponFamily = 'projectile' | 'strike' | 'aura' | 'orbit' | 'zone' | 'swing';
 export type WeaponTag = 'melee' | 'ranged' | 'piercing';

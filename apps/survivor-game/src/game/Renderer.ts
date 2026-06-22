@@ -1,4 +1,20 @@
-import type { Player, Enemy, Projectile, XPGem, Particle, DamageNumber, Camera, UpgradeOption, MapObstacle, TouchJoystickState, EnemyProjectile, PerformanceStats } from './types';
+import type {
+  Player,
+  Enemy,
+  Projectile,
+  XPGem,
+  Particle,
+  DamageNumber,
+  Camera,
+  UpgradeOption,
+  SellableCard,
+  MapObstacle,
+  TouchJoystickState,
+  EnemyProjectile,
+  PerformanceStats,
+  WeaponEvolutionId,
+  WeaponType,
+} from './types';
 import type { CodexTab, DesktopTab, MetaState, MetaUpgradeNode } from './systems/meta/MetaProgression';
 import type { RunDifficultyId } from './data/runDifficulties';
 import { COLORS } from './constants';
@@ -14,6 +30,7 @@ import {
   drawAudioButton as drawAudioBtn, drawPauseButton as drawPauseBtn,
   getAudioButtonRect as getAudioRect,
   getDesktopStartButtonRect as getStartButtonRect,
+  getStartingWeaponCardRects as getStartingWeaponRects,
   getMetaStarNodeRects as getStarNodeRects,
   getSkinCardRects as getSkinRects,
   getCodexTabRects as getCodexRects,
@@ -98,6 +115,9 @@ export class Renderer {
   getPauseButtonRect() { return getPauseRect(this.w); }
   getAudioButtonRect() { return getAudioRect(this.w); }
   getDesktopStartButtonRect() { return getStartButtonRect(this.w, this.h); }
+  getStartingWeaponCardRects(): Array<{ x: number; y: number; w: number; h: number; weaponType: WeaponType }> {
+    return getStartingWeaponRects(this.w, this.h);
+  }
   getDesktopTabRects() { return getTabRects(this.w, this.h); }
   getMetaStarNodeRects() { return getStarNodeRects(this.w, this.h); }
   getSkinCardRects() { return getSkinRects(this.w, this.h); }
@@ -118,8 +138,8 @@ export class Renderer {
   drawProjectile(p: Projectile) { drawProjectile(this.rc, p); }
   drawEnemyProjectile(p: EnemyProjectile) { drawEnemyProjectile(this.rc, p); }
   drawXPGem(gem: XPGem) { drawXPGem(this.rc, gem); }
-  drawGarlicAura(player: Player, radius: number, modifierMask: number = 0) {
-    drawGarlicAura(this.rc, player, radius, modifierMask);
+  drawGarlicAura(player: Player, radius: number, modifierMask: number = 0, evolutionIds?: readonly WeaponEvolutionId[]) {
+    drawGarlicAura(this.rc, player, radius, modifierMask, evolutionIds);
   }
   drawPickupRange(player: Player) { drawPickupRange(this.rc, player); }
 
@@ -139,14 +159,28 @@ export class Renderer {
   drawBossBar(name: string, hp: number, maxHp: number) { drawBossBar(this.rc, name, hp, maxHp); }
   drawAudioButton(muted: boolean) { drawAudioBtn(this.rc, muted); }
   drawPauseButton() { drawPauseBtn(this.rc); }
-  drawDesktop(meta: MetaState, tab: DesktopTab, codexTab: CodexTab, hoveredStarId?: MetaUpgradeNode['id']) {
-    drawDesktop(this.rc, meta, tab, codexTab, hoveredStarId);
+  drawDesktop(
+    meta: MetaState,
+    tab: DesktopTab,
+    codexTab: CodexTab,
+    selectedStartingWeapon: WeaponType,
+    hoveredStarId?: MetaUpgradeNode['id']
+  ) {
+    drawDesktop(this.rc, meta, tab, codexTab, selectedStartingWeapon, hoveredStarId);
   }
   drawPaused(player: Player, elapsed: number, killCount: number, difficultyName: string) {
     drawPaused(this.rc, player, elapsed, killCount, difficultyName);
   }
-  drawUpgradeScreen(options: UpgradeOption[], selectedIndex: number, shards: number, canFreeReroll: boolean, rerollCost: number, canPaidReroll: boolean) {
-    drawUpgradeScreen(this.rc, options, selectedIndex, shards, canFreeReroll, rerollCost, canPaidReroll);
+  drawUpgradeScreen(
+    options: UpgradeOption[],
+    selectedIndex: number,
+    shards: number,
+    sellableCards: SellableCard[],
+    canFreeReroll: boolean,
+    rerollCost: number,
+    canPaidReroll: boolean
+  ) {
+    drawUpgradeScreen(this.rc, options, selectedIndex, shards, sellableCards, canFreeReroll, rerollCost, canPaidReroll);
   }
   drawGameOver(stats: {
     time: number;

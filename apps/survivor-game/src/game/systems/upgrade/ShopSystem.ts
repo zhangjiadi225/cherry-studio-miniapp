@@ -6,11 +6,16 @@ import {
   getMetaShopOptionCount,
   getUnlockedModifierTypes,
 } from '../meta/MetaProgression';
-import type { Player, UpgradeOption } from '../../types';
-import { applyUpgrade, generateUpgradeOptions } from '../weapon/Upgrade';
+import type { Player, SellableCard, UpgradeOption } from '../../types';
+import { WEAPON_EVOLUTION_DATA } from '../../data/weaponEvolutions';
+import { applyUpgrade, generateUpgradeOptions, getSellableCards, sellOwnedCard } from '../weapon/Upgrade';
 import { getShopLayout } from './ShopLayout';
 
-export type ShopClickAction = 'buy' | 'reroll' | 'continue';
+export type ShopClickAction =
+  | { type: 'buy' }
+  | { type: 'reroll' }
+  | { type: 'continue' }
+  | { type: 'sell'; cardId: string };
 
 export class ShopSystem {
   options: UpgradeOption[] = [];
@@ -45,9 +50,10 @@ export class ShopSystem {
     const option = this.options[this.selectedIndex];
     if (option.purchased || player.shards < option.cost) return undefined;
 
+    if (!applyUpgrade(player, option)) return undefined;
     player.shards -= option.cost;
-    applyUpgrade(player, option);
     option.purchased = true;
+    this.markResolvedEvolutionAlternatives(option);
 
     const nextAffordable = this.options.findIndex((o) => !o.purchased && player.shards >= o.cost);
     const nextAvailable = nextAffordable >= 0
@@ -73,22 +79,39 @@ export class ShopSystem {
     return true;
   }
 
-  handleClick(x: number, y: number, w: number, h: number): ShopClickAction | undefined {
+  handleClick(x: number, y: number, w: number, h: number, player: Player): ShopClickAction | undefined {
     if (this.options.length === 0) return undefined;
 
-    const layout = getShopLayout(w, h, this.options.length);
+    const sellableCards = this.getSellableCards(player);
+    const layout = getShopLayout(w, h, this.options.length, sellableCards.length);
     for (const card of layout.cards) {
       if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
         this.selectedIndex = card.index;
-        return 'buy';
+        return { type: 'buy' };
+      }
+    }
+
+    for (const card of layout.sellCards) {
+      if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
+        const sellable = sellableCards[card.index];
+        if (!sellable) return undefined;
+        return { type: 'sell', cardId: sellable.id };
       }
     }
 
     const reroll = layout.rerollButton;
     const cont = layout.continueButton;
-    if (x >= reroll.x && x <= reroll.x + reroll.w && y >= reroll.y && y <= reroll.y + reroll.h) return 'reroll';
-    if (x >= cont.x && x <= cont.x + cont.w && y >= cont.y && y <= cont.y + cont.h) return 'continue';
+    if (x >= reroll.x && x <= reroll.x + reroll.w && y >= reroll.y && y <= reroll.y + reroll.h) return { type: 'reroll' };
+    if (x >= cont.x && x <= cont.x + cont.w && y >= cont.y && y <= cont.y + cont.h) return { type: 'continue' };
     return undefined;
+  }
+
+  getSellableCards(player: Player): SellableCard[] {
+    return getSellableCards(player);
+  }
+
+  sellCard(player: Player, cardId: string): SellableCard | undefined {
+    return sellOwnedCard(player, cardId);
   }
 
   canFreeReroll() {
@@ -111,5 +134,19 @@ export class ShopSystem {
       areModifierCardsUnlocked(meta),
       unlockedModifiers
     );
+  }
+
+  private markResolvedEvolutionAlternatives(option: UpgradeOption) {
+    if (option.type !== 'weapon_evolution' || !option.weaponType || !option.evolutionId) return;
+    const selected = WEAPON_EVOLUTION_DATA[option.evolutionId];
+    if (!selected) return;
+
+    for (const other of this.options) {
+      if (other.type !== 'weapon_evolution' || !other.evolutionId) continue;
+      const data = WEAPON_EVOLUTION_DATA[other.evolutionId];
+      if (other.weaponType === option.weaponType && data.tier === selected.tier) {
+        other.purchased = true;
+      }
+    }
   }
 }

@@ -9,7 +9,7 @@ import { weightedRandom } from '../../utils/math';
 import { getDifficultyParams, type DifficultyParams } from '../../data/difficulty';
 import { getRunDifficultyPreset, type RunDifficultyPreset } from '../../data/runDifficulties';
 
-const WRAITH_SHADOW_SPAWN_MULT = 0.62;
+const WRAITH_SHADOW_SPAWN_MULT = 0.45;
 
 function isRangedPressureType(type: EnemyType, elapsed: number, unlockTimeMult: number): boolean {
   if (type === EnemyType.CULTIST) return true;

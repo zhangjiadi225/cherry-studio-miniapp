@@ -1,4 +1,14 @@
-import { Weapon, WeaponType, Player, Enemy, Projectile, GenericModifierType, type ModifierEffect, type Vec2 } from '../../types';
+import {
+  Weapon,
+  WeaponEvolutionId,
+  WeaponType,
+  Player,
+  Enemy,
+  Projectile,
+  GenericModifierType,
+  type ModifierEffect,
+  type Vec2,
+} from '../../types';
 import {
   WEAPON_DATA, FIND_ENEMY_RANGE, LIGHTNING_RANGE, HOLY_WATER_RANGE,
   GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ACTIVE_PLAYER_PROJECTILES,
@@ -7,6 +17,7 @@ import { normalize, randFloat } from '../../utils/math';
 import { pools } from '../../utils/PoolManager';
 import { eventBus, GameEvent } from '../../events';
 import type { EnemyQuery } from '../enemy/EnemyQuery';
+import { getWeaponEvolutionIds, hasAnyWeaponEvolution, hasWeaponEvolution } from '../../data/weaponEvolutions';
 
 const nearestEnemiesScratch: Enemy[] = [];
 const nearestDistancesScratch: number[] = [];
@@ -18,7 +29,6 @@ const ORBITAL_PROJECTILE_SPEED = 3.7;
 const FIRE_ERUPTION_DURATION = 0.85;
 const AXE_CLEAVE_ARC = Math.PI * 2 / 3;
 const AXE_CLEAVE_BASE_REACH = 118;
-const AXE_CLEAVE_REACH_PER_LEVEL = 7;
 const RUNE_LANCE_MIN_LENGTH = 420;
 const RUNE_LANCE_MAX_LENGTH = 680;
 const RUNE_LANCE_DURATION = 0.18;
@@ -41,6 +51,7 @@ export function createWeapon(type: WeaponType): Weapon {
     knockback: d.baseKnockback,
     modifiers: [],
     modifierMask: 0,
+    evolutions: {},
   };
 }
 
@@ -70,10 +81,10 @@ export function updateWeapon(
   if (w.type === WeaponType.GARLIC) return;
 
   w.timer += dt;
-  const effectiveCooldown = w.cooldown * (1 - player.cooldownReduction);
+  const effectiveCooldown = w.cooldown * getEvolutionCooldownMultiplier(w) * (1 - player.cooldownReduction);
   if (w.timer < effectiveCooldown) return;
 
-  const effectiveDamage = w.damage * player.might;
+  const effectiveDamage = w.damage * player.might * getEvolutionDamageMultiplier(w);
   const effectiveArea = w.area * player.area;
 
   const castDamages = getCastDamages(w, effectiveDamage);
@@ -98,10 +109,10 @@ export function updateWeapon(
       for (const damage of castDamages) fired = fireLightning(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
       break;
     case WeaponType.WHIP:
-      fired = fireWhip(w, player, projectiles, effectiveDamage, effectiveArea, enemyQuery);
+      for (const damage of castDamages) fired = fireWhip(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
       break;
     case WeaponType.BIBLE:
-      fired = fireBible(w, player, projectiles, effectiveDamage, effectiveArea);
+      for (const damage of castDamages) fired = fireBible(w, player, projectiles, damage, effectiveArea) || fired;
       break;
     case WeaponType.HOLY_WATER:
       for (const damage of castDamages) fired = fireHolyWater(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
@@ -172,13 +183,40 @@ function getCastDamages(w: Weapon, damage: number): number[] {
   return hasModifierEffect(w, 'onFire', 'extraCast') ? [damage, damage] : [damage];
 }
 
-function getAttackCount(w: Weapon): number {
-  const baseCount = Math.max(1, w.count);
+function getAttackCountWithBonus(w: Weapon, bonusCount: number): number {
+  const baseCount = Math.max(1, w.count + bonusCount);
   return hasModifierEffect(w, 'onFire', 'split') ? baseCount * 2 : baseCount;
 }
 
 function getProjectileSpeed(w: Weapon): number {
-  return hasModifierEffect(w, 'onFire', 'projectileSpeed') ? w.speed * 1.28 : w.speed;
+  const modifierMultiplier = hasModifierEffect(w, 'onFire', 'projectileSpeed') ? 1.28 : 1;
+  let evolutionMultiplier = 1;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.MAGIC_FOCUS)) evolutionMultiplier *= 1.18;
+  return w.speed * modifierMultiplier * evolutionMultiplier;
+}
+
+function getEvolutionCooldownMultiplier(w: Weapon): number {
+  let multiplier = 1;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.WHIP_QUICK)) multiplier *= 0.82;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_REQUIEM)) multiplier *= 0.9;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.LIGHTNING_TEMPEST)) multiplier *= 0.9;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.AXE_GUARD)) multiplier *= 0.88;
+  return multiplier;
+}
+
+function getEvolutionDamageMultiplier(w: Weapon): number {
+  let multiplier = 1;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.WHIP_RAZOR)) multiplier *= 1.25;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.MAGIC_FOCUS)) multiplier *= 1.22;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_REQUIEM)) multiplier *= 1.18;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.GARLIC_CENSER)) multiplier *= 1.28;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.FIRE_BRAND)) multiplier *= 1.22;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.HOLY_SCOUR)) multiplier *= 1.24;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.LIGHTNING_JUDGMENT)) multiplier *= 1.25;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.AXE_EXECUTIONER)) multiplier *= 1.32;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.RUNE_FOCUS)) multiplier *= 1.18;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.MOON_REND)) multiplier *= 1.2;
+  return multiplier;
 }
 
 function canApplyProjectileOrbit(w: Weapon, config: ProjectileConfig): boolean {
@@ -225,7 +263,7 @@ function attachProjectileOrbit(p: Projectile, config: ProjectileConfig, index: n
 
 function attachWeaponModifiers(p: Projectile, w: Weapon) {
   p.modifierMask = w.modifierMask;
-  p.splitDone = false;
+  p.evolutionIds = getWeaponEvolutionIds(w);
   p.chainDone = false;
   p.pulseDone = false;
   p.reflectRemaining = getModifierStackCount(w, GenericModifierType.REFLECTION_PRISM);
@@ -281,6 +319,9 @@ type ProjectileConfig = {
 
 type TargetedProjectileConfig = Omit<ProjectileConfig, 'x' | 'y' | 'vx' | 'vy' | 'life' | 'pierce' | 'knockback'> & {
   origin?: Vec2;
+  life?: number;
+  pierce?: number;
+  knockback?: number;
 };
 
 function spawnWeaponProjectile(w: Weapon, projectiles: Projectile[], config: ProjectileConfig): Projectile | undefined {
@@ -338,10 +379,10 @@ function fireTargetedProjectile(
     vy,
     damage: config.damage,
     radius: config.radius,
-    life: w.duration,
-    pierce: w.pierce,
+    life: config.life ?? w.duration,
+    pierce: config.pierce ?? w.pierce,
     type: config.type,
-    knockback: w.knockback,
+    knockback: config.knockback ?? w.knockback,
     animTimer: config.animTimer,
     gravY: config.gravY,
   }) !== undefined;
@@ -352,7 +393,16 @@ function fireMagicWand(
   projectiles: Projectile[], damage: number, area: number,
   enemyQuery: EnemyQuery
 ): boolean {
-  const count = getAttackCount(w);
+  let bonusCount = 0;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.MAGIC_TWIN)) bonusCount += 1;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.MAGIC_VOLLEY)) bonusCount += 2;
+  const count = getAttackCountWithBonus(w, bonusCount);
+  const bonusPierce =
+    (hasWeaponEvolution(w, WeaponEvolutionId.MAGIC_PIERCER) ? 2 : 0) +
+    (hasWeaponEvolution(w, WeaponEvolutionId.MAGIC_FOCUS) ? 1 : 0);
+  const radiusMultiplier =
+    (hasWeaponEvolution(w, WeaponEvolutionId.MAGIC_PIERCER) ? 1.12 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.MAGIC_FOCUS) ? 1.08 : 1);
   const targets = findNearestEnemies(player, enemyQuery, count, FIND_ENEMY_RANGE);
   let fired = false;
   for (let i = 0; i < count; i++) {
@@ -361,7 +411,8 @@ function fireMagicWand(
     fired = fireTargetedProjectile(w, player, target, angle, projectiles, {
       origin: getWeaponCastOrigin(player, w, i, count),
       damage,
-      radius: 8 * area,
+      radius: 8 * area * radiusMultiplier,
+      pierce: w.pierce + bonusPierce,
       type: WeaponType.MAGIC_WAND,
     }) || fired;
   }
@@ -373,8 +424,17 @@ function fireFireWand(
   projectiles: Projectile[], damage: number, area: number,
   enemyQuery: EnemyQuery
 ): boolean {
-  const count = getAttackCount(w);
+  let bonusCount = 0;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.FIRE_BURST)) bonusCount += 1;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.FIRE_STORM)) bonusCount += 2;
+  const count = getAttackCountWithBonus(w, bonusCount);
   const targets = findNearestEnemies(player, enemyQuery, count, FIND_ENEMY_RANGE);
+  const radiusMultiplier =
+    (hasWeaponEvolution(w, WeaponEvolutionId.FIRE_POOL) ? 1.25 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.FIRE_STORM) ? 1.08 : 1);
+  const lifeMultiplier =
+    (hasWeaponEvolution(w, WeaponEvolutionId.FIRE_POOL) ? 1.3 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.FIRE_BRAND) ? 1.12 : 1);
   let fired = false;
   for (let i = 0; i < count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
@@ -391,8 +451,8 @@ function fireFireWand(
       vx: 0,
       vy: 0,
       damage,
-      radius: 24 * area,
-      life: FIRE_ERUPTION_DURATION,
+      radius: 24 * area * radiusMultiplier,
+      life: FIRE_ERUPTION_DURATION * lifeMultiplier,
       pierce: 999,
       type: WeaponType.FIRE_WAND,
       knockback: w.knockback,
@@ -419,21 +479,28 @@ function fireAxe(
   const dir = target
     ? normalize({ x: target.x - originX, y: target.y - originY })
     : { x: fallbackX, y: 0 };
-  const reach = (AXE_CLEAVE_BASE_REACH + w.level * AXE_CLEAVE_REACH_PER_LEVEL) * area;
+  const reachMultiplier =
+    (hasWeaponEvolution(w, WeaponEvolutionId.AXE_BULWARK) ? 1.28 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.AXE_GUARD) ? 1.12 : 1);
+  const arcMultiplier =
+    (hasWeaponEvolution(w, WeaponEvolutionId.AXE_BREAKER) ? 1.18 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.AXE_GUARD) ? 1.15 : 1);
+  const reach = AXE_CLEAVE_BASE_REACH * area * reachMultiplier;
+  const arcAngle = Math.min(Math.PI * 0.96, AXE_CLEAVE_ARC * arcMultiplier);
   const p = spawnWeaponProjectile(w, projectiles, {
     x: originX + dir.x * reach * 0.5,
     y: originY + dir.y * reach * 0.5,
     vx: dir.x,
     vy: dir.y,
     damage,
-    radius: 14 * area,
+    radius: 14 * area * (hasWeaponEvolution(w, WeaponEvolutionId.AXE_BULWARK) ? 1.16 : 1),
     life: w.duration,
     pierce: w.pierce,
     type: WeaponType.AXE,
     knockback: w.knockback,
     animTimer: 0,
     beamLength: reach,
-    arcAngle: AXE_CLEAVE_ARC,
+    arcAngle,
   });
   if (!p) return false;
   p.originX = originX;
@@ -446,10 +513,20 @@ function fireRuneLance(
   projectiles: Projectile[], damage: number, area: number,
   enemyQuery: EnemyQuery
 ): boolean {
-  const count = getAttackCount(w);
+  let bonusCount = 0;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.RUNE_FAN)) bonusCount += 2;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.RUNE_ARRAY)) bonusCount += 2;
+  const count = getAttackCountWithBonus(w, bonusCount);
   const targets = findNearestEnemies(player, enemyQuery, count, FIND_ENEMY_RANGE);
   let fired = false;
-  const spread = Math.min(0.42, 0.1 * (count - 1));
+  const spreadCap = hasAnyWeaponEvolution(w, [WeaponEvolutionId.RUNE_FAN, WeaponEvolutionId.RUNE_ARRAY]) ? 0.74 : 0.42;
+  const spread = Math.min(spreadCap, 0.1 * (count - 1));
+  const lengthMultiplier =
+    (hasWeaponEvolution(w, WeaponEvolutionId.RUNE_PIERCER) ? 1.18 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.RUNE_FOCUS) ? 1.25 : 1);
+  const bonusPierce =
+    (hasWeaponEvolution(w, WeaponEvolutionId.RUNE_PIERCER) ? 2 : 0) +
+    (hasWeaponEvolution(w, WeaponEvolutionId.RUNE_FOCUS) ? 1 : 0);
   for (let i = 0; i < count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
     const origin = getWeaponCastOrigin(player, w, i, count);
@@ -461,7 +538,7 @@ function fireRuneLance(
     const dirY = Math.sin(angle);
     const beamLength = Math.max(
       RUNE_LANCE_MIN_LENGTH,
-      Math.min(RUNE_LANCE_MAX_LENGTH, getProjectileSpeed(w) * w.duration * 0.82)
+      Math.min(RUNE_LANCE_MAX_LENGTH * lengthMultiplier, getProjectileSpeed(w) * w.duration * 0.82 * lengthMultiplier)
     );
     const p = spawnWeaponProjectile(w, projectiles, {
       x: origin.x + dirX * beamLength * 0.5,
@@ -469,9 +546,9 @@ function fireRuneLance(
       vx: dirX,
       vy: dirY,
       damage,
-      radius: 7 * area,
+      radius: 7 * area * (hasWeaponEvolution(w, WeaponEvolutionId.RUNE_FOCUS) ? 1.12 : 1),
       life: RUNE_LANCE_DURATION,
-      pierce: w.pierce,
+      pierce: w.pierce + bonusPierce,
       type: WeaponType.RUNE_LANCE,
       knockback: w.knockback,
       beamLength,
@@ -492,10 +569,19 @@ function fireMoonBlade(
 ): boolean {
   const target = findNearestEnemies(player, enemyQuery, 1, FIND_ENEMY_RANGE)[0];
   const baseAngle = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.random() * Math.PI * 2;
-  const count = getAttackCount(w);
+  let bonusCount = 0;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.MOON_TWIN)) bonusCount += 1;
+  if (hasWeaponEvolution(w, WeaponEvolutionId.MOON_RING)) bonusCount += 2;
+  const count = getAttackCountWithBonus(w, bonusCount);
   const spread = Math.min(1.1, 0.18 * (count - 1));
-  const orbitRadius = (68 + Math.min(36, w.level * 4)) * area;
-  const orbitSpeed = MOON_BLADE_ORBIT_SPEED + Math.min(1.4, w.level * 0.12);
+  const orbitRadius = 76 * area *
+    (hasWeaponEvolution(w, WeaponEvolutionId.MOON_REACH) ? 1.22 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.MOON_RING) ? 1.08 : 1);
+  const orbitSpeed = MOON_BLADE_ORBIT_SPEED * (hasWeaponEvolution(w, WeaponEvolutionId.MOON_REND) ? 1.16 : 1);
+  const life = w.duration *
+    (hasWeaponEvolution(w, WeaponEvolutionId.MOON_REACH) ? 1.22 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.MOON_RING) ? 1.08 : 1);
+  const pierce = w.pierce + (hasWeaponEvolution(w, WeaponEvolutionId.MOON_REND) ? 2 : 0);
   const hasProjectileOrbit = hasModifierEffect(w, 'onFire', 'projectileOrbit');
   let fired = false;
   for (let i = 0; i < count; i++) {
@@ -509,9 +595,9 @@ function fireMoonBlade(
       vx: 0,
       vy: 0,
       damage,
-      radius: 10 * area,
-      life: w.duration,
-      pierce: w.pierce,
+      radius: 10 * area * (hasWeaponEvolution(w, WeaponEvolutionId.MOON_RING) ? 1.08 : 1),
+      life,
+      pierce,
       type: WeaponType.MOON_BLADE,
       knockback: w.knockback,
       animTimer: i * 0.7,
@@ -534,10 +620,17 @@ function fireLightning(
   projectiles: Projectile[], damage: number, area: number,
   enemyQuery: EnemyQuery
 ): boolean {
-  const targets = findNearestEnemies(player, enemyQuery, w.count, LIGHTNING_RANGE);
+  const bonusCount =
+    (hasWeaponEvolution(w, WeaponEvolutionId.LIGHTNING_ROD) ? 1 : 0) +
+    (hasWeaponEvolution(w, WeaponEvolutionId.LIGHTNING_TEMPEST) ? 2 : 0);
+  const count = getAttackCountWithBonus(w, bonusCount);
+  const targets = findNearestEnemies(player, enemyQuery, count, LIGHTNING_RANGE);
   if (targets.length === 0) return false;
+  const radiusMultiplier =
+    (hasWeaponEvolution(w, WeaponEvolutionId.LIGHTNING_FIELD) ? 1.28 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.LIGHTNING_JUDGMENT) ? 1.08 : 1);
   let fired = false;
-  for (let i = 0; i < w.count; i++) {
+  for (let i = 0; i < count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
     if (target) {
       if (projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) break;
@@ -545,9 +638,10 @@ function fireLightning(
       p.x = target.x; p.y = target.y;
       p.vx = 0; p.vy = 0;
       p.damage = damage;
-      p.radius = 30 * area;
+      p.radius = 30 * area * radiusMultiplier;
       p.life = 0.3; p.maxLife = 0.3;
-      p.pierce = w.pierce; p.pierceCount = 0;
+      p.pierce = w.pierce + (hasWeaponEvolution(w, WeaponEvolutionId.LIGHTNING_FIELD) ? 1 : 0);
+      p.pierceCount = 0;
       p.type = WeaponType.LIGHTNING;
       p.knockback = w.knockback;
       p.animTimer = 0;
@@ -570,8 +664,14 @@ function fireWhip(
   const dir = target
     ? normalize({ x: target.x - player.x, y: target.y - player.y })
     : { x: fallbackX, y: 0 };
-  const segments = w.level;
-  const reachRadius = (44 + segments * 7) * area;
+  const segments =
+    1 +
+    (hasWeaponEvolution(w, WeaponEvolutionId.WHIP_LONG) ? 2 : 0) +
+    (hasWeaponEvolution(w, WeaponEvolutionId.WHIP_RING) ? 3 : 0);
+  const reachMultiplier =
+    (hasWeaponEvolution(w, WeaponEvolutionId.WHIP_LONG) ? 1.16 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.WHIP_RING) ? 1.24 : 1);
+  const reachRadius = (54 + segments * 7) * area * reachMultiplier;
   const offset = 24 + reachRadius * 0.42;
   const originX = player.x;
   const originY = player.y - 4;
@@ -601,16 +701,32 @@ function fireBible(
   projectiles: Projectile[], damage: number, area: number
 ): boolean {
   let fired = false;
-  for (let i = 0; i < w.count; i++) {
-    const angle = (i / w.count) * Math.PI * 2;
+  const count = Math.max(
+    1,
+    w.count +
+      (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_TOME) ? 1 : 0) +
+      (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_SANCTUARY) ? 2 : 0)
+  );
+  const orbitRadius = 80 * area *
+    (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_ORBIT) ? 1.22 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_SANCTUARY) ? 1.08 : 1);
+  const projectileRadius = 20 * area * (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_SANCTUARY) ? 1.1 : 1);
+  const duration = w.duration *
+    (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_ORBIT) ? 1.25 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_SANCTUARY) ? 1.08 : 1);
+  const orbitSpeed = 3 *
+    (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_ORBIT) ? 1.08 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.BIBLE_REQUIEM) ? 1.18 : 1);
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2;
     const p = spawnWeaponProjectile(w, projectiles, {
-      x: player.x + Math.cos(angle) * 80 * area,
-      y: player.y + Math.sin(angle) * 80 * area,
+      x: player.x + Math.cos(angle) * orbitRadius,
+      y: player.y + Math.sin(angle) * orbitRadius,
       vx: 0,
       vy: 0,
       damage,
-      radius: 20 * area,
-      life: w.duration,
+      radius: projectileRadius,
+      life: duration,
       pierce: w.pierce,
       type: WeaponType.BIBLE,
       knockback: w.knockback,
@@ -618,8 +734,8 @@ function fireBible(
     });
     if (!p) break;
     p.orbitAngle = angle;
-    p.orbitRadius = 80 * area;
-    p.orbitSpeed = 3;
+    p.orbitRadius = orbitRadius;
+    p.orbitSpeed = orbitSpeed;
     p.originX = player.x;
     p.originY = player.y;
     fired = true;
@@ -632,9 +748,19 @@ function fireHolyWater(
   projectiles: Projectile[], damage: number, area: number,
   enemyQuery: EnemyQuery
 ): boolean {
-  const targets = findNearestEnemies(player, enemyQuery, w.count, HOLY_WATER_RANGE);
+  const bonusCount =
+    (hasWeaponEvolution(w, WeaponEvolutionId.HOLY_TIDE) ? 1 : 0) +
+    (hasWeaponEvolution(w, WeaponEvolutionId.HOLY_DELUGE) ? 2 : 0);
+  const count = Math.max(1, w.count + bonusCount);
+  const targets = findNearestEnemies(player, enemyQuery, count, HOLY_WATER_RANGE);
+  const radiusMultiplier =
+    (hasWeaponEvolution(w, WeaponEvolutionId.HOLY_BASIN) ? 1.22 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.HOLY_DELUGE) ? 1.06 : 1);
+  const lifeMultiplier =
+    (hasWeaponEvolution(w, WeaponEvolutionId.HOLY_BASIN) ? 1.28 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.HOLY_SCOUR) ? 1.1 : 1);
   let fired = false;
-  for (let i = 0; i < w.count; i++) {
+  for (let i = 0; i < count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
     const tx = target ? target.x : player.x + randFloat(-200, 200);
     const ty = target ? target.y : player.y + randFloat(-200, 200);
@@ -644,8 +770,8 @@ function fireHolyWater(
       vx: 0,
       vy: 0,
       damage,
-      radius: 40 * area,
-      life: w.duration,
+      radius: 40 * area * radiusMultiplier,
+      life: w.duration * lifeMultiplier,
       pierce: w.pierce,
       type: WeaponType.HOLY_WATER,
       knockback: w.knockback,
@@ -655,7 +781,9 @@ function fireHolyWater(
 }
 
 export function getGarlicRadius(w: Weapon, player: Player): number {
-  return 60 * w.area * player.area;
+  return 60 * w.area * player.area *
+    (hasWeaponEvolution(w, WeaponEvolutionId.GARLIC_MIASMA) ? 1.25 : 1) *
+    (hasWeaponEvolution(w, WeaponEvolutionId.GARLIC_WARD) ? 1.08 : 1);
 }
 
 export function updateProjectile(p: Projectile, dt: number, player?: Player): boolean {
@@ -729,12 +857,14 @@ export function updateGarlicAura(
 ): { hits: Array<{ x: number; y: number; dmg: number }> } {
   const hits: Array<{ x: number; y: number; dmg: number }> = [];
   tickTimer.value += dt;
-  if (tickTimer.value < 0.5) return { hits };
+  const tickInterval = hasWeaponEvolution(garlicWeapon, WeaponEvolutionId.GARLIC_THORNS) ? 0.38 : 0.5;
+  if (tickTimer.value < tickInterval) return { hits };
   tickTimer.value = 0;
 
   const radius = getGarlicRadius(garlicWeapon, player);
-  const dmg = garlicWeapon.damage * player.might;
+  const dmg = garlicWeapon.damage * player.might * getEvolutionDamageMultiplier(garlicWeapon);
   const hasRepulsion = hasModifier(garlicWeapon, GenericModifierType.REPULSION_FIELD);
+  const wardKnockback = hasWeaponEvolution(garlicWeapon, WeaponEvolutionId.GARLIC_WARD) ? 90 : 0;
   const hitEnemy = (e: Enemy) => {
     if (e.hp <= 0) return;
     const dx = e.x - player.x;
@@ -743,10 +873,11 @@ export function updateGarlicAura(
     if (dx * dx + dy * dy < hitRadius * hitRadius) {
       e.hp -= dmg;
       e.hitFlash = 1;
-      if (hasRepulsion) {
+      if (hasRepulsion || wardKnockback > 0) {
         const dir = normalize({ x: e.x - player.x, y: e.y - player.y });
-        e.knockbackX += dir.x * 120;
-        e.knockbackY += dir.y * 120;
+        const knockback = (hasRepulsion ? 120 : 0) + wardKnockback;
+        e.knockbackX += dir.x * knockback;
+        e.knockbackY += dir.y * knockback;
       }
       hits.push({ x: e.x, y: e.y, dmg });
     }

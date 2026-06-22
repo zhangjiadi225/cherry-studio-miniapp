@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { XP_BASE, XP_GROWTH } from '../../constants';
-import { addXP, collectShards, createPlayer, damagePlayer } from './Player';
+import { PassiveType } from '../../types';
+import { addXP, applyPassive, collectShards, createPlayer, damagePlayer, hasPassive, removePassive } from './Player';
 
 describe('addXP', () => {
   it('levels up at the current threshold and carries remaining XP', () => {
@@ -51,5 +52,17 @@ describe('damagePlayer', () => {
 
     expect(damagePlayer(player, 10)).toBe(1);
     expect(player.hp).toBe(player.maxHp - 1);
+  });
+});
+
+describe('revive passive', () => {
+  it('is removed when consumed so it only protects one death', () => {
+    const player = createPlayer();
+
+    expect(applyPassive(player, PassiveType.REVIVE, 20)).toBe(true);
+    expect(hasPassive(player, PassiveType.REVIVE)).toBe(true);
+    expect(removePassive(player, PassiveType.REVIVE)?.purchaseValue).toBe(20);
+    expect(hasPassive(player, PassiveType.REVIVE)).toBe(false);
+    expect(removePassive(player, PassiveType.REVIVE)).toBeUndefined();
   });
 });

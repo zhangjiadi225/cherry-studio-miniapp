@@ -1,4 +1,4 @@
-import { Player, Weapon, PassiveType, MapZone } from '../../types';
+import { Player, Weapon, PassiveType, MapZone, PassiveUpgrade } from '../../types';
 import {
   PASSIVE_DATA,
   PLAYER_RADIUS, PLAYER_BASE_HP, PLAYER_BASE_SPEED, PLAYER_BASE_PICKUP_RANGE,
@@ -106,14 +106,26 @@ export function collectShards(p: Player, amount: number): boolean {
   return addXP(p, amount);
 }
 
-export function applyPassive(p: Player, type: PassiveType) {
+export function applyPassive(p: Player, type: PassiveType, purchaseValue = 0): boolean {
+  const maxLevel = PASSIVE_DATA[type].maxLevel;
   const existing = p.passives.find(pa => pa.type === type);
   if (existing) {
+    if (existing.level >= maxLevel) return false;
     existing.level++;
+    existing.purchaseValue = (existing.purchaseValue ?? 0) + purchaseValue;
   } else {
-    p.passives.push({ type, level: 1 });
+    p.passives.push({ type, level: 1, purchaseValue });
   }
   recalcStats(p);
+  return true;
+}
+
+export function removePassive(p: Player, type: PassiveType): PassiveUpgrade | undefined {
+  const idx = p.passives.findIndex(pa => pa.type === type);
+  if (idx < 0) return undefined;
+  const [removed] = p.passives.splice(idx, 1);
+  recalcStats(p);
+  return removed;
 }
 
 export function recalcStats(p: Player) {

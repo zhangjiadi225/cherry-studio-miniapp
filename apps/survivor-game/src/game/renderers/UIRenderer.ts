@@ -1,8 +1,20 @@
 import type { RenderContext } from './WorldRenderer';
-import type { Player, Enemy, UpgradeOption, TouchJoystickState, WeaponType, PerformanceStats, MapObstacle, MapZone } from '../types';
+import type {
+  Player,
+  Enemy,
+  UpgradeOption,
+  SellableCard,
+  TouchJoystickState,
+  WeaponType,
+  WeaponEvolutionId,
+  PerformanceStats,
+  MapObstacle,
+  MapZone,
+} from '../types';
 import {
-  COLORS, GAME_DURATION, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA,
+  COLORS, GAME_DURATION, WEAPON_DATA, STARTING_WEAPON_TYPES, PASSIVE_DATA, ENEMY_DATA,
   GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA, getWeaponMetadataLabel, ZONE_COLORS, MAP_ZONE_SIZE,
+  PLAYER_WEAPON_SLOT_LIMIT,
 } from '../constants';
 import { getZone } from '../utils/math';
 import {
@@ -14,6 +26,7 @@ import {
   RUN_DIFFICULTY_PRESETS,
   type RunDifficultyId,
 } from '../data/runDifficulties';
+import { getWeaponEvolutionIds, getWeaponEvolutionSummary } from '../data/weaponEvolutions';
 import { getShopLayout, isMobileViewport } from '../systems/upgrade/ShopLayout';
 import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
 
@@ -336,7 +349,19 @@ function drawDesktopLoadoutDocks(ctx: CanvasRenderingContext2D, player: Player, 
     const wep = player.weapons[i];
     const data = WEAPON_DATA[wep.type];
     const wx = padding + i * weaponStep;
-    drawLoadoutSlot(ctx, wx, weaponY, weaponSize, data.icon, wep.level, 'rgba(255,126,126,0.62)', '#44ff44', true, wep.type);
+    drawLoadoutSlot(
+      ctx,
+      wx,
+      weaponY,
+      weaponSize,
+      data.icon,
+      wep.level,
+      'rgba(255,126,126,0.62)',
+      '#44ff44',
+      true,
+      wep.type,
+      getWeaponEvolutionIds(wep)
+    );
   }
 
   if (player.passives.length === 0) return;
@@ -364,7 +389,8 @@ function drawLoadoutSlot(
   stroke: string,
   badgeColor: string,
   prominentBadge: boolean,
-  weaponType?: WeaponType
+  weaponType?: WeaponType,
+  evolutionIds?: readonly WeaponEvolutionId[]
 ) {
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.76)';
@@ -380,12 +406,19 @@ function drawLoadoutSlot(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const drewWeapon = weaponType
-    ? weaponSpriteRegistry.drawWeapon(ctx, weaponType, x + size / 2, y + size * 0.48, size * 0.74, { glow: true })
+    ? weaponSpriteRegistry.drawWeapon(ctx, weaponType, x + size / 2, y + size * 0.48, size * 0.74, {
+      glow: true,
+      evolutionIds,
+      evolutionIntensity: 0.78,
+    })
     : false;
   if (!drewWeapon) {
     ctx.font = `${Math.floor(size * (prominentBadge ? 0.52 : 0.46))}px serif`;
     ctx.fillStyle = COLORS.uiText;
     ctx.fillText(icon, x + size / 2, y + size * 0.48);
+    weaponSpriteRegistry.drawEvolutionAssets(ctx, evolutionIds, x + size / 2, y + size * 0.48, size * 0.66, {
+      evolutionIntensity: 0.72,
+    });
   }
 
   const badgeR = prominentBadge ? Math.max(11, size * 0.2) : Math.max(9, size * 0.17);
@@ -780,7 +813,7 @@ export function getRunDifficultyCardRects(w: number, h: number): Array<Rect & { 
     const cardH = Math.min(92, Math.max(78, content.h * 0.16));
     const gap = 10;
     const totalH = cardH * RUN_DIFFICULTY_ORDER.length + gap * (RUN_DIFFICULTY_ORDER.length - 1);
-    const startY = content.y + Math.max(24, (content.h - totalH) * 0.38);
+    const startY = content.y + Math.max(18, Math.min(42, (content.h - totalH) * 0.18));
     return RUN_DIFFICULTY_ORDER.map((id, index) => ({
       id,
       x: content.x + content.w / 2 - cardW / 2,
@@ -795,7 +828,7 @@ export function getRunDifficultyCardRects(w: number, h: number): Array<Rect & { 
   const cardH = Math.min(178, Math.max(148, content.h * 0.28));
   const totalW = cardW * RUN_DIFFICULTY_ORDER.length + gap * (RUN_DIFFICULTY_ORDER.length - 1);
   const startX = content.x + content.w / 2 - totalW / 2;
-  const y = content.y + content.h * 0.32;
+  const y = content.y + content.h * 0.22;
   return RUN_DIFFICULTY_ORDER.map((id, index) => ({
     id,
     x: startX + index * (cardW + gap),
@@ -803,6 +836,40 @@ export function getRunDifficultyCardRects(w: number, h: number): Array<Rect & { 
     w: cardW,
     h: cardH,
   }));
+}
+
+export function getStartingWeaponCardRects(w: number, h: number): Array<Rect & { weaponType: WeaponType }> {
+  const difficultyCards = getRunDifficultyCardRects(w, h);
+  const difficultyBottom = difficultyCards.reduce((bottom, card) => Math.max(bottom, card.y + card.h), 0);
+  const startButton = getDesktopStartButtonRect(w, h);
+  const { content } = getMenuLayout(w, h);
+  const mobile = isMobileViewport(w, h);
+  const count = STARTING_WEAPON_TYPES.length;
+  const gap = mobile ? 6 : 8;
+  const columns = mobile ? Math.min(5, count) : count;
+  const rows = Math.ceil(count / columns);
+  const maxRowW = Math.min(content.w - 32, w - 36);
+  const baseSize = mobile ? 42 : 52;
+  const labelH = mobile ? 18 : 20;
+  const availableH = Math.max(36, startButton.y - difficultyBottom - 14);
+  const maxSizeByHeight = Math.floor((availableH - labelH - gap * (rows - 1)) / rows);
+  const size = Math.max(mobile ? 28 : 38, Math.min(baseSize, maxSizeByHeight, (maxRowW - gap * (columns - 1)) / columns));
+  const totalW = columns * size + (columns - 1) * gap;
+  const totalH = rows * size + (rows - 1) * gap;
+  const x = w / 2 - totalW / 2;
+  const y = Math.max(difficultyBottom + labelH + 8, startButton.y - totalH - 14);
+
+  return STARTING_WEAPON_TYPES.map((weaponType, index) => {
+    const col = index % columns;
+    const row = Math.floor(index / columns);
+    return {
+      weaponType,
+      x: x + col * (size + gap),
+      y: y + row * (size + gap),
+      w: size,
+      h: size,
+    };
+  });
 }
 
 function getMenuLayout(w: number, h: number): MenuLayout {
@@ -836,12 +903,13 @@ export function drawDesktop(
   meta: MetaState,
   activeTab: DesktopTab,
   activeCodexTab: CodexTab,
+  selectedStartingWeapon: WeaponType,
   hoveredStarId?: MetaUpgradeNode['id']
 ) {
   drawDesktopBackdrop(rc);
 
   if (activeTab === 'start') {
-    drawStartButton(rc, meta.selectedDifficulty);
+    drawStartButton(rc, meta.selectedDifficulty, selectedStartingWeapon);
   } else if (activeTab === 'skins') {
     drawSkinPanel(rc, meta);
   } else if (activeTab === 'growth') {
@@ -982,7 +1050,7 @@ function drawDesktopBackdrop(rc: RenderContext) {
   }
 }
 
-function drawStartButton(rc: RenderContext, selectedDifficulty: RunDifficultyId) {
+function drawStartButton(rc: RenderContext, selectedDifficulty: RunDifficultyId, selectedStartingWeapon: WeaponType) {
   const { ctx, w, h } = rc;
   const mobile = isMobileViewport(w, h);
   const cards = getRunDifficultyCardRects(w, h);
@@ -1044,6 +1112,8 @@ function drawStartButton(rc: RenderContext, selectedDifficulty: RunDifficultyId)
     }
   }
 
+  drawStartingWeaponPicker(rc, selectedStartingWeapon);
+
   const b = getDesktopStartButtonRect(w, h);
   ctx.save();
   ctx.shadowColor = 'rgba(255,140,60,0.5)';
@@ -1066,6 +1136,68 @@ function drawStartButton(rc: RenderContext, selectedDifficulty: RunDifficultyId)
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText('开始夜潮', b.x + b.w / 2, b.y + b.h / 2);
+}
+
+function drawStartingWeaponPicker(rc: RenderContext, selectedStartingWeapon: WeaponType) {
+  const { ctx, w, h } = rc;
+  const mobile = isMobileViewport(w, h);
+  const cards = getStartingWeaponCardRects(w, h);
+  if (cards.length === 0) return;
+
+  const first = cards[0];
+  const selectedData = WEAPON_DATA[selectedStartingWeapon];
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.font = `800 ${mobile ? 12 : 14}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#ffd166';
+  ctx.fillText(
+    `初始武器：${selectedData.name} · 武器槽 ${PLAYER_WEAPON_SLOT_LIMIT}`,
+    w / 2,
+    first.y - (mobile ? 5 : 7)
+  );
+
+  for (const card of cards) {
+    const data = WEAPON_DATA[card.weaponType];
+    const selected = card.weaponType === selectedStartingWeapon;
+    const accent = selected ? '#ffd166' : colorWithAlpha('#8fe8ff', 0.38);
+
+    ctx.save();
+    if (selected) {
+      ctx.shadowColor = 'rgba(255,209,102,0.48)';
+      ctx.shadowBlur = 14;
+    }
+    uiPanel(ctx, card.x, card.y, card.w, card.h, accent, 8);
+    ctx.restore();
+
+    ctx.fillStyle = selected ? 'rgba(255,209,102,0.18)' : 'rgba(255,255,255,0.035)';
+    ctx.beginPath();
+    ctx.roundRect(card.x + 4, card.y + 4, card.w - 8, card.h - 8, 6);
+    ctx.fill();
+
+    const drew = weaponSpriteRegistry.drawWeapon(
+      ctx,
+      card.weaponType,
+      card.x + card.w / 2,
+      card.y + card.h / 2 - (card.h > 44 ? 1 : 0),
+      card.w * 0.74,
+      { glow: selected }
+    );
+    if (!drew) {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `${Math.max(20, Math.floor(card.w * 0.48))}px serif`;
+      ctx.fillStyle = selected ? '#fff4cf' : COLORS.uiText;
+      ctx.fillText(data.icon, card.x + card.w / 2, card.y + card.h / 2);
+    }
+
+    if (selected) {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.font = `900 ${mobile ? 9 : 10}px ${DESKTOP_FONT}`;
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('已选', card.x + card.w / 2, card.y + card.h - 4);
+    }
+  }
 }
 
 // opaque card/panel so content reads clearly over the background image
@@ -1633,10 +1765,17 @@ function getRunWeaponRows(player: Player): RunSummaryRow[] {
   if (player.weapons.length === 0) return [{ icon: '—', title: '暂无武器', detail: '本局还没有获得武器' }];
   return player.weapons.map((weapon) => {
     const data = WEAPON_DATA[weapon.type];
+    const evolutionSummary = getWeaponEvolutionSummary(weapon);
+    const details = [
+      `伤害 ${Math.round(weapon.damage)}`,
+      `数量 ${weapon.count}`,
+      `冷却 ${weapon.cooldown.toFixed(1)}s`,
+      evolutionSummary ? `进化 ${evolutionSummary}` : '',
+    ].filter(Boolean);
     return {
       icon: data.icon,
       title: `${data.name} Lv${weapon.level}`,
-      detail: `伤害 ${Math.round(weapon.damage)} · 数量 ${weapon.count} · 冷却 ${weapon.cooldown.toFixed(1)}s`,
+      detail: details.join(' · '),
       accent: '#ffb36b',
     };
   });
@@ -1876,12 +2015,13 @@ export function drawUpgradeScreen(
   options: UpgradeOption[],
   selectedIndex: number,
   shards: number,
+  sellableCards: SellableCard[],
   canFreeReroll: boolean,
   rerollCost: number,
   canPaidReroll: boolean
 ) {
   const { ctx, w, h } = rc;
-  const layout = getShopLayout(w, h, options.length);
+  const layout = getShopLayout(w, h, options.length, sellableCards.length);
 
   ctx.fillStyle = cachedRadialGradient(ctx, `upgrade-overlay-${w}-${h}`, w / 2, h / 2, 0, w / 2, h / 2, w * 0.7, [
     [0, 'rgba(0,0,30,0.85)'],
@@ -1905,7 +2045,7 @@ export function drawUpgradeScreen(
 
   ctx.font = `${layout.mobile ? 12 : 13}px "Segoe UI", sans-serif`;
   ctx.fillStyle = COLORS.uiDim;
-  ctx.fillText(layout.mobile ? '点卡片购买，点按钮刷新或继续' : '可连续购买多个成长，买完后继续战斗', w / 2, layout.helperY);
+  ctx.fillText(layout.mobile ? '点卡片购买，卖出旧牌返魂晶' : '可连续购买成长，也可以卖出已有卡牌调整构筑', w / 2, layout.helperY);
 
   for (const card of layout.cards) {
     const opt = options[card.index];
@@ -1918,6 +2058,7 @@ export function drawUpgradeScreen(
     const sold = !!opt.purchased;
     const unavailable = sold || !affordable;
     const isModifier = opt.type === 'modifier';
+    const isEvolution = opt.type === 'weapon_evolution';
     const rarity = UPGRADE_RARITY_DATA[opt.rarity];
     const accent = rarity.color;
     const accentDark = rarity.darkColor;
@@ -1995,16 +2136,23 @@ export function drawUpgradeScreen(
 
     ctx.textAlign = 'center';
     const weaponIconSize = ultraCompact ? 42 : compact ? 50 : 62;
-    const drewWeaponIcon = opt.type === 'weapon' && opt.weaponType
+    const evolutionIds = opt.evolutionId ? [opt.evolutionId] : undefined;
+    const drewWeaponIcon = (opt.type === 'weapon' || opt.type === 'weapon_evolution') && opt.weaponType
       ? weaponSpriteRegistry.drawWeapon(ctx, opt.weaponType, cardW / 2, iconY - 2, weaponIconSize, {
         alpha: unavailable ? 0.62 : 1,
         glow: selected && !unavailable,
+        evolutionIds,
+        evolutionIntensity: opt.type === 'weapon_evolution' ? 0.94 : 0.72,
       })
       : false;
     if (!drewWeaponIcon) {
       ctx.font = `${ultraCompact ? 28 : compact ? 34 : 42}px serif`;
       ctx.fillStyle = unavailable ? 'rgba(255,255,255,0.65)' : COLORS.uiText;
       ctx.fillText(opt.icon, cardW / 2, iconY);
+      weaponSpriteRegistry.drawEvolutionAssets(ctx, evolutionIds, cardW / 2, iconY - 2, weaponIconSize * 0.88, {
+        alpha: unavailable ? 0.7 : 1,
+        evolutionIntensity: 0.86,
+      });
     }
 
     ctx.font = `bold ${compact ? 13 : 15}px "Segoe UI", sans-serif`;
@@ -2033,11 +2181,13 @@ export function drawUpgradeScreen(
     if (line && lines < maxLines) ctx.fillText(line, cardW / 2, lineY);
 
     const badgeText = opt.type === 'weapon' ? '⚔️ 武器' :
+                      opt.type === 'weapon_evolution' ? '✦ 武器进化' :
                       opt.type === 'passive' ? '🛡️ 被动' :
                       opt.type === 'modifier' ? '✦ 通用模块' :
                       opt.type === 'supply' ? '✚ 战术补给' : '❤️ 治疗';
     ctx.font = `${compact ? 10 : 11}px "Segoe UI", sans-serif`;
     ctx.fillStyle = opt.type === 'weapon' ? '#ff9999' :
+                    opt.type === 'weapon_evolution' ? '#ffd166' :
                     opt.type === 'passive' ? '#88ff88' :
                     opt.type === 'modifier' ? '#d3a8ff' :
                     opt.type === 'supply' ? '#ffd166' : '#ffb3c1';
@@ -2056,10 +2206,12 @@ export function drawUpgradeScreen(
     ctx.stroke();
     ctx.font = `bold ${compact ? 11 : 13}px "Segoe UI", sans-serif`;
     ctx.fillStyle = sold ? '#88ff88' : affordable ? '#ffd166' : '#ff8888';
-    ctx.fillText(sold ? (isModifier ? '已安装' : '已购买') : `${rarity.label} · 魂晶 ${opt.cost}`, cardW / 2, priceY + priceH / 2);
+    ctx.fillText(sold ? (isModifier ? '已安装' : isEvolution ? '已进化' : '已购买') : `${rarity.label} · 魂晶 ${opt.cost}`, cardW / 2, priceY + priceH / 2);
 
     ctx.restore();
   }
+
+  drawSellableCards(ctx, layout, sellableCards);
 
   const rerollButton = layout.rerollButton;
   const continueButton = layout.continueButton;
@@ -2097,10 +2249,70 @@ export function drawUpgradeScreen(
   ctx.font = `${layout.mobile ? 11 : 14}px "Segoe UI", sans-serif`;
   ctx.fillStyle = COLORS.uiDim;
   ctx.fillText(
-    layout.mobile ? '点选卡片后自动购买' : '← → 选择 | Enter 购买 | R 刷新 | Space/Esc 继续',
+    layout.mobile ? '点选卡片购买或卖出' : '← → 选择 | Enter 购买 | R 刷新 | 点击下方卡牌卖出 | Space/Esc 继续',
     w / 2,
     layout.footerY
   );
+}
+
+function drawSellableCards(ctx: CanvasRenderingContext2D, layout: ReturnType<typeof getShopLayout>, sellableCards: SellableCard[]) {
+  if (sellableCards.length === 0 || layout.sellCards.length === 0) return;
+
+  const first = layout.sellCards[0];
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.font = `800 ${layout.mobile ? 11 : 12}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = '#9dffba';
+  ctx.fillText('卖出已有卡牌 · 返还80%', first.x + first.w / 2, first.y - 5);
+
+  for (const rect of layout.sellCards) {
+    const card = sellableCards[rect.index];
+    if (!card) continue;
+    const disabled = !card.sellable;
+    const accent = card.type === 'weapon' ? '#ffb36b' : '#9dffba';
+
+    ctx.save();
+    ctx.fillStyle = disabled ? 'rgba(45,45,58,0.82)' : colorWithAlpha(accent, 0.14);
+    ctx.beginPath();
+    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 8);
+    ctx.fill();
+    ctx.strokeStyle = disabled ? 'rgba(160,160,180,0.28)' : colorWithAlpha(accent, 0.72);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.roundRect(rect.x, rect.y, rect.w, rect.h, 8);
+    ctx.stroke();
+
+    const iconX = rect.x + 18;
+    const iconY = rect.y + rect.h / 2;
+    const drewWeapon = card.weaponType
+      ? weaponSpriteRegistry.drawWeapon(ctx, card.weaponType, iconX, iconY, Math.min(30, rect.h * 0.8), {
+        alpha: disabled ? 0.45 : 0.9,
+        glow: !disabled,
+      })
+      : false;
+    if (!drewWeapon) {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `${layout.mobile ? 17 : 19}px serif`;
+      ctx.fillStyle = disabled ? 'rgba(255,255,255,0.45)' : COLORS.uiText;
+      ctx.fillText(card.icon, iconX, iconY);
+    }
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = `800 ${layout.mobile ? 10 : 11}px ${DESKTOP_FONT}`;
+    ctx.fillStyle = disabled ? 'rgba(225,232,250,0.46)' : '#ffffff';
+    const title = card.title.length > 8 ? `${card.title.slice(0, 8)}…` : card.title;
+    ctx.fillText(title, rect.x + 36, rect.y + rect.h * 0.38);
+
+    ctx.font = `800 ${layout.mobile ? 9 : 10}px ${DESKTOP_FONT}`;
+    ctx.fillStyle = disabled ? 'rgba(180,185,205,0.42)' : '#9dffba';
+    const refundText = disabled
+      ? card.refund > 0 ? '需保留一把' : '无退款'
+      : `+${card.refund} 魂晶`;
+    ctx.fillText(refundText, rect.x + 36, rect.y + rect.h * 0.72);
+    ctx.restore();
+  }
 }
 
 export function drawGameOver(rc: RenderContext, stats: {

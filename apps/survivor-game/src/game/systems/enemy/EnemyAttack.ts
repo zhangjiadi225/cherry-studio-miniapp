@@ -248,7 +248,7 @@ export function updateEnemyAttacks(
   const ctx: EnemyAttackContext = {
     player,
     projectiles,
-    maxProjectiles: Math.max(48, Math.round(MAX_ACTIVE_ENEMY_PROJECTILES * runDifficulty.enemyProjectileCapMult)),
+    maxProjectiles: Math.max(36, Math.round(MAX_ACTIVE_ENEMY_PROJECTILES * runDifficulty.enemyProjectileCapMult)),
   };
   for (const enemy of enemies) {
     if (enemy.hp <= 0) continue;
