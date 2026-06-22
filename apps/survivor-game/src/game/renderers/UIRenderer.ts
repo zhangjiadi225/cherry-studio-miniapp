@@ -1460,7 +1460,7 @@ function getCodexCards(tab: CodexTab): CodexCard[] {
       accent: d.color,
     }));
   }
-  return Object.values(GENERIC_MODIFIER_DATA).map((d) => ({ icon: d.icon, title: d.name, tag: `${d.trigger}→${d.effect}`, desc: d.desc, accent: '#d3a8ff' }));
+  return Object.values(GENERIC_MODIFIER_DATA).map((d) => ({ icon: d.icon, title: d.name, tag: `${d.trigger}→${d.effect}`, desc: d.desc, accent: d.visual.accent }));
 }
 
 function drawCodexPanel(rc: RenderContext, activeTab: CodexTab) {
@@ -2189,6 +2189,7 @@ export function drawUpgradeScreen(
     ctx.fillStyle = opt.type === 'weapon' ? '#ff9999' :
                     opt.type === 'weapon_evolution' ? '#ffd166' :
                     opt.type === 'passive' ? '#88ff88' :
+                    opt.type === 'modifier' && opt.modifierType ? GENERIC_MODIFIER_DATA[opt.modifierType].visual.accent :
                     opt.type === 'modifier' ? '#d3a8ff' :
                     opt.type === 'supply' ? '#ffd166' : '#ffb3c1';
     ctx.fillText(badgeText, cardW / 2, typeY);

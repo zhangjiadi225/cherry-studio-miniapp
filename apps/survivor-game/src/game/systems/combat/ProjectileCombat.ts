@@ -230,20 +230,23 @@ export class ProjectileCombat {
         case 'pulse':
           if (!projectile.pulseDone) {
             projectile.pulseDone = true;
-            this.spawnImpactPulse(ctx, projectile, enemy);
+            this.spawnImpactPulse(ctx, projectile, enemy, modifier.visual.accent);
             this.emitModifierCue(modifier.id);
           }
           break;
         case 'chain':
           if (!projectile.chainDone) {
             projectile.chainDone = true;
-            if (this.spawnChainHit(ctx, projectile, enemy)) {
+            if (this.spawnChainHit(ctx, projectile, enemy, modifier.visual.accent)) {
               this.emitModifierCue(modifier.id);
             }
           }
           break;
         case 'reflect':
           if (this.spawnReflectionProjectile(ctx, projectile, enemy)) {
+            spawnHitParticles(ctx.particles, enemy.x, enemy.y, modifier.visual.accent, 5, {
+              speed: 100, life: 0.3, radius: 2, type: 'star', glow: true,
+            });
             this.emitModifierCue(modifier.id);
           }
           break;
@@ -295,7 +298,7 @@ export class ProjectileCombat {
     return { x: 1, y: 0 };
   }
 
-  private spawnImpactPulse(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy) {
+  private spawnImpactPulse(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy, accent = '#925dff') {
     const dir = this.getProjectileDirection(projectile, source);
     const backX = -dir.x;
     const backY = -dir.y;
@@ -303,7 +306,7 @@ export class ProjectileCombat {
     const centerX = source.x + backX * radius * 0.62;
     const centerY = source.y + backY * radius * 0.62;
     const damage = projectile.damage * 0.35;
-    spawnCrescentWaveParticle(ctx.particles, centerX, centerY, Math.atan2(backY, backX));
+    spawnCrescentWaveParticle(ctx.particles, centerX, centerY, Math.atan2(backY, backX), accent);
 
     ctx.enemyQuery.forNearby(centerX, centerY, radius, (target) => {
       if (target.hp <= 0 || target.id === source.id) return;
@@ -315,7 +318,7 @@ export class ProjectileCombat {
       const alignment = (dx / dist) * backX + (dy / dist) * backY;
       if (alignment < 0.32) return;
       damageEnemy(target, damage, backX * projectile.knockback * 0.38, backY * projectile.knockback * 0.38);
-      pushDamageNumber(ctx.damageNumbers, target.x, target.y, damage, '#c49cff', 12);
+      pushDamageNumber(ctx.damageNumbers, target.x, target.y, damage, accent, 12);
     });
   }
 
@@ -345,7 +348,7 @@ export class ProjectileCombat {
     });
   }
 
-  private spawnChainHit(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy): boolean {
+  private spawnChainHit(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy, accent = '#4bb7ff'): boolean {
     let best: Enemy | undefined;
     let bestDistSq = Infinity;
     const chainRadius = 240;
@@ -366,11 +369,11 @@ export class ProjectileCombat {
     const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
     const damage = projectile.damage * 0.55;
     damageEnemy(best, damage, (dir.x / len) * projectile.knockback * 0.7, (dir.y / len) * projectile.knockback * 0.7);
-    spawnChainLightningParticle(ctx.particles, source.x, source.y, best.x, best.y);
-    spawnHitParticles(ctx.particles, best.x, best.y, '#bde7ff', 6, {
+    spawnChainLightningParticle(ctx.particles, source.x, source.y, best.x, best.y, accent);
+    spawnHitParticles(ctx.particles, best.x, best.y, accent, 6, {
       speed: 130, life: 0.35, radius: 2.5, type: 'star', glow: true,
     });
-    pushDamageNumber(ctx.damageNumbers, best.x, best.y, damage, '#bde7ff', 13);
+    pushDamageNumber(ctx.damageNumbers, best.x, best.y, damage, accent, 13);
     return true;
   }
 
