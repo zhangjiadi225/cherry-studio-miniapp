@@ -33,3 +33,9 @@ public/sprites/units/.gitkeep
 public/sprites/units/player_ember_move.svg
 public/sprites/units/player_oracle_move.svg
 public/sprites/units/player_wanderer_move.svg
+
+# WorkBuddy project memory (not source)
+.workbuddy/
+
+# Playwright CLI cache
+.playwright-cli/

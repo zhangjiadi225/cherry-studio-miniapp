@@ -6,6 +6,8 @@ import { getSkinById } from '../systems/meta/MetaProgression';
 import { getWeaponEvolutionIds } from '../data/weaponEvolutions';
 import { spriteRegistry } from './SpriteRegistry';
 import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
+import { playerSpriteRegistry } from './PlayerSpriteRegistry';
+import type { SkinId } from '../systems/meta/MetaProgression';
 
 // ──────────────────────────── Helpers ────────────────────────────
 
@@ -543,17 +545,30 @@ export function drawPlayer(rc: RenderContext, p: Player) {
   drawOrbitingWeaponAssets(ctx, p, bob);
   drawEquippedWeaponAssets(ctx, p, bob);
 
-  const skinId = skin?.id ?? 'wanderer';
-  if (skinId === 'ember') {
-    drawEmberPlayer(ctx, p, bob, bodyColor, outlineColor);
-  } else if (skinId === 'oracle') {
-    drawOraclePlayer(ctx, p, bob, bodyColor, outlineColor);
-  } else {
-    drawWandererPlayer(ctx, p, bob, isMoving, bodyColor, outlineColor);
+  const skinId = (skin?.id ?? 'wanderer') as SkinId;
+  const drewSprite = drawPlayerSprite(ctx, p, bob, skinId, p.facingLeft);
+  if (!drewSprite) {
+    if (skinId === 'ember') {
+      drawEmberPlayer(ctx, p, bob, bodyColor, outlineColor);
+    } else if (skinId === 'oracle') {
+      drawOraclePlayer(ctx, p, bob, bodyColor, outlineColor);
+    } else {
+      drawWandererPlayer(ctx, p, bob, isMoving, bodyColor, outlineColor);
+    }
   }
 
   drawWeaponBodyMarks(ctx, p, bob);
   drawHPBar(rc, p.x, p.y - p.radius - 14, p.radius * 2.5, p.hp, p.maxHp, 5);
+}
+
+function drawPlayerSprite(
+  ctx: CanvasRenderingContext2D,
+  p: Player,
+  bob: number,
+  skinId: SkinId,
+  facingLeft: boolean
+): boolean {
+  return playerSpriteRegistry.drawPlayer(ctx, skinId, p.x, p.y + bob, p.radius, facingLeft);
 }
 
 function drawWandererPlayer(

@@ -24,6 +24,7 @@ import {
   drawPickupRange, drawXPGem,
 } from './renderers/EntityRenderer';
 import { spriteRegistry } from './renderers/SpriteRegistry';
+import { playerSpriteRegistry } from './renderers/PlayerSpriteRegistry';
 import { drawParticle, drawDamageNumber, drawDamageFlash, drawLevelUpFlash, drawBossWarning } from './renderers/EffectsRenderer';
 import {
   drawUI, drawMinimap, drawBossBar, drawVirtualJoystick,
@@ -60,6 +61,7 @@ export class Renderer {
     this.rc = { ctx: this.ctx, w: 0, h: 0 };
     this.resize();
     spriteRegistry.preloadEnemies();
+    playerSpriteRegistry.preload();
     window.addEventListener('resize', this.handleResize);
   }
 

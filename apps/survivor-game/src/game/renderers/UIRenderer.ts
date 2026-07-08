@@ -29,6 +29,7 @@ import {
 import { getWeaponEvolutionIds, getWeaponEvolutionSummary } from '../data/weaponEvolutions';
 import { getShopLayout, isMobileViewport } from '../systems/upgrade/ShopLayout';
 import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
+import { playerSpriteRegistry } from './PlayerSpriteRegistry';
 
 const gradientCache = new Map<string, CanvasGradient>();
 const GRADIENT_CACHE_LIMIT = 160;
@@ -1249,9 +1250,7 @@ function drawSkinPanel(rc: RenderContext, meta: MetaState) {
       const avatarR = Math.min(34, c.h * 0.25);
       ctx.fillStyle = `${skin.glow}0.18)`;
       ctx.beginPath(); ctx.arc(avatarX, avatarY, avatarR * 1.5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = skin.body;
-      ctx.beginPath(); ctx.arc(avatarX, avatarY, avatarR, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = skin.outline; ctx.lineWidth = 2.2; ctx.stroke();
+      playerSpriteRegistry.drawPlayer(ctx, skin.id, avatarX, avatarY, avatarR * 0.85, false);
 
       const textX = c.x + 96;
       ctx.textAlign = 'left'; ctx.textBaseline = 'top';
@@ -1287,9 +1286,7 @@ function drawSkinPanel(rc: RenderContext, meta: MetaState) {
     const er = Math.min(46, c.w * 0.20);
     ctx.fillStyle = `${skin.glow}0.18)`;
     ctx.beginPath(); ctx.arc(ex, ey, er * 1.5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = skin.body;
-    ctx.beginPath(); ctx.arc(ex, ey, er, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = skin.outline; ctx.lineWidth = 2.5; ctx.stroke();
+    playerSpriteRegistry.drawPlayer(ctx, skin.id, ex, ey, er * 0.82, false);
 
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = `800 20px ${DESKTOP_FONT}`;

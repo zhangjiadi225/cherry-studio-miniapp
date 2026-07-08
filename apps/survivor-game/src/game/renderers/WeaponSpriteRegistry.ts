@@ -29,52 +29,52 @@ const WEAPON_ROOT = '/sprites/weapons';
 export const WEAPON_ASSETS: Record<WeaponType, WeaponAssetSpec> = {
   [WeaponType.WHIP]: {
     id: 'weapon-whip',
-    url: `${WEAPON_ROOT}/whip.svg`,
+    url: `${WEAPON_ROOT}/whip.png`,
     glow: 'rgba(255,180,72,0.72)',
   },
   [WeaponType.MAGIC_WAND]: {
     id: 'weapon-magic-wand',
-    url: `${WEAPON_ROOT}/magic_wand.svg`,
+    url: `${WEAPON_ROOT}/magic_wand.png`,
     glow: 'rgba(112,230,255,0.78)',
   },
   [WeaponType.BIBLE]: {
     id: 'weapon-bible',
-    url: `${WEAPON_ROOT}/bible.svg`,
+    url: `${WEAPON_ROOT}/bible.png`,
     glow: 'rgba(255,230,142,0.72)',
   },
   [WeaponType.GARLIC]: {
     id: 'weapon-garlic',
-    url: `${WEAPON_ROOT}/garlic.svg`,
+    url: `${WEAPON_ROOT}/garlic.png`,
     glow: 'rgba(210,240,110,0.68)',
   },
   [WeaponType.FIRE_WAND]: {
     id: 'weapon-fire-wand',
-    url: `${WEAPON_ROOT}/fire_wand.svg`,
+    url: `${WEAPON_ROOT}/fire_wand.png`,
     glow: 'rgba(255,102,36,0.82)',
   },
   [WeaponType.HOLY_WATER]: {
     id: 'weapon-holy-water',
-    url: `${WEAPON_ROOT}/holy_water.svg`,
+    url: `${WEAPON_ROOT}/holy_water.png`,
     glow: 'rgba(114,226,255,0.72)',
   },
   [WeaponType.LIGHTNING]: {
     id: 'weapon-lightning',
-    url: `${WEAPON_ROOT}/lightning.svg`,
+    url: `${WEAPON_ROOT}/lightning.png`,
     glow: 'rgba(255,232,82,0.86)',
   },
   [WeaponType.AXE]: {
     id: 'weapon-axe',
-    url: `${WEAPON_ROOT}/axe.svg`,
+    url: `${WEAPON_ROOT}/axe.png`,
     glow: 'rgba(190,222,255,0.68)',
   },
   [WeaponType.RUNE_LANCE]: {
     id: 'weapon-rune-lance',
-    url: `${WEAPON_ROOT}/rune_lance.svg`,
+    url: `${WEAPON_ROOT}/rune_lance.png`,
     glow: 'rgba(118,244,255,0.78)',
   },
   [WeaponType.MOON_BLADE]: {
     id: 'weapon-moon-blade',
-    url: `${WEAPON_ROOT}/moon_blade.svg`,
+    url: `${WEAPON_ROOT}/moon_blade.png`,
     glow: 'rgba(196,160,255,0.76)',
   },
 };
