@@ -72,7 +72,6 @@ export interface Player extends PlayerMovement, PlayerCombatStats {
   xpToNext: number;
   shards: number;
   skinId: string;
-  currentZone: MapZone;
   weapons: Weapon[];
   passives: PassiveUpgrade[];
 }
@@ -465,21 +464,17 @@ export interface EnemyEnhancement {
   damageMult?: number;
 }
 
-export type MapZone = 'shadow' | 'blood' | 'bone' | 'storm';
-
 export interface MapObstacle {
   x: number;
   y: number;
   width: number;
   height: number;
-  type: 'tombstone' | 'bone_wall' | 'blood_pool' | 'magic_circle';
-  zone: MapZone;
+  type: 'tombstone' | 'bone_wall';
   variant: number;
   rotation: number;
   landmark?: boolean;
   hp: number;
   maxHp: number;
-  radius: number;
 }
 
 export type GameState = 'menu' | 'playing' | 'paused' | 'upgrading' | 'gameover';

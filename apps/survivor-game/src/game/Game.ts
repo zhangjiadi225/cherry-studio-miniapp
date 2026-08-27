@@ -5,14 +5,13 @@ import {
 import {
   SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
   CONTACT_COOLDOWN,
-  MAGIC_CIRCLE_HEAL_RATE, MAGIC_CIRCLE_RADIUS,
   MAX_ENEMIES, STARTING_WEAPON_TYPES,
 } from './constants';
 import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
 import {
   createPlayer, updatePlayer, damagePlayer, collectShards, hasPassive,
-  tryBloodZoneHeal, removePassive,
+  removePassive,
 } from './systems/player/Player';
 import { createEnemy, updateEnemy, isCollidingWithPlayer, resetEnemyIds, shouldSplitOnDeath } from './systems/enemy/Enemy';
 import { updateEnemyAttacks, updateEnemyProjectile } from './systems/enemy/EnemyAttack';
@@ -592,7 +591,6 @@ export class Game {
     const move = this.input.getMoveDir();
     updatePlayer(this.player, move.x, move.y, dt, this.mapSystem);
 
-    this.updateMagicCircleHealing(dt);
     updateCamera(this.camera, this.player, dt);
     this.spawner.update(this.enemies, this.player, this.elapsed, this.difficulty, dt, this.player.curse, this.runDifficulty);
     this.updateEnemies(dt);
@@ -770,21 +768,6 @@ export class Game {
     this.xpGems.length = write;
   }
 
-  private updateMagicCircleHealing(dt: number) {
-    this.mapSystem.forNearby(
-      this.player.x - MAGIC_CIRCLE_RADIUS, this.player.y - MAGIC_CIRCLE_RADIUS,
-      this.player.x + MAGIC_CIRCLE_RADIUS, this.player.y + MAGIC_CIRCLE_RADIUS,
-      (obs) => {
-        if (obs.type !== 'magic_circle') return;
-        const dx = this.player.x - obs.x;
-        const dy = this.player.y - obs.y;
-        if (dx * dx + dy * dy < obs.radius * obs.radius && this.player.hp < this.player.maxHp) {
-          this.player.hp = Math.min(this.player.maxHp, this.player.hp + MAGIC_CIRCLE_HEAL_RATE * dt);
-        }
-      }
-    );
-  }
-
   private updateEnemies(dt: number) {
     for (const e of this.enemies) {
       if (!updateEnemy(e, this.player, dt, this.mapSystem)) continue;
@@ -880,11 +863,6 @@ export class Game {
     }
 
     this.xpGems.push(createXPGem(e.x, e.y, e.xpValue));
-
-    const heal = tryBloodZoneHeal(this.player);
-    if (heal > 0) {
-      pushDamageNumber(this.damageNumbers, this.player.x, this.player.y, heal, '#ff6666', 14);
-    }
 
   }
 

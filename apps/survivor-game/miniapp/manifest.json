@@ -12,7 +12,7 @@
   "entry": "index.html",
   "icon": {
     "path": "sprites/units/player_wanderer.png",
-    "sha256": "e68985ba44d8c57c2fa0a2df6376fa97a37ff04b9e0e41810b84e77c944ee0d8"
+    "sha256": "9005095c846fa1e8f078a56559096614bdbb559d6e2884ab668ab8dc8cfe9b24"
   },
   "permissions": ["storage.get", "storage.set"]
 }

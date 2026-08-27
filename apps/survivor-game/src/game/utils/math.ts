@@ -1,18 +1,4 @@
-import type { Vec2, MapZone } from '../types';
-import { MAP_ZONE_SIZE } from '../constants';
-
-/** 根据世界坐标判断当前区域 */
-export function getZone(x: number, y: number): MapZone {
-  const bx = Math.floor((x + MAP_ZONE_SIZE / 2) / MAP_ZONE_SIZE);
-  const by = Math.floor((y + MAP_ZONE_SIZE / 2) / MAP_ZONE_SIZE);
-  const px = ((bx % 2) + 2) % 2;
-  const py = ((by % 2) + 2) % 2;
-
-  if (px === 0 && py === 0) return 'storm';
-  if (px === 1 && py === 0) return 'blood';
-  if (px === 0 && py === 1) return 'bone';
-  return 'shadow';
-}
+import type { Vec2 } from '../types';
 
 export function dist(a: Vec2, b: Vec2): number {
   const dx = a.x - b.x;

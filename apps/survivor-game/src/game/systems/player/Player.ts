@@ -1,4 +1,4 @@
-import { Player, Weapon, PassiveType, MapZone, PassiveUpgrade } from '../../types';
+import { Player, Weapon, PassiveType, PassiveUpgrade } from '../../types';
 import {
   PASSIVE_DATA,
   PLAYER_RADIUS, PLAYER_BASE_HP, PLAYER_BASE_SPEED, PLAYER_BASE_PICKUP_RANGE,
@@ -6,7 +6,6 @@ import {
   XP_BASE, XP_GROWTH, ARENA_HALF,
 } from '../../constants';
 import type { MapSystem } from '../map/MapSystem';
-import { getZone } from '../../utils/math';
 
 export function createPlayer(skinId: string = 'wanderer'): Player {
   return {
@@ -34,7 +33,6 @@ export function createPlayer(skinId: string = 'wanderer'): Player {
     curse: 1,
     shards: 0,
     skinId,
-    currentZone: 'storm',
     weapons: [],
     passives: [],
     animTimer: 0,
@@ -43,13 +41,8 @@ export function createPlayer(skinId: string = 'wanderer'): Player {
 }
 
 export function updatePlayer(p: Player, dx: number, dy: number, dt: number, mapSystem?: MapSystem) {
-  let speedMult = 1;
-  if (mapSystem) {
-    speedMult = mapSystem.getBloodPoolSlowFactor(p.x, p.y, p.radius);
-  }
-
-  p.x += dx * p.speed * speedMult * dt;
-  p.y += dy * p.speed * speedMult * dt;
+  p.x += dx * p.speed * dt;
+  p.y += dy * p.speed * dt;
   if (dx !== 0) p.facingLeft = dx < 0;
 
   if (mapSystem) {
@@ -62,12 +55,6 @@ export function updatePlayer(p: Player, dx: number, dy: number, dt: number, mapS
   p.y = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, p.y));
 
   if (p.invTime > 0) p.invTime -= dt;
-
-  const newZone = getZone(p.x, p.y);
-  if (newZone !== p.currentZone) {
-    p.currentZone = newZone;
-    recalcStats(p);
-  }
 
   if (p.regen > 0) {
     p.regenTimer += dt;
@@ -154,12 +141,6 @@ export function recalcStats(p: Player) {
     p.curse += (perLevel.curse ?? 0) * pa.level;
   }
 
-  switch (p.currentZone) {
-    case 'shadow': p.might += 0.1; break;
-    case 'bone':   p.armor += 2; break;
-    case 'storm':  speedMult += 0.15; break;
-  }
-
   p.speed = p.baseSpeed * speedMult;
   p.pickupRange = p.basePickupRange * pickupMult;
   p.maxHp = PLAYER_BASE_HP + hpBonus;
@@ -172,15 +153,4 @@ export function hasPassive(p: Player, type: PassiveType): boolean {
 
 export function getPassiveLevel(p: Player, type: PassiveType): number {
   return p.passives.find(pa => pa.type === type)?.level ?? 0;
-}
-
-/**
- * 血域击杀回血：在 blood 区域击杀敌人时恢复 3% 最大生命
- * 返回实际恢复量（0 表示未触发）
- */
-export function tryBloodZoneHeal(p: Player): number {
-  if (p.currentZone !== 'blood' || p.hp >= p.maxHp) return 0;
-  const heal = Math.floor(p.maxHp * 0.03);
-  p.hp = Math.min(p.maxHp, p.hp + heal);
-  return heal;
 }

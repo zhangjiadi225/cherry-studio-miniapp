@@ -1,6 +1,6 @@
-import type { MapZone, UpgradeRarity } from './types';
+import type { UpgradeRarity } from './types';
 
-export { COLORS, ZONE_COLORS } from './data/colors';
+export { COLORS } from './data/colors';
 export { ENEMY_DATA } from './data/enemies';
 export { GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from './data/modifiers';
 export { PASSIVE_DATA } from './data/passives';
@@ -10,7 +10,6 @@ export { WEAPON_DATA, STARTING_WEAPON_TYPES, getWeaponMetadataLabel } from './da
 // ===== Game =====
 export const GAME_DURATION = 9 * 60; // 9 minutes
 export const ARENA_SIZE = 4800;
-export const MAP_ZONE_SIZE = 1200;
 export const MAP_GRID_SIZE = 96;
 export const DIFFICULTY_INTERVAL = 30; // seconds
 export const DIFFICULTY_STEP = 0.03;
@@ -105,8 +104,6 @@ export const SHAKE_BOSS_INTENSITY = 6;
 // ===== Obstacle Config =====
 export const OBSTACLE_CELL_SIZE = 240;
 export const OBSTACLE_HP = 10;
-export const BLOOD_POOL_SLOW = 0.5;
-export const BLOOD_POOL_RADIUS = 54;
 
 // ===== Combat =====
 export const CONTACT_COOLDOWN = 0.5;
@@ -129,22 +126,6 @@ export const BOSS_HP_MULT = 5;
 export const BOSS_DMG_MULT = 2;
 export const BOSS_XP_MULT = 10;
 export const BOSS_MINION_COUNT = 20;
-
-// ===== Zone Buffs =====
-export const ZONE_BUFFS: Record<MapZone, {
-  name: string;
-  desc: string;
-  icon: string;
-}> = {
-  shadow: { name: '暗影之力', desc: '伤害 +10%', icon: '🔮' },
-  blood: { name: '鲜血渴望', desc: '击杀回血 3%', icon: '🩸' },
-  bone: { name: '白骨护盾', desc: '护甲 +2', icon: '🦴' },
-  storm: { name: '风暴疾行', desc: '移速 +15%', icon: '⚡' },
-};
-
-// ===== Magic Circle =====
-export const MAGIC_CIRCLE_HEAL_RATE = 5;
-export const MAGIC_CIRCLE_RADIUS = 30;
 
 // ===== Arena =====
 export const ARENA_HALF = ARENA_SIZE / 2;

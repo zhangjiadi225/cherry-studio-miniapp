@@ -110,11 +110,6 @@ export function updateEnemy(
   const traitMove = updateTraitState(e, dx, dy, len, dt);
   const phasing = isEnemyPhasing(e);
 
-  let speedMult = 1;
-  if (mapSystem && !phasing) {
-    speedMult = mapSystem.getBloodPoolSlowFactor(e.x, e.y, e.radius);
-  }
-
   if (len > 1) {
     const engagement = getEnemyEngagementProfile(e);
     let dirX = dx / len;
@@ -140,8 +135,8 @@ export function updateEnemy(
     if (!traitMove.dashActive && e.trait === 'phase' && e.traitDuration > 0) moveScale *= 1.32;
     if (!traitMove.dashActive && traitMove.windup) moveScale *= 0.2;
 
-    e.x += dirX * e.speed * speedMult * moveScale * dt;
-    e.y += dirY * e.speed * speedMult * moveScale * dt;
+    e.x += dirX * e.speed * moveScale * dt;
+    e.y += dirY * e.speed * moveScale * dt;
   }
 
   if (mapSystem && !phasing) {

@@ -1,11 +1,7 @@
-import type { MapZone } from '../types';
-
 export const COLORS = {
-  bg: '#d8ddd2',
-  groundOutside: '#b8beb5',
-  ground1: '#101827',
-  ground2: '#0b1020',
-  groundLine: '#24324d',
+  bg: '#7f8881',
+  groundOutside: '#5f6762',
+  groundMark: 'rgba(34,45,39,0.18)',
   playerBody: '#4a9eff',
   playerOutline: '#2d7ad6',
   playerGlow: 'rgba(74,158,255,0.3)',
@@ -38,11 +34,4 @@ export const COLORS = {
   boss: '#ff4444',
   levelUp: '#ffd700',
   revive: '#ffd700',
-};
-
-export const ZONE_COLORS: Record<MapZone, { line: string; dot: string; accent: string; particle: string }> = {
-  shadow: { line: '#202852', dot: '#5261a8', accent: '#8a6fff', particle: '#a190ff' },
-  blood: { line: '#522024', dot: '#a84f56', accent: '#ff5858', particle: '#ff8070' },
-  bone: { line: '#4a4024', dot: '#b1a66a', accent: '#eadb86', particle: '#fff0a6' },
-  storm: { line: '#1e4b3f', dot: '#5fc092', accent: '#66ffc2', particle: '#93ffda' },
 };

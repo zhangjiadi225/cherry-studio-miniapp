@@ -1,6 +1,6 @@
 import type { Camera, MapObstacle } from '../types';
-import { COLORS, ZONE_COLORS, ARENA_HALF, MAP_GRID_SIZE, MAP_ZONE_SIZE } from '../constants';
-import { hashXY, getZone } from '../utils/math';
+import { COLORS, ARENA_HALF, MAP_GRID_SIZE } from '../constants';
+import { hashXY } from '../utils/math';
 
 /** 渲染器共享上下文（无状态函数用） */
 export interface RenderContext {
@@ -47,34 +47,10 @@ export class WorldRenderer {
       ctx.beginPath();
       ctx.rect(mapL, mapT, mapR - mapL, mapB - mapT);
       ctx.clip();
-      this.drawZoneTints(ctx, mapL, mapT, mapR, mapB);
       this.drawSparseGroundMarks(ctx, mapL, mapT, mapR, mapB);
       ctx.restore();
     }
     ctx.restore();
-  }
-
-  private drawZoneTints(
-    ctx: CanvasRenderingContext2D,
-    startX: number,
-    startY: number,
-    endX: number,
-    endY: number
-  ) {
-    const firstBlockX = Math.floor((startX + MAP_ZONE_SIZE / 2) / MAP_ZONE_SIZE);
-    const lastBlockX = Math.floor((endX + MAP_ZONE_SIZE / 2) / MAP_ZONE_SIZE);
-    const firstBlockY = Math.floor((startY + MAP_ZONE_SIZE / 2) / MAP_ZONE_SIZE);
-    const lastBlockY = Math.floor((endY + MAP_ZONE_SIZE / 2) / MAP_ZONE_SIZE);
-
-    for (let bx = firstBlockX; bx <= lastBlockX; bx++) {
-      const x = bx * MAP_ZONE_SIZE - MAP_ZONE_SIZE / 2;
-      for (let by = firstBlockY; by <= lastBlockY; by++) {
-        const y = by * MAP_ZONE_SIZE - MAP_ZONE_SIZE / 2;
-        const zone = getZone(x + MAP_ZONE_SIZE / 2, y + MAP_ZONE_SIZE / 2);
-        ctx.fillStyle = hexToRgba(ZONE_COLORS[zone].accent, 0.035);
-        ctx.fillRect(x, y, MAP_ZONE_SIZE, MAP_ZONE_SIZE);
-      }
-    }
   }
 
   /** 只为当前视口按坐标哈希补绘少量地面标记，不保存地图块或纹理。 */
@@ -92,6 +68,8 @@ export class WorldRenderer {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = 1.2;
+    ctx.fillStyle = COLORS.groundMark;
+    ctx.strokeStyle = COLORS.groundMark;
 
     for (let x = firstX; x <= endX; x += cellSize) {
       for (let y = firstY; y <= endY; y += cellSize) {
@@ -100,38 +78,26 @@ export class WorldRenderer {
 
         const px = x + 36 + ((hash >>> 5) % (cellSize - 72));
         const py = y + 36 + ((hash >>> 13) % (cellSize - 72));
-        const zone = getZone(px, py);
-        const accent = ZONE_COLORS[zone].accent;
-        ctx.fillStyle = hexToRgba(accent, 0.1);
-        ctx.strokeStyle = hexToRgba(accent, 0.16);
 
-        switch (zone) {
-          case 'shadow':
+        switch ((hash >>> 21) % 3) {
+          case 0:
             ctx.beginPath();
             ctx.moveTo(px - 8, py - 5);
             ctx.lineTo(px + 2, py + 1);
             ctx.lineTo(px + 10, py + 9);
             ctx.stroke();
             break;
-          case 'blood':
+          case 1:
             ctx.beginPath();
-            ctx.ellipse(px, py, 8, 5, (hash % 7) * 0.2, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.ellipse(px, py, 7, 4, (hash % 7) * 0.2, 0, Math.PI * 2);
+            ctx.stroke();
             break;
-          case 'bone':
+          default:
             ctx.beginPath();
             ctx.moveTo(px - 6, py - 6);
             ctx.lineTo(px + 6, py + 6);
             ctx.moveTo(px + 6, py - 6);
             ctx.lineTo(px - 6, py + 6);
-            ctx.stroke();
-            break;
-          case 'storm':
-            ctx.beginPath();
-            ctx.moveTo(px + 2, py - 8);
-            ctx.lineTo(px - 3, py);
-            ctx.lineTo(px + 3, py + 2);
-            ctx.lineTo(px - 2, py + 10);
             ctx.stroke();
             break;
         }
@@ -156,16 +122,6 @@ export class WorldRenderer {
           this.drawBoneWall(ctx, obs);
           break;
         }
-        case 'blood_pool': {
-          if (obs.landmark) this.drawBloodRiftLandmark(ctx, obs, time);
-          else this.drawBloodPool(ctx, obs, time);
-          break;
-        }
-        case 'magic_circle': {
-          if (obs.landmark) this.drawRuneShrineLandmark(ctx, obs, time);
-          else this.drawMagicCircle(ctx, obs, time);
-          break;
-        }
       }
     }
   }
@@ -173,7 +129,7 @@ export class WorldRenderer {
   private drawTombstone(ctx: CanvasRenderingContext2D, obs: MapObstacle) {
     const w = obs.width;
     const h = obs.height;
-    const accent = ZONE_COLORS[obs.zone].accent;
+    const accent = '#6f8b83';
     ctx.save();
     ctx.translate(obs.x, obs.y);
     ctx.rotate(obs.rotation * 0.22);
@@ -221,7 +177,7 @@ export class WorldRenderer {
   private drawObeliskLandmark(ctx: CanvasRenderingContext2D, obs: MapObstacle, time: number) {
     const w = obs.width;
     const h = obs.height * 1.35;
-    const accent = ZONE_COLORS[obs.zone].accent;
+    const accent = '#82a69d';
     const pulse = 0.22 + Math.sin(time * 1.8 + obs.variant) * 0.05;
     ctx.save();
     ctx.translate(obs.x, obs.y);
@@ -352,127 +308,6 @@ export class WorldRenderer {
     ctx.beginPath();
     ctx.arc(0, -length / 2, thickness * 0.72, 0, Math.PI * 2);
     ctx.arc(0, length / 2, thickness * 0.72, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  private drawBloodPool(ctx: CanvasRenderingContext2D, obs: MapObstacle, time: number) {
-    const r = obs.radius;
-    const poolGrad = ctx.createRadialGradient(obs.x, obs.y, 0, obs.x, obs.y, r);
-    poolGrad.addColorStop(0, 'rgba(110,12,18,0.46)');
-    poolGrad.addColorStop(0.62, 'rgba(64,5,10,0.28)');
-    poolGrad.addColorStop(1, 'rgba(24,0,0,0)');
-    ctx.fillStyle = poolGrad;
-    ctx.beginPath();
-    ctx.ellipse(obs.x, obs.y, r, r * 0.65, obs.rotation * 0.18, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(168,32,38,0.26)';
-    ctx.lineWidth = 1;
-    const ripplePhase = time * 1.5 + hashXY(obs.x, obs.y) * 0.1;
-    for (let i = 0; i < 3; i++) {
-      const rr = r * (0.3 + ((ripplePhase + i * 0.35) % 1) * 0.6);
-      ctx.beginPath();
-      ctx.ellipse(obs.x, obs.y, rr, rr * 0.65, obs.rotation * 0.18, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-
-  private drawBloodRiftLandmark(ctx: CanvasRenderingContext2D, obs: MapObstacle, time: number) {
-    this.drawBloodPool(ctx, obs, time);
-    const r = obs.radius;
-    const pulse = 0.45 + Math.sin(time * 2.4 + obs.variant) * 0.12;
-    ctx.save();
-    ctx.translate(obs.x, obs.y);
-    ctx.rotate(obs.rotation * 0.32);
-    ctx.strokeStyle = `rgba(255,72,72,${pulse})`;
-    ctx.lineWidth = 2.2;
-    ctx.lineCap = 'round';
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 + time * 0.08;
-      const inner = r * 0.25;
-      const outer = r * (0.72 + (i % 2) * 0.12);
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner * 0.65);
-      ctx.lineTo(Math.cos(a + 0.1) * outer, Math.sin(a + 0.1) * outer * 0.65);
-      ctx.stroke();
-    }
-    ctx.fillStyle = `rgba(255,52,52,${0.18 + pulse * 0.16})`;
-    ctx.beginPath();
-    ctx.moveTo(0, -r * 0.18);
-    ctx.lineTo(r * 0.2, 0);
-    ctx.lineTo(0, r * 0.2);
-    ctx.lineTo(-r * 0.2, 0);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
-  private drawMagicCircle(ctx: CanvasRenderingContext2D, obs: MapObstacle, time: number) {
-    const r = obs.radius;
-    const pulse = 0.15 + Math.sin(time * 2 + hashXY(obs.x, obs.y) * 0.05) * 0.05;
-    const auraGrad = ctx.createRadialGradient(obs.x, obs.y, r * 0.2, obs.x, obs.y, r * 1.3);
-    auraGrad.addColorStop(0, `rgba(100,0,150,${pulse})`);
-    auraGrad.addColorStop(0.6, `rgba(80,0,120,${pulse * 0.5})`);
-    auraGrad.addColorStop(1, 'rgba(60,0,100,0)');
-    ctx.fillStyle = auraGrad;
-    ctx.beginPath();
-    ctx.arc(obs.x, obs.y, r * 1.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = `rgba(160,80,255,${pulse * 2})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(obs.x, obs.y, r, 0, Math.PI * 2);
-    ctx.stroke();
-    const rot = time * 0.3 + obs.rotation;
-    for (let i = 0; i < 5; i++) {
-      const a1 = rot + (i / 5) * Math.PI * 2 - Math.PI / 2;
-      const a2 = rot + (((i + 2) % 5) / 5) * Math.PI * 2 - Math.PI / 2;
-      ctx.beginPath();
-      ctx.moveTo(obs.x + Math.cos(a1) * r, obs.y + Math.sin(a1) * r);
-      ctx.lineTo(obs.x + Math.cos(a2) * r, obs.y + Math.sin(a2) * r);
-      ctx.stroke();
-    }
-  }
-
-  private drawRuneShrineLandmark(ctx: CanvasRenderingContext2D, obs: MapObstacle, time: number) {
-    this.drawMagicCircle(ctx, obs, time);
-    const r = obs.radius;
-    const accent = ZONE_COLORS[obs.zone].accent;
-    const rot = time * 0.22 + obs.rotation;
-    ctx.save();
-    ctx.translate(obs.x, obs.y);
-    ctx.strokeStyle = hexToRgba(accent, 0.72);
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.68, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.38, 0, Math.PI * 2);
-    ctx.stroke();
-    for (let i = 0; i < 8; i++) {
-      const a = rot + (i / 8) * Math.PI * 2;
-      const x = Math.cos(a) * r * 0.8;
-      const y = Math.sin(a) * r * 0.8;
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(a + Math.PI / 4);
-      ctx.strokeRect(-3, -3, 6, 6);
-      ctx.restore();
-    }
-    const crystal = ctx.createLinearGradient(0, -r * 0.26, 0, r * 0.24);
-    crystal.addColorStop(0, '#ffffff');
-    crystal.addColorStop(0.42, accent);
-    crystal.addColorStop(1, '#251538');
-    ctx.fillStyle = crystal;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, -r * 0.32);
-    ctx.lineTo(r * 0.2, -r * 0.02);
-    ctx.lineTo(0, r * 0.3);
-    ctx.lineTo(-r * 0.2, -r * 0.02);
-    ctx.closePath();
     ctx.fill();
     ctx.stroke();
     ctx.restore();

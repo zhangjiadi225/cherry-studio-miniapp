@@ -35,7 +35,7 @@ survivor-game/
         │
         ├── systems/                # 独立游戏系统（每个可单独扩展）
         │   ├── player/
-        │   │   ├── Player.ts       # 玩家：创建/更新/受伤/升级/区域Buff
+        │   │   ├── Player.ts       # 玩家：创建/更新/受伤/升级
         │   │   └── XPGem.ts        # 经验宝石：创建/吸引/收集
         │   ├── enemy/
         │   │   ├── Enemy.ts        # 敌人：创建/更新/受伤/碰撞
@@ -107,7 +107,7 @@ survivor-game/
 
 | 系统 | 目录 | 文件 | 职责 |
 |------|------|------|------|
-| **玩家** | `systems/player/` | `Player.ts` `XPGem.ts` | 移动、受伤、升级、属性重算、区域 Buff、经验收集 |
+| **玩家** | `systems/player/` | `Player.ts` `XPGem.ts` | 移动、受伤、升级、属性重算、经验收集 |
 | **敌人** | `systems/enemy/` | `Enemy.ts` `Spawner.ts` | 敌人 AI、波次生成、Boss/精英机制、难度缩放 |
 | **武器** | `systems/weapon/` | `Weapon.ts` `Upgrade.ts` | 8 种武器开火逻辑、弹幕更新、大蒜范围、升级选项 |
 | **镜头** | `systems/camera/` | `Camera.ts` | 平滑跟随、屏幕震动 |
@@ -197,12 +197,11 @@ survivor-game/
 2. 在 `renderers/EffectsRenderer.ts` 添加对应的绘制函数
 3. 在 `Game.ts` 或子系统中调用
 
-### 添加新地图区域
+### 调整地图障碍
 
-1. `types.ts` → `MapZone` 添加枚举
-2. `constants.ts` → `ZONE_COLORS` + `ZONE_BUFFS` 添加配置
-3. `utils/math.ts` → `getZone()` 更新判定逻辑
-4. `systems/player/Player.ts` → `recalcStats()` 添加区域 Buff
+1. `types.ts` → 更新 `MapObstacle` 类型
+2. `systems/map/MapSystem.ts` → 调整生成密度、尺寸和碰撞逻辑
+3. `renderers/WorldRenderer.ts` → 更新对应障碍物绘制
 
 ### 添加音效系统（计划）
 
