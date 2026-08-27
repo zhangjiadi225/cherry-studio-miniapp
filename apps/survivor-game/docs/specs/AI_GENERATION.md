@@ -12,6 +12,8 @@
 
 AI 输出始终是候选 Draft。游戏规则只接受经过本地校验且被玩家明确接受的 ContentPack。
 
+当前实现进度：武器任务已经通过本机链接的 `@cherry-miniapp/kit` 接入真实 Cherry Host。产品 Forge UI 可提交意图、显示流式结果、预览一级/满级数值与原语引用、展示本地校验结果，并明确接受或拒绝。单请求状态机、取消、单 JSON 提取、Draft 持久化、完整本地校验以及“接受 Job + 安装并启用 ContentPack”的原子写入已经落地；接受后重载冻结内容快照，武器可作为开局选择进入真实战斗。一次自动修复、启动恢复管理 UI 和内容包管理 UI 尚未接入。
+
 ## 2. 支持的任务
 
 第一阶段支持：
@@ -75,6 +77,7 @@ interface GenerationJobV1 {
   status:
     | 'pending'
     | 'streaming'
+    | 'received'
     | 'validating'
     | 'preview'
     | 'repairing'
@@ -85,6 +88,7 @@ interface GenerationJobV1 {
   userIntent: string
   createdAt: string
   updatedAt: string
+  rawResponse?: string
   draft?: unknown
   validation?: ValidationReportV1
   error?: { name: string; message: string; retryable: boolean }
@@ -95,10 +99,11 @@ interface GenerationJobV1 {
 
 - 发起 AI 请求前必须先保存 `pending` Job 和玩家意图。
 - 流式文本只用于 UI，不需要每个 Chunk 写入存档。
-- 完整响应收到后，先保存可恢复的 Draft，再进入校验。
+- 完整响应收到后，先保存不超过 100,000 字符的可恢复原文，再提取 Draft 并进入校验；接受后清除重复原文。
 - 玩家接受后，必须以一次串行写入同时保存 ContentPack 与 Job 结果。
 - 隐藏、取消或宿主销毁导致中断时，Job 必须在下次启动显示为可重试或可放弃。
 - 重试复用同一用户意图，但创建新的调用 ID；不能把两次响应拼接。
+- 主状态文档只保留最近 12 个 Generation Job，防止失败原文无界占用 Storage。
 
 ## 5. Prompt 合同
 

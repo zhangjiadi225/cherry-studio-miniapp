@@ -67,6 +67,7 @@ function resetProjectile(p: Projectile) {
   p.arcAngle = undefined;
   p.evolutionIds = undefined;
   p.runtimePlan = undefined;
+  p.useLegacyProjectileSprite = undefined;
 }
 
 function resetEnemyProjectile(p: EnemyProjectile) {

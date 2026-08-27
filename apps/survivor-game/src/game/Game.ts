@@ -5,7 +5,7 @@ import {
 import {
   SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS,
   CONTACT_COOLDOWN,
-  MAX_ENEMIES, STARTING_WEAPON_TYPES,
+  MAX_ENEMIES,
 } from './constants';
 import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
@@ -103,7 +103,7 @@ export class Game {
   private readonly persistMuted: GameOptions['persistMuted'];
   private desktopTab: DesktopTab = 'start';
   private codexTab: CodexTab = 'weapons';
-  private selectedStartingWeapon: WeaponType = WeaponType.MAGIC_WAND;
+  private selectedStartingWeaponId = 'builtin.weapon.magic-wand';
   private hoveredStarId?: MetaUpgradeNode['id'];
   private player = createPlayer();
   private enemies: Enemy[] = [];
@@ -123,6 +123,7 @@ export class Game {
   private animationFrameId = 0;
   private destroyed = false;
   private hostVisible = true;
+  private externalUiOpen = false;
   private levelUpQueue = 0;
   private bossWarningTimer = 0;
   private bossWarningName = '';
@@ -225,9 +226,22 @@ export class Game {
     this.animationFrameId = requestAnimationFrame(this.handleAnimationFrame);
   }
 
+  setExternalUiOpen(open: boolean) {
+    this.externalUiOpen = open;
+    if (open) {
+      this.input.reset();
+      this.hoveredStarId = undefined;
+    }
+  }
+
+  canOpenWeaponForge(): boolean {
+    return gameState.is('menu') || gameState.is('gameover');
+  }
+
   // ──────────────────────────── Input Routing ────────────────────────────
 
   private onKeyDown(e: KeyboardEvent) {
+    if (this.externalUiOpen) return;
     switch (gameState.state) {
       case 'upgrading':
         if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
@@ -266,6 +280,7 @@ export class Game {
   }
 
   private onClick(e: MouseEvent) {
+    if (this.externalUiOpen) return;
     if (gameState.is('menu')) {
       this.handleDesktopClick(e);
     } else if (gameState.is('gameover')) {
@@ -278,6 +293,7 @@ export class Game {
   }
 
   private onMouseMove(e: MouseEvent) {
+    if (this.externalUiOpen) return;
     if (!gameState.is('menu')) return;
     const rect = this.canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -286,6 +302,7 @@ export class Game {
   }
 
   private onTouchStart(e: TouchEvent) {
+    if (this.externalUiOpen) return;
     if (gameState.is('menu')) {
       this.handleDesktopClick(e);
     } else if (gameState.is('gameover')) {
@@ -378,9 +395,11 @@ export class Game {
   }
 
   private shiftStartingWeapon(dir: number) {
-    const index = STARTING_WEAPON_TYPES.indexOf(this.selectedStartingWeapon);
-    const next = STARTING_WEAPON_TYPES[(index + dir + STARTING_WEAPON_TYPES.length) % STARTING_WEAPON_TYPES.length];
-    this.selectedStartingWeapon = next ?? WeaponType.MAGIC_WAND;
+    const weapons = this.content.startingWeapons;
+    if (weapons.length === 0) return;
+    const index = Math.max(0, weapons.findIndex((weapon) => weapon.id === this.selectedStartingWeaponId));
+    const next = weapons[(index + dir + weapons.length) % weapons.length];
+    this.selectedStartingWeaponId = next?.id ?? 'builtin.weapon.magic-wand';
   }
 
   private handleDesktopClick(e: MouseEvent | TouchEvent) {
@@ -409,10 +428,10 @@ export class Game {
           return;
         }
       }
-      const weaponCards = this.renderer.getStartingWeaponCardRects();
+      const weaponCards = this.renderer.getStartingWeaponCardRects(this.content.startingWeapons);
       for (const card of weaponCards) {
         if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
-          this.selectedStartingWeapon = card.weaponType;
+          this.selectedStartingWeaponId = card.definitionId;
           return;
         }
       }
@@ -482,10 +501,9 @@ export class Game {
     clearAllPools();
     this.player = createPlayer(this.meta.selectedSkin);
     this.player.shards = getInitialShards(this.meta);
-    const startingWeapon = STARTING_WEAPON_TYPES.includes(this.selectedStartingWeapon)
-      ? this.selectedStartingWeapon
-      : WeaponType.MAGIC_WAND;
-    this.player.weapons.push(createWeapon(startingWeapon, this.content.getWeaponByType(startingWeapon)));
+    const startingDefinition = this.content.weapons.get(this.selectedStartingWeaponId) ??
+      this.content.getWeaponByType(WeaponType.MAGIC_WAND);
+    this.player.weapons.push(createWeapon(startingDefinition.legacyType, startingDefinition));
     this.refreshWeaponRefs();
     this.activeBoss = undefined;
     this.enemies = [];
@@ -957,7 +975,7 @@ export class Game {
       time: this.elapsed,
       kills: this.killCount,
       level: this.player.level,
-      weaponNames: this.player.weapons.map((w) => this.content.getWeaponByType(w.type).name),
+      weaponNames: this.player.weapons.map((weapon) => weapon.name),
       soulFireEarned: this.meta.soulFire - previousSoulFire,
       totalSoulFire: this.meta.soulFire,
       runDuration: this.runDifficulty.duration,
@@ -1085,7 +1103,14 @@ export class Game {
     this.renderer.clear();
 
     if (gameState.is('menu')) {
-      this.renderer.drawDesktop(this.meta, this.desktopTab, this.codexTab, this.selectedStartingWeapon, this.hoveredStarId);
+      this.renderer.drawDesktop(
+        this.meta,
+        this.desktopTab,
+        this.codexTab,
+        this.selectedStartingWeaponId,
+        this.content.startingWeapons,
+        this.hoveredStarId
+      );
       return;
     }
 
@@ -1192,7 +1217,7 @@ export class Game {
         time: this.elapsed,
         kills: this.killCount,
         level: this.player.level,
-        weaponNames: this.player.weapons.map((w) => this.content.getWeaponByType(w.type).name),
+        weaponNames: this.player.weapons.map((weapon) => weapon.name),
         soulFireEarned: 0,
         totalSoulFire: this.meta.soulFire,
         runDuration: this.runDifficulty.duration,

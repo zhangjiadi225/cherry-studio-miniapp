@@ -1,6 +1,15 @@
-import type { Enemy, Player, Projectile } from '../../types';
+import type {
+  Enemy,
+  GenericModifierType,
+  Player,
+  Projectile,
+  WeaponFamily,
+} from '../../types';
 import type { EnemyQuery } from '../../systems/enemy/EnemyQuery';
-import type { PrimitiveParamsV1 } from './WeaponRecipe';
+import type {
+  PrimitiveParamsV1,
+  TrustedWeaponPlanAdjustment,
+} from './WeaponRecipe';
 
 export type WeaponPrimitiveKind =
   | 'trigger'
@@ -202,7 +211,35 @@ export type HitEffectPrimitive = WeaponPrimitive<ResolvedHitEffect>;
 export type ProjectileLifecyclePrimitive = WeaponPrimitive<ResolvedProjectileLifecycle>;
 export type ProjectileRenderPrimitive = WeaponPrimitive<ResolvedProjectileRenderPrimitive>;
 
+export type WeaponModifierPhase =
+  | 'stat-additive'
+  | 'stat-multiplicative'
+  | 'emission-structural'
+  | 'projectile-structural'
+  | 'hit-effect'
+  | 'lifecycle';
+
+export interface WeaponModifierDescriptorV1 {
+  readonly id: string;
+  readonly version: string;
+  readonly phase: WeaponModifierPhase;
+  readonly name: string;
+  readonly description: string;
+  readonly maxStacks: number;
+  readonly compatibleFamilies: readonly WeaponFamily[];
+  readonly conflictsWith: readonly string[];
+  readonly estimatedCostPerStack: number;
+}
+
+export interface TrustedWeaponModifierHandler {
+  readonly descriptor: WeaponModifierDescriptorV1;
+  readonly legacyType: GenericModifierType;
+  getAdjustments(stacks: number): readonly TrustedWeaponPlanAdjustment[];
+  getCastMultiplier(stacks: number): number;
+}
+
 export interface WeaponCapabilityCatalogV1 {
   readonly catalogVersion: 1;
   readonly primitives: readonly WeaponPrimitiveDescriptorV1[];
+  readonly modifiers: readonly WeaponModifierDescriptorV1[];
 }

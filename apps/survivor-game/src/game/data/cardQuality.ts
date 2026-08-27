@@ -37,11 +37,10 @@ function ratio(value: number, baseline: number): number {
 }
 
 export function getWeaponLevelQuality(weapon: Weapon): CardQuality {
-  const data = WEAPON_DATA[weapon.type];
-  const p = data.perLevel;
+  const p = weapon.perLevel;
   let score = 0;
 
-  if (p.damage) score += Math.min(1, ratio(p.damage, Math.max(weapon.damage, data.baseDamage))) * 4;
+  if (p.damage) score += Math.min(1, ratio(p.damage, Math.max(1, weapon.damage))) * 4;
   if (p.cooldown && p.cooldown < 0) score += Math.min(1, ratio(Math.abs(p.cooldown), Math.max(0.15, weapon.cooldown))) * 6;
   if (p.count) score += p.count * 4.8;
   if (p.area) score += p.area * 16;

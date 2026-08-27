@@ -6,6 +6,14 @@ import {
   type MetaState,
 } from '../game/systems/meta/MetaProgression';
 import type { AppStorage } from './AppHost';
+import {
+  MAX_SAVED_GENERATION_JOBS,
+  type GenerationJobV1,
+} from '../ai/generation/GenerationJob';
+import {
+  MAX_ENABLED_GENERATED_WEAPON_PACKS,
+  type ContentPackV1,
+} from '../content/schema/ContentPack';
 
 export const APP_STATE_STORAGE_KEY = 'survivor-game:app-state';
 export const APP_STATE_VERSION = 1;
@@ -18,7 +26,7 @@ export interface AppSettingsV1 {
 }
 
 export interface ContentLibraryStateV1 {
-  // Packs remain unknown until the ContentPack validator is implemented.
+  // Persisted input remains unknown until it is validated while building a runtime snapshot.
   packs: unknown[];
   enabledPackIds: string[];
 }
@@ -203,5 +211,84 @@ export class AppStateStore {
       ...state,
       settings: { ...state.settings, muted },
     }));
+  }
+
+  upsertGenerationJob(job: GenerationJobV1): Promise<void> {
+    return this.commit((state) => ({
+      ...state,
+      generationJobs: [
+        ...state.generationJobs.filter((candidate) =>
+          !isRecord(candidate) || candidate.requestId !== job.requestId
+        ),
+        job,
+      ].slice(-MAX_SAVED_GENERATION_JOBS),
+    }));
+  }
+
+  acceptGeneratedWeaponPack(
+    pack: ContentPackV1,
+    acceptedJob: GenerationJobV1
+  ): Promise<void> {
+    if (acceptedJob.status !== 'accepted' || acceptedJob.acceptedPackId !== pack.id) {
+      throw new Error('Accepted generation job must reference the installed ContentPack');
+    }
+
+    return this.commit((state) => {
+      if (state.contentLibrary.enabledPackIds.length >= MAX_ENABLED_GENERATED_WEAPON_PACKS) {
+        throw new Error(
+          `Enabled generated weapon limit reached (${MAX_ENABLED_GENERATED_WEAPON_PACKS})`
+        );
+      }
+      const existingPack = state.contentLibrary.packs.find((candidate) =>
+        isRecord(candidate) && candidate.id === pack.id
+      );
+      if (existingPack !== undefined) {
+        throw new Error(`ContentPack ID already exists: ${pack.id}`);
+      }
+
+      return {
+        ...state,
+        contentLibrary: {
+          packs: [...state.contentLibrary.packs, pack],
+          enabledPackIds: [...state.contentLibrary.enabledPackIds, pack.id],
+        },
+        generationJobs: [
+          ...state.generationJobs.filter((candidate) =>
+            !isRecord(candidate) || candidate.requestId !== acceptedJob.requestId
+          ),
+          acceptedJob,
+        ].slice(-MAX_SAVED_GENERATION_JOBS),
+      };
+    });
+  }
+
+  setContentPackEnabled(packId: string, enabled: boolean): Promise<void> {
+    return this.commit((state) => {
+      const pack = state.contentLibrary.packs.find((candidate) =>
+        isRecord(candidate) && candidate.id === packId
+      );
+      if (!isRecord(pack) || pack.status !== 'accepted') {
+        throw new Error(`Accepted ContentPack not found: ${packId}`);
+      }
+      const currentlyEnabled = state.contentLibrary.enabledPackIds.includes(packId);
+      if (currentlyEnabled === enabled) return { ...state };
+      if (
+        enabled &&
+        state.contentLibrary.enabledPackIds.length >= MAX_ENABLED_GENERATED_WEAPON_PACKS
+      ) {
+        throw new Error(
+          `Enabled generated weapon limit reached (${MAX_ENABLED_GENERATED_WEAPON_PACKS})`
+        );
+      }
+      return {
+        ...state,
+        contentLibrary: {
+          ...state.contentLibrary,
+          enabledPackIds: enabled
+            ? [...state.contentLibrary.enabledPackIds, packId]
+            : state.contentLibrary.enabledPackIds.filter((id) => id !== packId),
+        },
+      };
+    });
   }
 }

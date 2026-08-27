@@ -16,10 +16,11 @@
 - 8 种怪物、时间强化、精英、Boss、远程弹幕和多种攻击 Pattern。
 - 商店、出售、补给、魂晶、星图元成长、角色皮肤和 Codex。
 - 程序化地图、对象池、空间索引、音频与性能统计。
-- Cherry 存储与 `app.visibilityChange` 的过渡接入。
-- 单文档 `AppStateStore`、冻结 Registry、内置内容快照和武器行为分派。
+- 通过 `@cherry-miniapp/kit` 接入 Cherry 存储、AI 与 `app.visibilityChange`。
+- 单文档 `AppStateStore`、冻结 Registry、动态内容快照和武器行为分派。
+- 投射物 `ContentPackV1`、严格 Validator、内容库原子安装和 AI 武器生成服务。
 
-AI Forge、ContentPack 校验/安装和 BehaviorGraph 尚未实现，不属于当前能力。当前 Registry 除内置武器施放行为与内置武器/怪物定义外，已经注册首批投射物原语；只有魔法法器进入原子 Recipe 迁移链路，其他武器仍使用兼容行为。
+当前 Registry 已注册首批投射物原语和现有通用 Modifier，魔法法器与通过校验并启用的 AI 投射物武器使用同一 Recipe 执行链；其他内置武器仍使用兼容行为。产品入口已通过 Cherry kit 提供玩家可见的 AI Forge，可生成、预览、接受并在重载后选择武器。一次自动修复、Job 恢复管理 UI、包管理 UI 和 BehaviorGraph 尚未实现。
 
 ## 2. 当前目录
 
@@ -40,14 +41,16 @@ survivor-game/
 │   └── sprites/                    # 包内单位与武器图片
 └── src/
     ├── main.ts                     # 启动、读取 AppState、装配内容、创建 Game
-    ├── cherry.d.ts                 # 当前过渡 Bridge 类型
     ├── application/
     │   └── AppVersion.ts           # 当前 App 版本真值
+    ├── ai/                          # Cherry kit 适配器、Prompt、Job、Forge 服务与 UI
     ├── content/
     │   ├── registry/               # 稳定 ID、可冻结 Registry
-    │   └── runtime/                # 内置内容的只读运行时快照
+    │   ├── runtime/                # 内置与已启用内容的只读运行时快照
+    │   └── schema/                 # ContentPack 合同与不可信输入校验
     ├── platform/
-    │   ├── AppHost.ts              # Browser/Cherry 存储与可见性适配
+    │   ├── AppHost.ts              # Cherry kit 存储与可见性适配
+    │   ├── DevelopmentCherryMock.ts # 仅 Vite DEV 安装的显式 Host mock
     │   └── AppStateStore.ts        # 版本化单文档状态与串行事务写入
     └── game/
         ├── Game.ts                 # 单局与桌面 UI 编排器
@@ -81,6 +84,7 @@ main.ts
   ├─ AppHost：提供 Storage 与 Host 可见性
   ├─ AppStateStore：加载/迁移单一状态文档，串行持久化事务
   ├─ GameContentSnapshot：冻结内置行为、武器和怪物定义
+  ├─ WeaponForgeService/Panel：通过 Cherry AI 生成、校验和接受内容
   └─ Game：输入、状态、单局循环、系统调度、桌面 UI 流程
        ├─ systems：确定性玩法系统
        ├─ events：状态切换与跨系统通知
@@ -95,19 +99,16 @@ main.ts
 
 `main.ts` 当前流程：
 
-1. 创建 `AppHost`。
-2. 读取稳定 Key `survivor-game:app-state` 中带 `stateVersion` 的文档；首次运行时读取三个旧 Key 并迁移，但不删除旧值。
-3. 把 AppState 的内容库槽位交给装配器，通过核心 `EnginePlugin` 注册武器行为和首批投射物原语，导出只含描述的 Capability Catalog，并在装配冻结的武器/怪物内容快照时编译内置魔法法器 Recipe。当前若状态尝试启用尚不受支持的外部内容包，会阻止启动而不是静默加载。
-4. 创建 `Game`，注入内容快照和 AppState 持久化回调。
-5. 将 Host 可见性事件转发给 `Game.setHostVisible`。
-6. 启动失败时显示可点击重试提示。
+1. Vite DEV 环境显式安装 kit dev mock；真实 Cherry Host 已存在时 mock 不覆盖它。生产环境缺少 Host 会阻止启动。
+2. 通过 kit 创建 `AppHost`。
+3. 读取稳定 Key `survivor-game:app-state` 中带 `stateVersion` 的文档；首次运行时读取三个旧 Key 并迁移，但不删除旧值。
+4. 把 AppState 的内容库交给装配器，通过核心 `EnginePlugin` 注册武器行为、投射物原语和 Modifier，校验所有已启用 ContentPack，并把内置魔法法器与动态投射物 Recipe 编译进冻结快照。启用 ID 缺失、内容无效或包未接受时阻止启动。
+5. 创建 `Game`，注入内容快照和 AppState 持久化回调。
+6. 创建 `WeaponForgeService` 与 Forge Panel，只在主菜单或结算边界开放生成；接受后重载并重建不可变内容快照。
+7. 将 Host 可见性事件同时转发给 Game 和 Forge，暂停游戏并取消在途 AI。
+8. 启动失败时显示可点击重试提示。
 
-`AppHost` 当前有两种实现：
-
-- Cherry：直接使用全局 `cherry.storage` 和 `cherry.on`。
-- Browser：使用 `localStorage` 和浏览器 `visibilitychange`。
-
-这是过渡实现。它尚未使用 `@cherry-miniapp/kit`，类型只覆盖 Storage 和 Visibility，也没有 AI、权限或能力探测。目标约束见 [`docs/specs/CHERRY_RUNTIME.md`](./docs/specs/CHERRY_RUNTIME.md)。
+`AppHost` 只通过 `@cherry-miniapp/kit` 获取 Cherry Storage 与 Visibility；生产不再回退到 `localStorage`。普通浏览器仅在 Vite DEV 模式安装 kit 的显式 mock。`CherryKitAiGateway` 同样只委托 kit 的能力快照、流式调用、取消和错误识别，不让 Game Kernel 接触 Host API。当前依赖按用户确认链接到本机 foundation workspace，属于本地联合开发配置。目标约束见 [`docs/specs/CHERRY_RUNTIME.md`](./docs/specs/CHERRY_RUNTIME.md)。
 
 ## 5. Game 编排器
 
@@ -166,11 +167,11 @@ main.ts
 - 展示方式、行为标签和战斗标签。
 - 一级属性、每级成长和最大等级。
 
-每件内置武器声明稳定 `behaviorId`。启动时 `Weapon.ts` 把现有 `fireXxx` 兼容行为与通用 Recipe 投射物行为注册为冻结的 `WeaponBehaviorHandler`。Trigger、Targeting、Cast Origin、Emission Pattern、Projectile Motion、Collision、HitEffect 与 Render 分别拥有冻结 Registry；Capability Catalog 从这些 Registry 的公开 Descriptor 派生，不包含函数实现。
+每件内置武器声明稳定 `behaviorId`。启动时 `Weapon.ts` 把现有 `fireXxx` 兼容行为与通用 Recipe 投射物行为注册为冻结的 `WeaponBehaviorHandler`。Trigger、Targeting、Cast Origin、Emission Pattern、Projectile Motion、Collision、HitEffect、Render 与 Weapon Modifier 分别拥有冻结 Registry；Capability Catalog 从这些 Registry 的公开 Descriptor 派生，不包含函数实现。
 
-魔法法器是当前第一件真实 Recipe 样板。其冷却、最近目标、法器施放点、单向阵型、直线运动、标准圆碰撞、伤害、击退和圆形视觉层在启动或升级安全点编译为只读 `WeaponRuntimePlan`。帧循环直接执行已绑定处理器；进化先转换成封闭的内置数值调整，再重新编译计划。弹体对象池会清理计划引用，反射弹体继承同一计划。原有法器 Sprite、武器音效和 UI 暂时继续用 `WeaponType` 兼容标识。
+魔法法器是当前第一件真实 Recipe 样板。AI Prompt 直接投影这份运行时数据和冻结 Capability Catalog。Recipe 在启动或升级安全点编译为只读 `WeaponRuntimePlan`；局内 Modifier 按固定阶段与稳定 ID 转换成受信任调整并重新执行预算检查。帧循环只执行已绑定处理器。弹体对象池会清理计划引用，反射弹体继承同一计划。
 
-其余九件武器仍使用粗粒度 `fireXxx` 兼容行为，特殊移动、碰撞和渲染仍有类型分支。Projectile Lifecycle、Weapon Modifier Registry、Burst 调度、完整 ContentPack Validator 与动态内容 ID 尚未实现；外部/AI Recipe 不能进入游戏。具体目标边界见 [`docs/specs/WEAPON_RECIPE.md`](./docs/specs/WEAPON_RECIPE.md)。
+通过 Validator 的 AI WeaponBlueprint 会转换为动态武器定义，保留自己的稳定 ID、名称、成长和视觉 Recipe，可作为开局武器并在战斗中升级、碰撞和造成伤害。其余九件内置武器仍使用粗粒度 `fireXxx` 兼容行为，特殊移动、碰撞和渲染仍有类型分支。Projectile Lifecycle 的实际回调与 Burst 调度尚未实现，因此生成内容只能提交当前 Capability Catalog 可以完整表达的组合。具体边界见 [`docs/specs/WEAPON_RECIPE.md`](./docs/specs/WEAPON_RECIPE.md)。
 
 ## 8. 怪物与攻击
 
@@ -244,15 +245,15 @@ menu ↔ playing ↔ paused
 
 - `stateVersion`、`revision`、`savedAt`、`appVersion`。
 - Meta 与设置。
-- 尚未启用的 `contentLibrary` 和 `generationJobs` 存储槽位。
+- 保存原始不可信值、在使用点校验的 `contentLibrary` 和 `generationJobs`。
 
-写入在 `AppStateStore` 内串行执行，并在序列化后检查 UTF-8 字节预算。首次找不到主文档时会读取旧 Meta、静音和性能 Key，写入 v1 主文档，同时保留旧值。已有主文档解析失败时不覆盖原值，启动进入错误提示。
+写入在 `AppStateStore` 内串行执行，并在序列化后检查 UTF-8 字节预算。接受生成武器时，ContentPack 安装、启用和 Job 状态通过同一次主文档写入完成。首次找不到主文档时会读取旧 Meta、静音和性能 Key，写入 v1 主文档，同时保留旧值。已有主文档解析失败时不覆盖原值，启动进入错误提示。
 
 当前仍没有：
 
 - v2 及以上逐版本迁移链。
-- 经过结构校验的 AI Generation Job。
-- ContentPack Validator 与可安装 Content Library。
+- Generation Job 的独立完整迁移器与恢复管理 UI。
+- ContentPack 禁用、归档和删除 UI。
 - 单局崩溃恢复。
 
 目标存档规范见 [`docs/specs/CHERRY_RUNTIME.md`](./docs/specs/CHERRY_RUNTIME.md)。
@@ -285,11 +286,11 @@ menu ↔ playing ↔ paused
 
 | 当前状态 | 目标 |
 | --- | --- |
-| 自建 `cherry.d.ts` 与 Browser fallback | `@cherry-miniapp/kit` + Cherry-only production + dev mock |
+| Cherry Host、Storage、Visibility 与 AI 已经统一经过本机链接的 `@cherry-miniapp/kit` | foundation 发布后把本地 link 升级为可独立解析的正式依赖 |
 | v1 AppStateEnvelope 已接入，旧 Key 仅用于首次迁移 | 后续逐版本迁移、恢复 UI 与 RunCheckpoint |
-| 魔法法器已进入原子 Projectile Recipe/Compiler；其余武器与部分展示仍有类型兼容分支 | 全部投射物复用原子 RuntimePlan + Modifier/Lifecycle Registry + 声明式 ContentPack |
+| 魔法法器与动态 AI 武器已进入原子 Projectile Recipe/Compiler；其余武器与部分展示仍有类型兼容分支 | 全部投射物复用原子 RuntimePlan + 完整 Lifecycle Registry + 声明式 ContentPack |
 | 内置武器/怪物快照已冻结；多数系统仍直接导入旧表 | 系统统一依赖已解析 Registry Snapshot |
-| AI 尚未接入 | 持久化 Job、校验、预览、玩家确认的 AI Forge |
+| AI Forge 已能调用 Cherry、流式取消、校验、预览、接受并安装动态武器 | 增加一次自动修复、启动恢复管理和内容包禁用/归档 UI |
 | 自定义 ZIP 脚本 | 共享 `cherry-miniapp` CLI |
 
 迁移顺序和依赖规则以 [`TARGET_ARCHITECTURE.md`](./docs/architecture/TARGET_ARCHITECTURE.md) 为准。

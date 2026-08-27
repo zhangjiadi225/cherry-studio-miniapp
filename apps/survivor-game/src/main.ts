@@ -1,7 +1,14 @@
+import { WeaponForgePanel } from './ai/ui/WeaponForgePanel';
+import { cherryKitAiGateway } from './ai/CherryKitAiGateway';
+import { WeaponForgeService } from './ai/generation/WeaponForgeService';
 import { Game } from './game/Game';
+import { eventBus, GameEvent } from './game/events';
 import { createBuiltinGameContentSnapshot } from './content/runtime/GameContentSnapshot';
 import { createAppHost } from './platform/AppHost';
 import { AppStateStore } from './platform/AppStateStore';
+import { installDevelopmentCherryMock } from './platform/DevelopmentCherryMock';
+
+installDevelopmentCherryMock();
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 if (!canvas) {
@@ -36,7 +43,21 @@ async function bootstrap() {
     persistMeta: (meta) => stateStore.setMeta(meta),
     persistMuted: (muted) => stateStore.setMuted(muted),
   });
-  host.onVisibilityChange((visible) => game.setHostVisible(visible));
+  const forgeService = new WeaponForgeService(cherryKitAiGateway, stateStore);
+  const forgePanel = new WeaponForgePanel({
+    service: forgeService,
+    canGenerate: () => game.canOpenWeaponForge(),
+    onOpenChange: (open) => game.setExternalUiOpen(open),
+    onAccepted: () => window.location.reload(),
+  });
+  forgePanel.setAvailable(game.canOpenWeaponForge());
+  eventBus.on(GameEvent.STATE_CHANGE, () => {
+    forgePanel.setAvailable(game.canOpenWeaponForge());
+  });
+  host.onVisibilityChange((visible) => {
+    game.setHostVisible(visible);
+    forgeService.setHostVisible(visible);
+  });
 
   if (loading) loading.style.display = 'none';
 }

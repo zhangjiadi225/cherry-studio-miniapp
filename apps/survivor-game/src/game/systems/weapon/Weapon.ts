@@ -31,6 +31,10 @@ import {
 } from '../../behaviors/EngineRegistry';
 import { CORE_PROJECTILE_PRIMITIVE_PLUGIN } from '../../behaviors/weapon/CoreProjectilePrimitives';
 import {
+  CORE_WEAPON_MODIFIER_PLUGIN,
+  getCoreWeaponModifierId,
+} from '../../behaviors/weapon/CoreWeaponModifiers';
+import {
   compileProjectileWeaponRecipe,
   type WeaponRecipeCompilerRegistries,
 } from '../../recipes/weapon/WeaponRecipeCompiler';
@@ -60,6 +64,9 @@ export function createWeapon(
   type: WeaponType,
   definition: WeaponData & {
     readonly id?: string;
+    readonly sourcePackId?: string;
+    readonly generated?: boolean;
+    readonly useLegacyProjectileSprite?: boolean;
     readonly runtimePlan?: Weapon['runtimePlan'];
   } = WEAPON_DATA[type]
 ): Weapon {
@@ -67,8 +74,17 @@ export function createWeapon(
   const weapon: Weapon = {
     type,
     definitionId: definition.id ?? getBuiltinWeaponContentId(type),
+    sourcePackId: definition.sourcePackId ?? 'builtin.core',
+    generated: definition.generated ?? false,
+    name: d.name,
+    icon: d.icon,
+    description: d.desc,
     behaviorId: d.behaviorId,
     family: d.family,
+    metadata: Object.freeze({ ...d.metadata, tags: Object.freeze([...d.metadata.tags]) }) as Weapon['metadata'],
+    perLevel: Object.freeze({ ...d.perLevel }),
+    maxLevel: d.maxLevel,
+    useLegacyProjectileSprite: definition.useLegacyProjectileSprite ?? type === WeaponType.MAGIC_WAND,
     level: 1,
     cooldown: d.baseCooldown,
     timer: 0,
@@ -95,10 +111,9 @@ export function createWeapon(
 }
 
 export function upgradeWeapon(w: Weapon): boolean {
-  const d = WEAPON_DATA[w.type];
-  if (d.maxLevel !== undefined && w.level >= d.maxLevel) return false;
+  if (w.maxLevel !== undefined && w.level >= w.maxLevel) return false;
   w.level++;
-  const p = d.perLevel;
+  const p = w.perLevel;
   if (p.damage) w.damage += p.damage;
   if (p.cooldown) w.cooldown = Math.max(0.2, w.cooldown + p.cooldown);
   if (p.speed) w.speed += p.speed;
@@ -111,7 +126,23 @@ export function upgradeWeapon(w: Weapon): boolean {
   return true;
 }
 
-function getRecipeAdjustments(w: Weapon): TrustedWeaponPlanAdjustment[] {
+const MODIFIER_PHASE_ORDER = [
+  'stat-additive',
+  'stat-multiplicative',
+  'emission-structural',
+  'projectile-structural',
+  'hit-effect',
+  'lifecycle',
+] as const;
+
+function getRecipeModifierComposition(
+  w: Weapon,
+  registries: WeaponRecipeCompilerRegistries,
+  modifiers: readonly GenericModifierType[] = w.modifiers
+): {
+  readonly adjustments: readonly TrustedWeaponPlanAdjustment[];
+  readonly castMultiplier: number;
+} {
   const adjustments: TrustedWeaponPlanAdjustment[] = [];
   for (const tier of [4, 8] as const) {
     const evolutionId = w.evolutions[tier];
@@ -120,13 +151,59 @@ function getRecipeAdjustments(w: Weapon): TrustedWeaponPlanAdjustment[] {
     if (effects) adjustments.push(...effects);
   }
 
-  if (hasModifierEffect(w, 'onFire', 'split')) {
-    adjustments.push({ operation: 'multiply', stat: 'count', value: 2 });
+  const stackCounts = new Map<GenericModifierType, number>();
+  for (const modifier of modifiers) {
+    stackCounts.set(modifier, (stackCounts.get(modifier) ?? 0) + 1);
   }
-  if (hasModifierEffect(w, 'onFire', 'projectileSpeed')) {
-    adjustments.push({ operation: 'multiply', stat: 'speed', value: 1.28 });
+  const handlers = [...stackCounts.entries()].map(([type, stacks]) => {
+    const stableId = getCoreWeaponModifierId(type);
+    const handler = registries.weaponModifiers.require(stableId);
+    if (
+      !w.recipe?.modifierPolicy.allowedIds.includes(stableId) ||
+      w.recipe.modifierPolicy.deniedIds.includes(stableId)
+    ) {
+      throw new Error(`Modifier ${stableId} is not allowed by ${w.definitionId}`);
+    }
+    return { handler, stacks };
+  });
+  handlers.sort((left, right) => {
+    const phaseDelta = MODIFIER_PHASE_ORDER.indexOf(left.handler.descriptor.phase) -
+      MODIFIER_PHASE_ORDER.indexOf(right.handler.descriptor.phase);
+    return phaseDelta || left.handler.descriptor.id.localeCompare(right.handler.descriptor.id);
+  });
+  for (const { handler, stacks } of handlers) {
+    adjustments.push(...handler.getAdjustments(stacks));
   }
-  return adjustments;
+  return {
+    adjustments,
+    castMultiplier: handlers.reduce(
+      (total, { handler, stacks }) => total * handler.getCastMultiplier(stacks),
+      1
+    ),
+  };
+}
+
+function compileWeaponRuntimePlan(
+  w: Weapon,
+  registries: WeaponRecipeCompilerRegistries,
+  modifiers: readonly GenericModifierType[] = w.modifiers
+): WeaponRuntimePlan {
+  if (!w.recipe) throw new Error(`Weapon ${w.definitionId} has no recipe`);
+  const modifierComposition = getRecipeModifierComposition(w, registries, modifiers);
+  return compileProjectileWeaponRecipe(w.definitionId, w.recipe, registries, {
+    stats: {
+      damage: w.damage,
+      cooldown: w.cooldown,
+      speed: w.speed,
+      radius: w.recipe.projectile.radius * w.area,
+      count: w.count,
+      pierce: w.pierce,
+      lifetime: w.duration,
+      knockback: w.knockback,
+    },
+    adjustments: modifierComposition.adjustments,
+    castMultiplier: modifierComposition.castMultiplier,
+  });
 }
 
 function captureWeaponRuntimePlanSourceState(
@@ -176,20 +253,44 @@ export function rebuildWeaponRuntimePlan(
     w.runtimePlanSourceState = undefined;
     return;
   }
-  w.runtimePlan = compileProjectileWeaponRecipe(w.definitionId, w.recipe, registries, {
-    stats: {
-      damage: w.damage,
-      cooldown: w.cooldown,
-      speed: w.speed,
-      radius: w.recipe.projectile.radius * w.area,
-      count: w.count,
-      pierce: w.pierce,
-      lifetime: w.duration,
-      knockback: w.knockback,
-    },
-    adjustments: getRecipeAdjustments(w),
-  });
+  w.runtimePlan = compileWeaponRuntimePlan(w, registries);
   w.runtimePlanSourceState = captureWeaponRuntimePlanSourceState(w);
+}
+
+export function canApplyModifierToWeapon(
+  w: Weapon,
+  modifierType: GenericModifierType,
+  registries: WeaponRecipeCompilerRegistries = getDefaultEngineRegistrySnapshot()
+): boolean {
+  const modifier = GENERIC_MODIFIER_DATA[modifierType];
+  const currentStacks = w.modifiers.filter((item) => item === modifierType).length;
+  if (
+    !modifier.compatibleFamilies.includes(w.family) ||
+    currentStacks >= modifier.maxStacks
+  ) {
+    return false;
+  }
+  if (!w.recipe) return true;
+
+  const stableId = getCoreWeaponModifierId(modifierType);
+  const handler = registries.weaponModifiers.get(stableId);
+  if (
+    !handler ||
+    !handler.descriptor.compatibleFamilies.includes(w.family) ||
+    !w.recipe.modifierPolicy.allowedIds.includes(stableId) ||
+    w.recipe.modifierPolicy.deniedIds.includes(stableId)
+  ) {
+    return false;
+  }
+  const ownedIds = new Set(w.modifiers.map(getCoreWeaponModifierId));
+  if (handler.descriptor.conflictsWith.some((id) => ownedIds.has(id))) return false;
+
+  try {
+    compileWeaponRuntimePlan(w, registries, [...w.modifiers, modifierType]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function updateWeapon(
@@ -284,6 +385,7 @@ export function createCoreWeaponBehaviorRegistry(): ReadonlyRegistry<WeaponBehav
 export function createCoreEngineRegistrySnapshot(): EngineRegistrySnapshot {
   return buildEngineRegistrySnapshot([
     CORE_PROJECTILE_PRIMITIVE_PLUGIN,
+    CORE_WEAPON_MODIFIER_PLUGIN,
     CORE_WEAPON_BEHAVIOR_PLUGIN,
   ]);
 }
@@ -539,6 +641,7 @@ function spawnPooledWeaponProjectile(
   p.beamLength = beamLength;
   p.arcAngle = arcAngle;
   p.runtimePlan = runtimePlan;
+  p.useLegacyProjectileSprite = w.useLegacyProjectileSprite;
   attachWeaponModifiers(p, w);
   if (canApplyProjectileOrbit(w, p)) {
     attachProjectileOrbit(p, projectileIndex);

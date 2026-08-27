@@ -599,6 +599,7 @@ export class ProjectileCombat {
     child.reflectRemaining = nextRemaining;
     this.clearProjectileMotionExtras(child);
     child.runtimePlan = projectile.runtimePlan;
+    child.useLegacyProjectileSprite = projectile.useLegacyProjectileSprite;
     ctx.projectiles.push(child);
     return true;
   }

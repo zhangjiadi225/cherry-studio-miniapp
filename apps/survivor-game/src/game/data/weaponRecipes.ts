@@ -1,5 +1,6 @@
 import { WeaponEvolutionId } from '../types';
 import { CoreWeaponPrimitiveId } from '../behaviors/weapon/CoreProjectilePrimitives';
+import { CoreWeaponModifierId } from '../behaviors/weapon/CoreWeaponModifiers';
 import type {
   ProjectileWeaponRecipeV1,
   TrustedWeaponPlanAdjustment,
@@ -92,7 +93,7 @@ export const MAGIC_WAND_RECIPE = freezeProjectileWeaponRecipe({
     },
   },
   modifierPolicy: {
-    allowedIds: [],
+    allowedIds: Object.values(CoreWeaponModifierId),
     deniedIds: [],
   },
 } as const satisfies ProjectileWeaponRecipeV1);

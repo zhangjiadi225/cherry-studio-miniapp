@@ -11,7 +11,7 @@ import type {
   MapObstacle,
 } from '../types';
 import {
-  COLORS, GAME_DURATION, WEAPON_DATA, STARTING_WEAPON_TYPES, PASSIVE_DATA, ENEMY_DATA,
+  COLORS, GAME_DURATION, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA,
   GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA, getWeaponMetadataLabel,
   PLAYER_WEAPON_SLOT_LIMIT,
 } from '../constants';
@@ -346,14 +346,13 @@ function drawDesktopLoadoutDocks(ctx: CanvasRenderingContext2D, player: Player, 
   const weaponY = h - weaponSize - 18;
   for (let i = 0; i < player.weapons.length; i++) {
     const wep = player.weapons[i];
-    const data = WEAPON_DATA[wep.type];
     const wx = padding + i * weaponStep;
     drawLoadoutSlot(
       ctx,
       wx,
       weaponY,
       weaponSize,
-      data.icon,
+      wep.icon,
       wep.level,
       'rgba(255,126,126,0.62)',
       '#44ff44',
@@ -707,6 +706,14 @@ const DESKTOP_FONT = '"Segoe UI", "PingFang SC", sans-serif';
 
 type Rect = { x: number; y: number; w: number; h: number };
 
+export type StartingWeaponView = {
+  readonly id: string;
+  readonly name: string;
+  readonly icon: string;
+  readonly legacyType: WeaponType;
+  readonly generated: boolean;
+};
+
 type MenuLayout = {
   content: Rect;
   rail: Rect;
@@ -758,15 +765,19 @@ export function getRunDifficultyCardRects(w: number, h: number): Array<Rect & { 
   }));
 }
 
-export function getStartingWeaponCardRects(w: number, h: number): Array<Rect & { weaponType: WeaponType }> {
+export function getStartingWeaponCardRects(
+  w: number,
+  h: number,
+  weapons: readonly StartingWeaponView[]
+): Array<Rect & { definitionId: string }> {
   const difficultyCards = getRunDifficultyCardRects(w, h);
   const difficultyBottom = difficultyCards.reduce((bottom, card) => Math.max(bottom, card.y + card.h), 0);
   const startButton = getDesktopStartButtonRect(w, h);
   const { content } = getMenuLayout(w, h);
   const mobile = isMobileViewport(w, h);
-  const count = STARTING_WEAPON_TYPES.length;
+  const count = weapons.length;
   const gap = mobile ? 6 : 8;
-  const columns = mobile ? Math.min(5, count) : count;
+  const columns = mobile ? Math.min(5, count) : Math.min(6, count);
   const rows = Math.ceil(count / columns);
   const maxRowW = Math.min(content.w - 32, w - 36);
   const baseSize = mobile ? 42 : 52;
@@ -779,11 +790,11 @@ export function getStartingWeaponCardRects(w: number, h: number): Array<Rect & {
   const x = w / 2 - totalW / 2;
   const y = Math.max(difficultyBottom + labelH + 8, startButton.y - totalH - 14);
 
-  return STARTING_WEAPON_TYPES.map((weaponType, index) => {
+  return weapons.map((weapon, index) => {
     const col = index % columns;
     const row = Math.floor(index / columns);
     return {
-      weaponType,
+      definitionId: weapon.id,
       x: x + col * (size + gap),
       y: y + row * (size + gap),
       w: size,
@@ -823,13 +834,14 @@ export function drawDesktop(
   meta: MetaState,
   activeTab: DesktopTab,
   activeCodexTab: CodexTab,
-  selectedStartingWeapon: WeaponType,
+  selectedStartingWeaponId: string,
+  startingWeapons: readonly StartingWeaponView[],
   hoveredStarId?: MetaUpgradeNode['id']
 ) {
   drawDesktopBackdrop(rc);
 
   if (activeTab === 'start') {
-    drawStartButton(rc, meta.selectedDifficulty, selectedStartingWeapon);
+    drawStartButton(rc, meta.selectedDifficulty, selectedStartingWeaponId, startingWeapons);
   } else if (activeTab === 'skins') {
     drawSkinPanel(rc, meta);
   } else if (activeTab === 'growth') {
@@ -970,7 +982,12 @@ function drawDesktopBackdrop(rc: RenderContext) {
   }
 }
 
-function drawStartButton(rc: RenderContext, selectedDifficulty: RunDifficultyId, selectedStartingWeapon: WeaponType) {
+function drawStartButton(
+  rc: RenderContext,
+  selectedDifficulty: RunDifficultyId,
+  selectedStartingWeaponId: string,
+  startingWeapons: readonly StartingWeaponView[]
+) {
   const { ctx, w, h } = rc;
   const mobile = isMobileViewport(w, h);
   const cards = getRunDifficultyCardRects(w, h);
@@ -1032,7 +1049,7 @@ function drawStartButton(rc: RenderContext, selectedDifficulty: RunDifficultyId,
     }
   }
 
-  drawStartingWeaponPicker(rc, selectedStartingWeapon);
+  drawStartingWeaponPicker(rc, selectedStartingWeaponId, startingWeapons);
 
   const b = getDesktopStartButtonRect(w, h);
   ctx.save();
@@ -1058,14 +1075,18 @@ function drawStartButton(rc: RenderContext, selectedDifficulty: RunDifficultyId,
   ctx.fillText('开始夜潮', b.x + b.w / 2, b.y + b.h / 2);
 }
 
-function drawStartingWeaponPicker(rc: RenderContext, selectedStartingWeapon: WeaponType) {
+function drawStartingWeaponPicker(
+  rc: RenderContext,
+  selectedStartingWeaponId: string,
+  weapons: readonly StartingWeaponView[]
+) {
   const { ctx, w, h } = rc;
   const mobile = isMobileViewport(w, h);
-  const cards = getStartingWeaponCardRects(w, h);
+  const cards = getStartingWeaponCardRects(w, h, weapons);
   if (cards.length === 0) return;
 
   const first = cards[0];
-  const selectedData = WEAPON_DATA[selectedStartingWeapon];
+  const selectedData = weapons.find((weapon) => weapon.id === selectedStartingWeaponId) ?? weapons[0];
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
   ctx.font = `800 ${mobile ? 12 : 14}px ${DESKTOP_FONT}`;
@@ -1077,8 +1098,9 @@ function drawStartingWeaponPicker(rc: RenderContext, selectedStartingWeapon: Wea
   );
 
   for (const card of cards) {
-    const data = WEAPON_DATA[card.weaponType];
-    const selected = card.weaponType === selectedStartingWeapon;
+    const data = weapons.find((weapon) => weapon.id === card.definitionId);
+    if (!data) continue;
+    const selected = card.definitionId === selectedStartingWeaponId;
     const accent = selected ? '#ffd166' : colorWithAlpha('#8fe8ff', 0.38);
 
     ctx.save();
@@ -1094,9 +1116,9 @@ function drawStartingWeaponPicker(rc: RenderContext, selectedStartingWeapon: Wea
     ctx.roundRect(card.x + 4, card.y + 4, card.w - 8, card.h - 8, 6);
     ctx.fill();
 
-    const drew = weaponSpriteRegistry.drawWeapon(
+    const drew = !data.generated && weaponSpriteRegistry.drawWeapon(
       ctx,
-      card.weaponType,
+      data.legacyType,
       card.x + card.w / 2,
       card.y + card.h / 2 - (card.h > 44 ? 1 : 0),
       card.w * 0.74,
@@ -1680,7 +1702,6 @@ function getModifierSummary(modifiers: readonly string[]): string {
 function getRunWeaponRows(player: Player): RunSummaryRow[] {
   if (player.weapons.length === 0) return [{ icon: '—', title: '暂无武器', detail: '本局还没有获得武器' }];
   return player.weapons.map((weapon) => {
-    const data = WEAPON_DATA[weapon.type];
     const evolutionSummary = getWeaponEvolutionSummary(weapon);
     const details = [
       `伤害 ${Math.round(weapon.damage)}`,
@@ -1689,8 +1710,8 @@ function getRunWeaponRows(player: Player): RunSummaryRow[] {
       evolutionSummary ? `进化 ${evolutionSummary}` : '',
     ].filter(Boolean);
     return {
-      icon: data.icon,
-      title: `${data.name} Lv${weapon.level}`,
+      icon: weapon.icon,
+      title: `${weapon.name} Lv${weapon.level}`,
       detail: details.join(' · '),
       accent: '#ffb36b',
     };
@@ -1714,8 +1735,8 @@ function getRunAbilityRows(player: Player): RunSummaryRow[] {
   const rows = player.weapons
     .filter((weapon) => weapon.modifiers.length > 0)
     .map((weapon) => ({
-      icon: WEAPON_DATA[weapon.type].icon,
-      title: WEAPON_DATA[weapon.type].name,
+      icon: weapon.icon,
+      title: weapon.name,
       detail: getModifierSummary(weapon.modifiers),
       accent: '#d3a8ff',
     }));

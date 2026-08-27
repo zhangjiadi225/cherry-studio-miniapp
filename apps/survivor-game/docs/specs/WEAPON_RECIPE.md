@@ -14,6 +14,8 @@ AI 可以提供颜色、尺寸、速度、数量、阵型参数和受限视觉�
 
 当前代码中的 `builtin.weapon.magic-wand`、`builtin.weapon.fire-wand` 等 `behaviorId` 是迁移期兼容适配器。它们完成了从 `WeaponType switch` 到 Registry 分发的第一步，但仍然是一件武器对应一个较粗行为，不是最终原子层。
 
+当前投射物闭环已经包含 Trigger、Targeting、Cast Origin、Emission Pattern、Motion、Collision、HitEffect、Render、现有通用 Modifier Registry、Capability Catalog、严格编译和动态 ContentPack 装配。Lifecycle 数组目前只能为空，Burst 目前固定为单次；Validator 会拒绝引用未实现能力，而不会降级执行。
+
 本规范第一阶段只要求打通普通玩家投射物武器。Aura、Orbit、Strike、Zone、Swing 等交付模式在现有实现保持不变，等投射物配方闭环稳定后再扩展，避免一次性抽象所有武器。
 
 ## 2. 核心原则

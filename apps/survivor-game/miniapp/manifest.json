@@ -14,5 +14,5 @@
     "path": "sprites/units/player_wanderer.png",
     "sha256": "9005095c846fa1e8f078a56559096614bdbb559d6e2884ab668ab8dc8cfe9b24"
   },
-  "permissions": ["storage.get", "storage.set"]
+  "permissions": ["ai.chat", "storage.get", "storage.set"]
 }

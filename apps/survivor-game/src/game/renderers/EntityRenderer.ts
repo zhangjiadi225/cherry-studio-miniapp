@@ -272,7 +272,7 @@ function getEquippedWeaponVisuals(player: Player, modes?: Set<WeaponDisplayMode>
   const visuals: EquippedWeaponVisual[] = [];
   const seen = new Set<WeaponType>();
   for (const weapon of player.weapons) {
-    const metadata = WEAPON_DATA[weapon.type].metadata;
+    const metadata = weapon.metadata;
     if (metadata.displayMode === 'none' || seen.has(weapon.type)) continue;
     if (modes && !modes.has(metadata.displayMode)) continue;
     seen.add(weapon.type);
@@ -287,7 +287,7 @@ function getEquippedWeaponVisuals(player: Player, modes?: Set<WeaponDisplayMode>
 }
 
 function hasEquippedWeaponDisplayMode(player: Player, mode: WeaponDisplayMode): boolean {
-  return player.weapons.some((weapon) => WEAPON_DATA[weapon.type].metadata.displayMode === mode);
+  return player.weapons.some((weapon) => weapon.metadata.displayMode === mode);
 }
 
 function drawWeaponFallbackIcon(
@@ -1305,7 +1305,7 @@ export function drawProjectile(rc: RenderContext, p: Projectile) {
   const alpha = Math.min(1, lifeRatio / 0.3);
 
   if (drawRuntimeProjectileVisual(rc, p, alpha)) {
-    if (p.type === WeaponType.MAGIC_WAND) {
+    if (p.useLegacyProjectileSprite && p.type === WeaponType.MAGIC_WAND) {
       weaponSpriteRegistry.drawWeapon(ctx, WeaponType.MAGIC_WAND, p.x, p.y, p.radius * 3.1, {
         alpha,
         rotation: getProjectileAngle(p) + Math.PI / 4,

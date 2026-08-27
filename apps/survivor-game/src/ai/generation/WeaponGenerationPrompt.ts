@@ -1,0 +1,120 @@
+import { WeaponType } from '../../game/types';
+import { WEAPON_DATA } from '../../game/data/weapons';
+import type { WeaponCapabilityCatalogV1 } from '../../game/recipes/weapon/WeaponRuntimePlan';
+import type { AiMessage } from '../AiGateway';
+
+export const WEAPON_GENERATION_PROMPT_VERSION = 'weapon.v1';
+
+function compactCatalog(catalog: WeaponCapabilityCatalogV1) {
+  return {
+    catalogVersion: catalog.catalogVersion,
+    primitives: catalog.primitives.map((primitive) => ({
+      id: primitive.id,
+      kind: primitive.kind,
+      parameterSchema: primitive.parameterSchema,
+      compatibility: primitive.compatibility,
+      budget: primitive.budget,
+    })),
+    modifiers: catalog.modifiers.map((modifier) => ({
+      id: modifier.id,
+      phase: modifier.phase,
+      maxStacks: modifier.maxStacks,
+      compatibleFamilies: modifier.compatibleFamilies,
+      conflictsWith: modifier.conflictsWith,
+    })),
+  };
+}
+
+export function createWeaponGenerationMessages(
+  userIntent: string,
+  catalog: WeaponCapabilityCatalogV1
+): readonly AiMessage[] {
+  const sample = WEAPON_DATA[WeaponType.MAGIC_WAND];
+  if (!sample.recipe) throw new Error('Built-in weapon sample is missing its runtime recipe');
+
+  const example = {
+    proposalVersion: 1,
+    name: sample.name,
+    description: sample.desc,
+    recipe: sample.recipe,
+    progression: {
+      maxLevel: sample.maxLevel,
+      perLevel: {
+        damage: sample.perLevel.damage,
+        cooldown: sample.perLevel.cooldown,
+        projectileSpeed: sample.perLevel.speed,
+      },
+    },
+    balance: {
+      budgetTier: 2,
+      intendedRole: 'single-target',
+    },
+  };
+
+  const system = [
+    'You design one declarative projectile weapon for Night Survivor.',
+    'Return exactly one JSON object and no explanation or Markdown.',
+    'Use only fields shown by the output contract and only registered IDs from the capability catalog.',
+    'Never output code, expressions, URLs, HTML, SVG, CSS, shaders, module paths, app-owned content IDs, timestamps, pack status, or host information.',
+    'The game deterministically validates every number, reference, balance limit, and performance limit.',
+  ].join(' ');
+  const user = JSON.stringify({
+    task: 'weapon',
+    promptVersion: WEAPON_GENERATION_PROMPT_VERSION,
+    userIntent,
+    outputContract: {
+      proposalVersion: 1,
+      name: 'string 1..32',
+      description: 'string 1..180',
+      recipe: {
+        recipeVersion: 1,
+        delivery: 'projectile',
+        trigger: 'PrimitiveRef',
+        targeting: 'PrimitiveRef',
+        emission: {
+          emitterId: 'builtin.emitter.projectile',
+          origin: 'PrimitiveRef',
+          count: 'integer',
+          burstCount: 1,
+          burstInterval: 0,
+          pattern: 'PrimitiveRef',
+        },
+        projectile: {
+          damage: 'number', radius: 'number', speed: 'number', lifetime: 'number',
+          pierce: 'integer', knockback: 'number', motion: 'PrimitiveRef',
+          collision: 'PrimitiveRef', hitEffects: 'PrimitiveRef[]', lifecycle: 'PrimitiveRef[]',
+          visual: {
+            body: 'PrimitiveRef',
+            palette: { primary: '#RRGGBB', secondary: '#RRGGBB?', accent: '#RRGGBB?' },
+            scale: 'number', opacity: 'number', glow: 'bounded object?',
+            layers: 'PrimitiveRef[]', trail: 'PrimitiveRef?', particles: 'PrimitiveRef?',
+          },
+        },
+        modifierPolicy: { allowedIds: 'registered modifier ID[]', deniedIds: 'registered modifier ID[]' },
+      },
+      progression: {
+        maxLevel: 'integer 1..8',
+        perLevel: 'only damage,cooldown,projectileSpeed,projectileRadius,count,pierce,lifetime,knockback',
+      },
+      balance: {
+        budgetTier: 'integer 1..5',
+        intendedRole: 'single-target|area|control|defense|hybrid',
+      },
+      PrimitiveRef: { primitiveId: 'registered ID', params: 'closed JSON object matching its parameterSchema' },
+    },
+    capabilityCatalog: compactCatalog(catalog),
+    balancePolicy: {
+      baseDirectDpsLimit: 'projectile.damage * effective direct projectiles per second <= 45 * budgetTier',
+      maxDirectDpsLimit: 'same value at max level and all allowed modifiers at max stacks <= 150 * budgetTier',
+      maximumEffectiveProjectilesPerCast: 64,
+      maximumTheoreticalConcurrentProjectiles: 420,
+      lifecycle: 'must be empty until lifecycle handlers are published',
+      damageEffect: 'hitEffects must include builtin.effect.damage exactly once',
+    },
+    validRuntimeExample: example,
+  });
+  return Object.freeze([
+    Object.freeze({ role: 'system', content: system }),
+    Object.freeze({ role: 'user', content: user }),
+  ]);
+}

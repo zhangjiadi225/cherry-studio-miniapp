@@ -14,5 +14,8 @@
     "typescript": "~6.0.2",
     "vite": "^8.0.12",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@cherry-miniapp/kit": "link:/Users/jd/cherry-studio-miniapp/foundation/packages/runtime"
   }
 }

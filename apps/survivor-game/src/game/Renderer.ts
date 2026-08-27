@@ -32,6 +32,7 @@ import {
   getAudioButtonRect as getAudioRect,
   getDesktopStartButtonRect as getStartButtonRect,
   getStartingWeaponCardRects as getStartingWeaponRects,
+  type StartingWeaponView,
   getMetaStarNodeRects as getStarNodeRects,
   getSkinCardRects as getSkinRects,
   getCodexTabRects as getCodexRects,
@@ -116,8 +117,10 @@ export class Renderer {
   getPauseButtonRect() { return getPauseRect(this.w); }
   getAudioButtonRect() { return getAudioRect(this.w); }
   getDesktopStartButtonRect() { return getStartButtonRect(this.w, this.h); }
-  getStartingWeaponCardRects(): Array<{ x: number; y: number; w: number; h: number; weaponType: WeaponType }> {
-    return getStartingWeaponRects(this.w, this.h);
+  getStartingWeaponCardRects(
+    weapons: readonly StartingWeaponView[]
+  ): Array<{ x: number; y: number; w: number; h: number; definitionId: string }> {
+    return getStartingWeaponRects(this.w, this.h, weapons);
   }
   getDesktopTabRects() { return getTabRects(this.w, this.h); }
   getMetaStarNodeRects() { return getStarNodeRects(this.w, this.h); }
@@ -164,10 +167,11 @@ export class Renderer {
     meta: MetaState,
     tab: DesktopTab,
     codexTab: CodexTab,
-    selectedStartingWeapon: WeaponType,
+    selectedStartingWeaponId: string,
+    startingWeapons: readonly StartingWeaponView[],
     hoveredStarId?: MetaUpgradeNode['id']
   ) {
-    drawDesktop(this.rc, meta, tab, codexTab, selectedStartingWeapon, hoveredStarId);
+    drawDesktop(this.rc, meta, tab, codexTab, selectedStartingWeaponId, startingWeapons, hoveredStarId);
   }
   drawPaused(player: Player, elapsed: number, killCount: number, difficultyName: string) {
     drawPaused(this.rc, player, elapsed, killCount, difficultyName);

@@ -13,6 +13,7 @@ import {
 } from '../../constants';
 import { SUPPLY_DATA, getSupplyCost } from '../../data/supplies';
 import { applyWeaponEvolution, getAvailableWeaponEvolutionChoices } from '../../data/weaponEvolutions';
+import { getBuiltinWeaponContentId } from '../../data/weapons';
 import {
   getModifierQuality,
   getNewWeaponQuality,
@@ -21,7 +22,12 @@ import {
   getWeaponEvolutionQuality,
   getWeaponLevelQuality,
 } from '../../data/cardQuality';
-import { createWeapon, rebuildWeaponRuntimePlan, upgradeWeapon } from './Weapon';
+import {
+  canApplyModifierToWeapon,
+  createWeapon,
+  rebuildWeaponRuntimePlan,
+  upgradeWeapon,
+} from './Weapon';
 import { applyPassive, getPassiveLevel, removePassive } from '../player/Player';
 import { shuffleArray } from '../../utils/math';
 
@@ -77,16 +83,16 @@ export function generateUpgradeOptions(
 function getWeaponLevelOptions(player: Player): UpgradeOption[] {
   const options: UpgradeOption[] = [];
   for (const w of player.weapons) {
-    const data = WEAPON_DATA[w.type];
-    if (data.maxLevel !== undefined && w.level >= data.maxLevel) continue;
+    if (w.maxLevel !== undefined && w.level >= w.maxLevel) continue;
     const nextLevel = w.level + 1;
     const rarity = getWeaponLevelQuality(w).rarity;
     options.push({
-      title: `${data.name} Lv${nextLevel}`,
+      title: `${w.name} Lv${nextLevel}`,
       description: getWeaponUpgradeDesc(w),
-      icon: data.icon,
+      icon: w.icon,
       type: 'weapon',
       weaponType: w.type,
+      weaponDefinitionId: w.definitionId,
       rarity,
       cost: applyRarityCost(getWeaponUpgradeBaseCost(player, w), rarity),
       isMaxed: false,
@@ -98,15 +104,16 @@ function getWeaponLevelOptions(player: Player): UpgradeOption[] {
 function getWeaponEvolutionOptions(player: Player): UpgradeOption[] {
   const options: UpgradeOption[] = [];
   for (const weapon of player.weapons) {
-    const data = WEAPON_DATA[weapon.type];
+    if (weapon.generated || weapon.definitionId !== getBuiltinWeaponContentId(weapon.type)) continue;
     for (const choice of getAvailableWeaponEvolutionChoices(weapon)) {
       const rarity = getWeaponEvolutionQuality(choice).rarity;
       options.push({
-        title: `${data.name} · ${choice.name}`,
+        title: `${weapon.name} · ${choice.name}`,
         description: choice.desc,
         icon: choice.icon,
         type: 'weapon_evolution',
         weaponType: weapon.type,
+        weaponDefinitionId: weapon.definitionId,
         evolutionId: choice.id,
         rarity,
         cost: applyRarityCost(getWeaponEvolutionBaseCost(player, weapon, choice.tier), rarity),
@@ -121,10 +128,11 @@ function getNewWeaponOptions(player: Player): UpgradeOption[] {
   const options: UpgradeOption[] = [];
   if (player.weapons.length >= PLAYER_WEAPON_SLOT_LIMIT) return options;
 
-  const ownedTypes = new Set(player.weapons.map(w => w.type));
+  const ownedDefinitionIds = new Set(player.weapons.map(w => w.definitionId));
   for (const [type, data] of Object.entries(WEAPON_DATA)) {
-    if (ownedTypes.has(type as WeaponType)) continue;
     const weaponType = type as WeaponType;
+    const weaponDefinitionId = getBuiltinWeaponContentId(weaponType);
+    if (ownedDefinitionIds.has(weaponDefinitionId)) continue;
     const rarity = getNewWeaponQuality(weaponType).rarity;
     options.push({
       title: `${data.name} (新!)`,
@@ -132,6 +140,7 @@ function getNewWeaponOptions(player: Player): UpgradeOption[] {
       icon: data.icon,
       type: 'weapon',
       weaponType,
+      weaponDefinitionId,
       rarity,
       cost: applyRarityCost(getNewWeaponBaseCost(player), rarity),
       isMaxed: false,
@@ -187,6 +196,7 @@ function getUpgradeOptionKey(option: UpgradeOption): string {
   return [
     option.type,
     option.weaponType ?? '',
+    option.weaponDefinitionId ?? '',
     option.evolutionId ?? '',
     option.passiveType ?? '',
     option.modifierType ?? '',
@@ -233,7 +243,9 @@ export function getRerollCost(paidRerollsThisRound: number): number {
 
 export function applyUpgrade(player: Player, option: UpgradeOption) {
   if (option.type === 'weapon' && option.weaponType) {
-    const existing = player.weapons.find(w => w.type === option.weaponType);
+    const existing = option.weaponDefinitionId
+      ? player.weapons.find(w => w.definitionId === option.weaponDefinitionId)
+      : player.weapons.find(w => w.type === option.weaponType);
     if (existing) {
       if (!upgradeWeapon(existing)) return false;
       existing.purchaseValue = (existing.purchaseValue ?? 0) + option.cost;
@@ -244,15 +256,17 @@ export function applyUpgrade(player: Player, option: UpgradeOption) {
       player.weapons.push(weapon);
     }
   } else if (option.type === 'weapon_evolution' && option.weaponType && option.evolutionId) {
-    const weapon = player.weapons.find(w => w.type === option.weaponType);
+    const weapon = option.weaponDefinitionId
+      ? player.weapons.find(w => w.definitionId === option.weaponDefinitionId)
+      : player.weapons.find(w => w.type === option.weaponType);
     if (!weapon || !applyWeaponEvolution(weapon, option.evolutionId)) return false;
     rebuildWeaponRuntimePlan(weapon);
     weapon.purchaseValue = (weapon.purchaseValue ?? 0) + option.cost;
   } else if (option.type === 'modifier' && option.weaponType && option.modifierType) {
-    const weapon = player.weapons.find(w => w.type === option.weaponType);
-    const modifier = GENERIC_MODIFIER_DATA[option.modifierType];
-    const stackCount = weapon?.modifiers.filter(m => m === option.modifierType).length ?? 0;
-    if (weapon && stackCount < modifier.maxStacks) {
+    const weapon = option.weaponDefinitionId
+      ? player.weapons.find(w => w.definitionId === option.weaponDefinitionId)
+      : player.weapons.find(w => w.type === option.weaponType);
+    if (weapon && canApplyModifierToWeapon(weapon, option.modifierType)) {
       weapon.modifiers.push(option.modifierType);
       weapon.modifierMask |= GENERIC_MODIFIER_MASK[option.modifierType];
       rebuildWeaponRuntimePlan(weapon);
@@ -272,15 +286,15 @@ export function applyUpgrade(player: Player, option: UpgradeOption) {
 
 export function getSellableCards(player: Player): SellableCard[] {
   const weaponCards = player.weapons.map((weapon) => {
-    const data = WEAPON_DATA[weapon.type];
     const refund = getSellRefund(weapon.purchaseValue);
     return {
-      id: `weapon:${weapon.type}`,
-      title: `${data.name} Lv${weapon.level}`,
+      id: `weapon:${weapon.definitionId}`,
+      title: `${weapon.name} Lv${weapon.level}`,
       description: '卖出会移除等级、进化和模块',
-      icon: data.icon,
+      icon: weapon.icon,
       type: 'weapon' as const,
       weaponType: weapon.type,
+      weaponDefinitionId: weapon.definitionId,
       level: weapon.level,
       refund,
       sellable: player.weapons.length > 1 && refund > 0,
@@ -311,7 +325,9 @@ export function sellOwnedCard(player: Player, cardId: string): SellableCard | un
   if (!card || !card.sellable) return undefined;
 
   if (card.type === 'weapon' && card.weaponType) {
-    const index = player.weapons.findIndex((weapon) => weapon.type === card.weaponType);
+    const index = card.weaponDefinitionId
+      ? player.weapons.findIndex((weapon) => weapon.definitionId === card.weaponDefinitionId)
+      : player.weapons.findIndex((weapon) => weapon.type === card.weaponType);
     if (index < 0 || player.weapons.length <= 1) return undefined;
     player.weapons.splice(index, 1);
   } else if (card.type === 'passive' && card.passiveType) {
@@ -329,8 +345,7 @@ function getSellRefund(purchaseValue = 0): number {
 }
 
 function getWeaponUpgradeDesc(w: Weapon): string {
-  const d = WEAPON_DATA[w.type];
-  const p = d.perLevel;
+  const p = w.perLevel;
   const parts: string[] = [];
   if (p.damage) parts.push(`伤害+${p.damage}`);
   if (p.count) parts.push(`数量+${p.count}`);
@@ -349,20 +364,20 @@ function getModifierOptions(player: Player, modifierPool: GenericModifierType[])
   const options: UpgradeOption[] = [];
 
   for (const weapon of player.weapons) {
-    const weaponData = WEAPON_DATA[weapon.type];
     for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
       if (!modifierPool.includes(modifier.id)) continue;
       if (weapon.level < modifier.unlockLevel) continue;
       if (!modifier.compatibleFamilies.includes(weapon.family)) continue;
-      if (weapon.modifiers.filter(m => m === modifier.id).length >= modifier.maxStacks) continue;
+      if (!canApplyModifierToWeapon(weapon, modifier.id)) continue;
       const rarity = getModifierQuality(modifier.id, weapon).rarity;
 
       options.push({
-        title: `${modifier.name} · ${weaponData.name}`,
+        title: `${modifier.name} · ${weapon.name}`,
         description: modifier.desc,
         icon: modifier.icon,
         type: 'modifier',
         weaponType: weapon.type,
+        weaponDefinitionId: weapon.definitionId,
         modifierType: modifier.id,
         rarity,
         cost: applyRarityCost(getModifierBaseCost(weapon, modifier.id), rarity),

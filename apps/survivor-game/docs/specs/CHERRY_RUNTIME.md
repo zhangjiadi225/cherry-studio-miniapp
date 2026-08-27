@@ -18,6 +18,8 @@
 - Host 合同变化时先升级 foundation 包，再显式升级本 App 的依赖。
 - 当前只制作 development 构建和本地安装包；发布流程需要用户单独授权。
 
+当前实现说明：经当前本地联合开发方案确认，本仓库使用 `link:/Users/jd/cherry-studio-miniapp/foundation/packages/runtime` 接入 `@cherry-miniapp/kit@0.1.0`。Storage、Visibility、运行时能力探测与 AI 流式调用均经过 kit；manifest 已申请 `ai.chat`、`storage.get` 和 `storage.set`，产品已提供 Forge UI。该绝对 link 只适用于当前本机开发环境，foundation 发布后再升级为可在独立 clone 中解析的正式依赖。
+
 ## 2. 运行环境
 
 ### 2.1 生产
@@ -55,19 +57,18 @@ Platform 层应对上层提供项目语义接口，例如 `StateStore`、`AiGate
 
 ## 4. 权限策略
 
-第一阶段 manifest 建议：
+当前第一阶段 manifest：
 
 ```json
 {
-  "permissions": ["storage.get", "storage.set"],
-  "optionalPermissions": ["ai.chat"]
+  "permissions": ["ai.chat", "storage.get", "storage.set"]
 }
 ```
 
 解释：
 
 - 存档是核心体验，因此 `storage.get`、`storage.set` 为必需权限。
-- AI 不可用时仍可玩内置和已接受内容，因此 `ai.chat` 第一阶段为可选权限。
+- `ai.chat` 用于玩家明确打开 Forge 后发起生成；权限被拒绝或能力不可用时，Forge 显示失败，内置和已接受内容仍由本地引擎运行。
 - `app.getInfo`、`app.getPermissions` 和能力探测不额外申请产品权限。
 - 不申请 `network.fetch`、`file.*`、`notification.show`。
 
@@ -99,7 +100,7 @@ Platform 层应对上层提供项目语义接口，例如 `StateStore`、`AiGate
 
 ## 6. 应用状态文档
 
-当前实现进度：`AppStateStore` 已落地 v1 Envelope、旧 Key 首次迁移、串行事务写入和 UTF-8 字节预算检查。`contentLibrary.packs` 与 `generationJobs` 仍按 `unknown[]` 保存但不会进入运行时；逐版本迁移链、恢复 UI 和 RunCheckpoint 尚未实现。
+当前实现进度：`AppStateStore` 已落地 v1 Envelope、旧 Key 首次迁移、串行事务写入和 UTF-8 字节预算检查。`contentLibrary.packs` 与 `generationJobs` 按 `unknown[]` 保存，在内容快照或 Forge 服务使用时重新校验；接受武器时 Pack 安装、启用和 Job 结果通过一次写入提交。逐版本迁移链、恢复 UI 和 RunCheckpoint 尚未实现。
 
 应用使用一个版本化、可恢复的状态文档作为持久化真值：
 
@@ -222,7 +223,7 @@ source + public/manifest.json
 - 使用发布的 `@cherry-miniapp/cli` / `cherry-miniapp`，不自行维护 ZIP 格式。
 - CLI 必须验证 manifest、entry、icon hash、文件数量、体积、symlink 和权限。
 - 默认只生成 development 构建。release/production、上传、分发清单和发布都需要当前任务的用户明确授权。
-- 本地 workspace link 只能用于开发；提交的依赖和 lockfile 必须能在独立 clone 中从 registry 解析。
+- 当前用户已确认本机 Cherry 与 MiniApp 联合开发使用 workspace `link:`；它只能用于当前开发环境，发布或要求独立 clone 前必须替换为 foundation 的可解析正式版本。
 
 ## 13. 发布前 Host 验证
 

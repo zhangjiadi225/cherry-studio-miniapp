@@ -13,6 +13,7 @@ import type {
   ProjectileMotionPrimitive,
   ProjectileRenderPrimitive,
   TargetingPrimitive,
+  TrustedWeaponModifierHandler,
   WeaponTriggerPrimitive,
 } from '../recipes/weapon/WeaponRuntimePlan';
 
@@ -27,6 +28,7 @@ export interface EnginePluginApi {
   readonly hitEffects: Registry<HitEffectPrimitive>;
   readonly projectileLifecycles: Registry<ProjectileLifecyclePrimitive>;
   readonly projectileRenderers: Registry<ProjectileRenderPrimitive>;
+  readonly weaponModifiers: Registry<TrustedWeaponModifierHandler>;
 }
 
 export interface EnginePlugin {
@@ -47,6 +49,7 @@ export interface EngineRegistrySnapshot {
   readonly hitEffects: ReadonlyRegistry<HitEffectPrimitive>;
   readonly projectileLifecycles: ReadonlyRegistry<ProjectileLifecyclePrimitive>;
   readonly projectileRenderers: ReadonlyRegistry<ProjectileRenderPrimitive>;
+  readonly weaponModifiers: ReadonlyRegistry<TrustedWeaponModifierHandler>;
 }
 
 export function buildEngineRegistrySnapshot(
@@ -63,6 +66,7 @@ export function buildEngineRegistrySnapshot(
   const hitEffects = new Registry<HitEffectPrimitive>('hit effects');
   const projectileLifecycles = new Registry<ProjectileLifecyclePrimitive>('projectile lifecycles');
   const projectileRenderers = new Registry<ProjectileRenderPrimitive>('projectile renderers');
+  const weaponModifiers = new Registry<TrustedWeaponModifierHandler>('weapon modifiers');
   const api: EnginePluginApi = Object.freeze({
     weaponBehaviors,
     weaponTriggers,
@@ -74,6 +78,7 @@ export function buildEngineRegistrySnapshot(
     hitEffects,
     projectileLifecycles,
     projectileRenderers,
+    weaponModifiers,
   });
 
   for (const plugin of plugins) {
@@ -97,5 +102,6 @@ export function buildEngineRegistrySnapshot(
     hitEffects: hitEffects.freeze(),
     projectileLifecycles: projectileLifecycles.freeze(),
     projectileRenderers: projectileRenderers.freeze(),
+    weaponModifiers: weaponModifiers.freeze(),
   });
 }

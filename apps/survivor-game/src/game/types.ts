@@ -82,8 +82,27 @@ export interface Player extends PlayerMovement, PlayerCombatStats {
 export interface Weapon {
   type: WeaponType;
   definitionId: string;
+  sourcePackId: string;
+  generated: boolean;
+  name: string;
+  icon: string;
+  description: string;
   behaviorId: string;
   family: WeaponFamily;
+  metadata: WeaponMetadata;
+  perLevel: {
+    damage?: number;
+    cooldown?: number;
+    speed?: number;
+    area?: number;
+    count?: number;
+    pierce?: number;
+    duration?: number;
+    knockback?: number;
+    growthLabel?: string;
+  };
+  maxLevel?: number;
+  useLegacyProjectileSprite: boolean;
   level: number;
   cooldown: number;
   timer: number;
@@ -191,6 +210,7 @@ export interface Projectile {
   arcAngle?: number;
   evolutionIds?: WeaponEvolutionId[];
   runtimePlan?: WeaponRuntimePlan;
+  useLegacyProjectileSprite?: boolean;
 }
 
 export type EnemyProjectileKind = 'cultist_bolt' | 'demon_fire' | 'wraith_orb';
@@ -263,6 +283,7 @@ export interface UpgradeOption {
   icon: string;
   type: 'weapon' | 'weapon_evolution' | 'passive' | 'heal' | 'modifier' | 'supply';
   weaponType?: WeaponType;
+  weaponDefinitionId?: string;
   evolutionId?: WeaponEvolutionId;
   passiveType?: PassiveType;
   modifierType?: GenericModifierType;
@@ -280,6 +301,7 @@ export interface SellableCard {
   icon: string;
   type: 'weapon' | 'passive';
   weaponType?: WeaponType;
+  weaponDefinitionId?: string;
   passiveType?: PassiveType;
   level: number;
   refund: number;

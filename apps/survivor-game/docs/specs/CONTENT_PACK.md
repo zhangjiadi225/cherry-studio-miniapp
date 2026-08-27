@@ -8,7 +8,9 @@
 
 ## 1. 目的
 
-当前实现进度：稳定 ID Registry、启动期 `EnginePlugin` 合同、内置武器/怪物只读快照和粗粒度武器 `behaviorId` 分派已落地。投射物 Trigger、Targeting、Cast Origin、Emission Pattern、Motion、Collision、HitEffect 与 Render 原语 Registry、Capability Catalog、WeaponRecipeCompiler 以及首件内置武器迁移已经开始落地。ContentPack 运行时类型、完整 Validator、迁移、内容库安装、Modifier/Lifecycle 原语闭环和 AI 内容装配尚未实现，因此当前运行时仍只接受内置内容。
+当前实现进度：投射物 `ContentPackV1`、封闭字段 Validator、引用/数值/一级与满级最坏 Modifier 预算校验、内容库接受事务和启动期动态武器装配已经落地。Cherry AI Forge 已能生成、预览并由玩家接受内容；已接受并启用的 AI 武器使用与内置魔法法器相同的 `WeaponRuntimePlan` 执行链。当前只支持一个 Pack 一件 projectile 武器；怪物、行为图、版本迁移、Lifecycle 派生能力和包管理 UI 尚未完成。
+
+第一版最多同时启用 6 个生成武器 Pack。达到上限时必须先通过未来的包管理入口禁用已有内容；不能继续安装并让开局选择界面或运行时预算无界增长。
 
 ContentPack（内容包，即可以被验证、保存和安装的声明式玩法数据）是内置内容与 AI 生成内容进入游戏的唯一运行时协议。
 

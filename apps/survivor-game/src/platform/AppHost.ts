@@ -1,10 +1,12 @@
+import { getCherry, hasCherryHost, onAppVisibility } from '@cherry-miniapp/kit';
+
 export interface AppStorage {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
 }
 
 export interface AppHost {
-  kind: 'browser' | 'cherry';
+  kind: 'cherry';
   storage: AppStorage;
   onVisibilityChange(handler: (visible: boolean) => void): () => void;
 }
@@ -31,42 +33,27 @@ function createSerializedStorage(backend: StorageBackend): AppStorage {
 }
 
 function createCherryHost(): AppHost {
+  const api = getCherry();
   return {
     kind: 'cherry',
     storage: createSerializedStorage({
       async get(key) {
-        const { value } = await cherry.storage.get(key);
+        const { value } = await api.storage.get(key);
         return value;
       },
       async set(key, value) {
-        await cherry.storage.set(key, value);
+        await api.storage.set(key, value);
       },
     }),
     onVisibilityChange(handler) {
-      return cherry.on('app.visibilityChange', ({ visible }) => handler(visible));
-    },
-  };
-}
-
-function createBrowserHost(): AppHost {
-  return {
-    kind: 'browser',
-    storage: createSerializedStorage({
-      async get(key) {
-        return window.localStorage.getItem(key);
-      },
-      async set(key, value) {
-        window.localStorage.setItem(key, value);
-      },
-    }),
-    onVisibilityChange(handler) {
-      const listener = () => handler(!document.hidden);
-      document.addEventListener('visibilitychange', listener);
-      return () => document.removeEventListener('visibilitychange', listener);
+      return onAppVisibility(handler);
     },
   };
 }
 
 export function createAppHost(): AppHost {
-  return typeof cherry !== 'undefined' ? createCherryHost() : createBrowserHost();
+  if (!hasCherryHost()) {
+    throw new Error('Cherry Studio Host is unavailable');
+  }
+  return createCherryHost();
 }

@@ -10,6 +10,7 @@ import {
   type ProjectileRenderPrimitive,
   type ResolvedProjectileRenderPrimitive,
   type TargetingPrimitive,
+  type TrustedWeaponModifierHandler,
   type WeaponCapabilityCatalogV1,
   type WeaponPrimitiveDescriptorV1,
   type WeaponRuntimePlan,
@@ -61,6 +62,7 @@ export interface WeaponRecipeCompilerRegistries {
   readonly hitEffects: ReadonlyRegistry<HitEffectPrimitive>;
   readonly projectileLifecycles: ReadonlyRegistry<ProjectileLifecyclePrimitive>;
   readonly projectileRenderers: ReadonlyRegistry<ProjectileRenderPrimitive>;
+  readonly weaponModifiers: ReadonlyRegistry<TrustedWeaponModifierHandler>;
 }
 
 export interface WeaponRecipeRuntimeStats {
@@ -77,6 +79,7 @@ export interface WeaponRecipeRuntimeStats {
 export interface CompileWeaponRecipeOptions {
   readonly stats?: WeaponRecipeRuntimeStats;
   readonly adjustments?: readonly TrustedWeaponPlanAdjustment[];
+  readonly castMultiplier?: number;
 }
 
 type MutableRecipeStats = Record<WeaponRecipeNumericStat, number>;
@@ -276,7 +279,14 @@ export function compileProjectileWeaponRecipe(
   );
   const visual = compileVisual(recipe.projectile.visual, registries);
 
-  const directProjectilesPerCast = stats.count * recipe.emission.burstCount;
+  const castMultiplier = assertFiniteInRange(
+    options.castMultiplier ?? 1,
+    'modifiers.castMultiplier',
+    1,
+    16,
+    true
+  );
+  const directProjectilesPerCast = stats.count * recipe.emission.burstCount * castMultiplier;
   if (directProjectilesPerCast > MAX_DIRECT_PROJECTILES_PER_CAST) {
     throw new WeaponRecipeCompileError(
       'PROJECTILES_PER_CAST_EXCEEDED',
@@ -294,8 +304,30 @@ export function compileProjectileWeaponRecipe(
     );
   }
 
+  const allowedModifierIds = new Set(recipe.modifierPolicy.allowedIds);
+  const deniedModifierIds = new Set(recipe.modifierPolicy.deniedIds);
+  if (allowedModifierIds.size !== recipe.modifierPolicy.allowedIds.length) {
+    fail('modifierPolicy.allowedIds', 'duplicate modifier ID');
+  }
+  if (deniedModifierIds.size !== recipe.modifierPolicy.deniedIds.length) {
+    fail('modifierPolicy.deniedIds', 'duplicate modifier ID');
+  }
   for (const id of [...recipe.modifierPolicy.allowedIds, ...recipe.modifierPolicy.deniedIds]) {
     assertStableId(id);
+    const handler = registries.weaponModifiers.get(id);
+    if (!handler) {
+      throw new WeaponRecipeCompileError(
+        'UNKNOWN_PRIMITIVE',
+        'modifierPolicy',
+        `unknown modifier "${id}"`
+      );
+    }
+    if (!handler.descriptor.compatibleFamilies.includes('projectile')) {
+      fail('modifierPolicy', `modifier "${id}" is incompatible with projectile weapons`);
+    }
+    if (allowedModifierIds.has(id) && deniedModifierIds.has(id)) {
+      fail('modifierPolicy', `modifier "${id}" cannot be both allowed and denied`);
+    }
   }
 
   const plan: WeaponRuntimePlan = {
@@ -360,8 +392,12 @@ export function createWeaponCapabilityCatalog(
   registries: WeaponRecipeCompilerRegistries
 ): WeaponCapabilityCatalogV1 {
   const primitives = collectDescriptors(registries);
+  const modifiers = registries.weaponModifiers.values()
+    .map((handler) => handler.descriptor)
+    .sort((left, right) => left.id.localeCompare(right.id));
   return Object.freeze({
     catalogVersion: 1,
     primitives: Object.freeze(primitives),
+    modifiers: Object.freeze(modifiers),
   });
 }
