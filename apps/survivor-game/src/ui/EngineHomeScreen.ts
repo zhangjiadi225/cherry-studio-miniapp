@@ -6,19 +6,26 @@ export interface EngineHomeWeaponSummary {
   readonly description: string;
 }
 
+export interface EngineHomeBattleSetupSummary {
+  readonly difficultyName: string;
+  readonly difficultyDetail: string;
+  readonly weaponName: string;
+  readonly weaponIcon: string;
+}
+
 export interface EngineHomeScreenOptions {
   readonly appVersion: string;
   readonly primitiveCount: number;
   readonly modifierCount: number;
   readonly enabledPackCount: number;
+  readonly battleSetup: EngineHomeBattleSetupSummary;
   readonly recentWeapon?: EngineHomeWeaponSummary;
   readonly onGenerate: (intent: string) => void;
-  readonly onOpenForge: (intent: string) => void;
+  readonly onStartBattle: () => void;
   readonly onOpenBattleSetup: () => void;
   readonly onOpenContentLibrary: () => void;
   readonly onOpenSkins: () => void;
   readonly onOpenGrowth: () => void;
-  readonly onOpenCodex: () => void;
 }
 
 function createButton(label: string, className: string): HTMLButtonElement {
@@ -81,6 +88,8 @@ export class EngineHomeScreen {
   private readonly characterCount = document.createElement('span');
   private readonly feedback = document.createElement('p');
   private readonly aiStatus = createStatusCard('✦', 'Cherry AI');
+  private readonly battleDifficulty = document.createElement('span');
+  private readonly battleWeapon = document.createElement('span');
 
   constructor(private readonly options: EngineHomeScreenOptions) {
     this.root.className = 'engine-home';
@@ -98,6 +107,7 @@ export class EngineHomeScreen {
 
     this.root.addEventListener('keydown', (event) => event.stopPropagation());
     this.intent.addEventListener('input', () => this.updateCharacterCount());
+    this.setBattleSetup(this.options.battleSetup);
     this.updateCharacterCount();
   }
 
@@ -115,6 +125,11 @@ export class EngineHomeScreen {
       unavailable: '暂不可用 · 仍可离线战斗',
     };
     this.aiStatus.detail.textContent = details[status];
+  }
+
+  setBattleSetup(setup: EngineHomeBattleSetupSummary): void {
+    this.battleDifficulty.textContent = `◆ ${setup.difficultyName} · ${setup.difficultyDetail}`;
+    this.battleWeapon.textContent = `${setup.weaponIcon} ${setup.weaponName}`;
   }
 
   destroy(): void {
@@ -139,14 +154,12 @@ export class EngineHomeScreen {
 
     const navigation = document.createElement('nav');
     navigation.className = 'engine-home-utility-nav';
-    navigation.setAttribute('aria-label', '其他工具');
+    navigation.setAttribute('aria-label', '角色与成长');
     const skins = createButton('角色', 'engine-home-utility-button');
     const growth = createButton('星图', 'engine-home-utility-button');
-    const codex = createButton('图鉴', 'engine-home-utility-button');
     skins.addEventListener('click', this.options.onOpenSkins);
     growth.addEventListener('click', this.options.onOpenGrowth);
-    codex.addEventListener('click', this.options.onOpenCodex);
-    navigation.append(skins, growth, codex);
+    navigation.append(skins, growth);
     header.append(brand, navigation);
     return header;
   }
@@ -190,11 +203,8 @@ export class EngineHomeScreen {
     const actions = document.createElement('div');
     actions.className = 'engine-home-actions';
     actions.append(
-      createActionCard('◎', '开始新战斗', '选择难度和开局武器，进入确定性战斗。', this.options.onOpenBattleSetup),
-      createActionCard('◆', '武器工坊', '打开完整锻造流程，预览、验证并接受武器。', () => {
-        this.options.onOpenForge(this.intent.value.trim());
-      }),
-      createActionCard('▣', '内容包', '查看已启用内容与引擎模块。', this.options.onOpenContentLibrary)
+      this.createBattleAction(),
+      createActionCard('▣', '内容库', '查看武器、怪物、被动与已启用模块。', this.options.onOpenContentLibrary)
     );
     workspace.append(eyebrow, heading, description, form, this.feedback, actions);
     return workspace;
@@ -215,10 +225,8 @@ export class EngineHomeScreen {
     const contentLabel = document.createElement('p');
     contentLabel.className = 'engine-home-rail-label';
     contentLabel.textContent = '最近生成的武器';
-    const recent = document.createElement('button');
-    recent.type = 'button';
+    const recent = document.createElement('div');
     recent.className = 'engine-home-recent';
-    recent.addEventListener('click', () => this.options.onOpenForge(''));
     const visual = document.createElement('span');
     visual.className = 'engine-home-recent-visual';
     visual.textContent = this.options.recentWeapon?.icon ?? '✦';
@@ -238,6 +246,37 @@ export class EngineHomeScreen {
     librarySummary.textContent = `${this.options.enabledPackCount} 个 AI 内容包已启用 · v${this.options.appVersion}`;
     aside.append(contentLabel, recent, librarySummary);
     return aside;
+  }
+
+  private createBattleAction(): HTMLElement {
+    const card = document.createElement('section');
+    card.className = 'engine-home-battle-action';
+
+    const visual = document.createElement('span');
+    visual.className = 'engine-home-action-icon';
+    visual.textContent = '◎';
+
+    const copy = document.createElement('span');
+    copy.className = 'engine-home-battle-copy';
+    const heading = document.createElement('strong');
+    heading.textContent = '开始战斗';
+    const label = document.createElement('span');
+    label.textContent = '当前出征配置';
+    const metadata = document.createElement('span');
+    metadata.className = 'engine-home-battle-meta';
+    metadata.append(this.battleDifficulty, this.battleWeapon);
+    copy.append(heading, label, metadata);
+
+    const actions = document.createElement('span');
+    actions.className = 'engine-home-battle-buttons';
+    const start = createButton('立即开战', 'engine-home-battle-primary');
+    const configure = createButton('调整配置', 'engine-home-battle-secondary');
+    start.addEventListener('click', this.options.onStartBattle);
+    configure.addEventListener('click', this.options.onOpenBattleSetup);
+    actions.append(start, configure);
+
+    card.append(visual, copy, actions);
+    return card;
   }
 
   private submitIntent(): void {

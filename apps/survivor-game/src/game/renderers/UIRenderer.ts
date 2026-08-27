@@ -719,7 +719,17 @@ type MenuLayout = {
   rail: Rect;
 };
 
-const DESKTOP_TABS: DesktopTab[] = ['home', 'start', 'skins', 'growth', 'codex'];
+const DESKTOP_TABS: DesktopTab[] = ['home', 'skins', 'growth', 'codex'];
+
+export function getBattleSetupBackButtonRect(w: number, h: number): Rect {
+  const mobile = isMobileViewport(w, h);
+  return {
+    x: mobile ? 16 : Math.max(24, w * 0.035),
+    y: mobile ? 16 : Math.max(24, h * 0.035),
+    w: mobile ? 96 : 118,
+    h: mobile ? 40 : 44,
+  };
+}
 
 export function getDesktopStartButtonRect(w: number, h: number): Rect {
   const btnW = Math.min(320, Math.max(240, w * 0.26));
@@ -850,7 +860,7 @@ export function drawDesktop(
     drawCodexPanel(rc, activeCodexTab);
   }
 
-  if (activeTab !== 'home') drawDesktopTabs(rc, activeTab);
+  if (activeTab !== 'home' && activeTab !== 'start') drawDesktopTabs(rc, activeTab);
 }
 
 export function getDesktopTabRects(w: number, h: number = 720): Array<Rect & { id: DesktopTab }> {
@@ -992,11 +1002,27 @@ function drawStartButton(
   const mobile = isMobileViewport(w, h);
   const cards = getRunDifficultyCardRects(w, h);
 
+  const back = getBattleSetupBackButtonRect(w, h);
+  ctx.fillStyle = 'rgba(3,7,13,0.72)';
+  ctx.beginPath();
+  ctx.roundRect(back.x, back.y, back.w, back.h, 10);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(back.x, back.y, back.w, back.h, 10);
+  ctx.stroke();
+  ctx.font = `800 ${mobile ? 13 : 14}px ${DESKTOP_FONT}`;
+  ctx.fillStyle = 'rgba(238,244,255,0.82)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('← 返回首页', back.x + back.w / 2, back.y + back.h / 2);
+
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.font = `900 ${mobile ? 26 : 34}px ${DESKTOP_FONT}`;
   ctx.fillStyle = '#ffffff';
-  ctx.fillText('选择夜潮难度', w / 2, mobile ? h * 0.18 : h * 0.24);
+  ctx.fillText('调整出征配置', w / 2, mobile ? h * 0.18 : h * 0.24);
 
   for (const card of cards) {
     const preset = RUN_DIFFICULTY_PRESETS[card.id];
@@ -1361,7 +1387,7 @@ function drawMetaDetail(ctx: CanvasRenderingContext2D, rect: Rect, meta: MetaSta
   }
 }
 
-// ---- 图鉴 ----
+// ---- 内容库 ----
 function getCodexAccent(tab: CodexTab): string {
   if (tab === 'passives') return '#9dffba';
   if (tab === 'enemies') return '#ff7a76';
@@ -1409,7 +1435,7 @@ function drawCodexPanel(rc: RenderContext, activeTab: CodexTab) {
 
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.font = `900 ${mobile ? 22 : 24}px ${DESKTOP_FONT}`; ctx.fillStyle = '#ffffff';
-  ctx.fillText('图鉴', panel.x + (mobile ? 18 : 26), panel.y + (mobile ? 18 : 22));
+  ctx.fillText('内容库', panel.x + (mobile ? 18 : 26), panel.y + (mobile ? 18 : 22));
 
   drawCodexTabs(rc, activeTab);
 
@@ -1487,7 +1513,7 @@ function drawDesktopTabs(rc: RenderContext, activeTab: DesktopTab) {
     start: '出征',
     skins: '衣橱',
     growth: '星图',
-    codex: '图鉴',
+    codex: '内容库',
   };
   const icons: Record<DesktopTab, string> = {
     home: '⌂',

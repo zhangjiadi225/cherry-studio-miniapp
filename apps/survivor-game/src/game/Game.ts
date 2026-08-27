@@ -253,6 +253,26 @@ export class Game {
     this.setDesktopTab('codex');
   }
 
+  getBattleSetupSummary(): {
+    difficultyName: string;
+    difficultyDetail: string;
+    weaponName: string;
+    weaponIcon: string;
+  } {
+    const weapon = this.content.weapons.get(this.selectedStartingWeaponId) ?? this.content.startingWeapons[0];
+    return {
+      difficultyName: this.runDifficulty.name,
+      difficultyDetail: this.runDifficulty.shortName,
+      weaponName: weapon?.name ?? '魔法法器',
+      weaponIcon: weapon?.icon ?? '✦',
+    };
+  }
+
+  startConfiguredRun(): void {
+    if (!gameState.is('menu') || this.externalUiOpen) return;
+    this.startGame();
+  }
+
   // ──────────────────────────── Input Routing ────────────────────────────
 
   private onKeyDown(e: KeyboardEvent) {
@@ -379,22 +399,26 @@ export class Game {
   }
 
   private handleDesktopKey(e: KeyboardEvent) {
+    if (this.desktopTab === 'start') {
+      if (e.code === 'Escape') this.setDesktopTab('home');
+      else if (e.code === 'KeyQ') this.shiftStartingWeapon(-1);
+      else if (e.code === 'KeyE') this.shiftStartingWeapon(1);
+      else if (e.code === 'Enter' || e.code === 'Space') this.startGame();
+      return;
+    }
+
     if (e.code === 'Digit1') this.setDesktopTab('home');
-    else if (e.code === 'Digit2') this.setDesktopTab('start');
-    else if (e.code === 'Digit3') this.setDesktopTab('skins');
-    else if (e.code === 'Digit4') this.setDesktopTab('growth');
-    else if (e.code === 'Digit5') this.setDesktopTab('codex');
+    else if (e.code === 'Digit2') this.setDesktopTab('skins');
+    else if (e.code === 'Digit3') this.setDesktopTab('growth');
+    else if (e.code === 'Digit4') this.setDesktopTab('codex');
     else if (this.desktopTab === 'codex' && e.code === 'KeyQ') this.shiftCodexTab(-1);
     else if (this.desktopTab === 'codex' && e.code === 'KeyE') this.shiftCodexTab(1);
-    else if (this.desktopTab === 'start' && e.code === 'KeyQ') this.shiftStartingWeapon(-1);
-    else if (this.desktopTab === 'start' && e.code === 'KeyE') this.shiftStartingWeapon(1);
     else if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.shiftDesktopTab(-1);
     else if (e.code === 'ArrowRight' || e.code === 'KeyD') this.shiftDesktopTab(1);
-    else if (this.desktopTab === 'start' && (e.code === 'Enter' || e.code === 'Space')) this.startGame();
   }
 
   private shiftDesktopTab(dir: number) {
-    const tabs: DesktopTab[] = ['home', 'start', 'skins', 'growth', 'codex'];
+    const tabs: DesktopTab[] = ['home', 'skins', 'growth', 'codex'];
     const index = tabs.indexOf(this.desktopTab);
     this.setDesktopTab(tabs[(index + dir + tabs.length) % tabs.length]);
   }
@@ -432,15 +456,11 @@ export class Game {
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
-    const tabs = this.renderer.getDesktopTabRects();
-    for (const tab of tabs) {
-      if (x >= tab.x && x <= tab.x + tab.w && y >= tab.y && y <= tab.y + tab.h) {
-        this.setDesktopTab(tab.id);
+    if (this.desktopTab === 'start') {
+      if (this.isPointInRect(x, y, this.renderer.getBattleSetupBackButtonRect())) {
+        this.setDesktopTab('home');
         return;
       }
-    }
-
-    if (this.desktopTab === 'start') {
       const difficultyCards = this.renderer.getRunDifficultyCardRects();
       for (const card of difficultyCards) {
         if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
@@ -463,6 +483,14 @@ export class Game {
         this.startGame();
       }
       return;
+    }
+
+    const tabs = this.renderer.getDesktopTabRects();
+    for (const tab of tabs) {
+      if (x >= tab.x && x <= tab.x + tab.w && y >= tab.y && y <= tab.y + tab.h) {
+        this.setDesktopTab(tab.id);
+        return;
+      }
     }
 
     if (this.desktopTab === 'growth') {

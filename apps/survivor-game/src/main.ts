@@ -60,6 +60,7 @@ async function bootstrap() {
     primitiveCount: content.weaponCapabilityCatalog.primitives.length,
     modifierCount: content.weaponCapabilityCatalog.modifiers.length,
     enabledPackCount: Math.max(0, content.packIds.length - 1),
+    battleSetup: game.getBattleSetupSummary(),
     recentWeapon: recentGeneratedWeapon
       ? {
           name: recentGeneratedWeapon.name,
@@ -68,15 +69,15 @@ async function bootstrap() {
         }
       : undefined,
     onGenerate: (intent) => forgePanel.openWithIntent(intent, true),
-    onOpenForge: (intent) => forgePanel.openWithIntent(intent),
+    onStartBattle: () => game.startConfiguredRun(),
     onOpenBattleSetup: () => game.openDesktopTab('start'),
     onOpenContentLibrary: () => game.openContentLibrary(),
     onOpenSkins: () => game.openDesktopTab('skins'),
     onOpenGrowth: () => game.openDesktopTab('growth'),
-    onOpenCodex: () => game.openDesktopTab('codex'),
   });
   const syncProductUi = () => {
     const homeActive = game.isEngineHomeActive();
+    homeScreen.setBattleSetup(game.getBattleSetupSummary());
     homeScreen.setVisible(homeActive);
     forgePanel.setAvailable(game.canOpenWeaponForge());
     forgePanel.setLaunchVisible(!homeActive);

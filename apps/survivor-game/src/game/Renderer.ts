@@ -31,6 +31,7 @@ import {
   drawAudioButton as drawAudioBtn, drawPauseButton as drawPauseBtn,
   getAudioButtonRect as getAudioRect,
   getDesktopStartButtonRect as getStartButtonRect,
+  getBattleSetupBackButtonRect as getBattleSetupBackRect,
   getStartingWeaponCardRects as getStartingWeaponRects,
   type StartingWeaponView,
   getMetaStarNodeRects as getStarNodeRects,
@@ -117,6 +118,7 @@ export class Renderer {
   getPauseButtonRect() { return getPauseRect(this.w); }
   getAudioButtonRect() { return getAudioRect(this.w); }
   getDesktopStartButtonRect() { return getStartButtonRect(this.w, this.h); }
+  getBattleSetupBackButtonRect() { return getBattleSetupBackRect(this.w, this.h); }
   getStartingWeaponCardRects(
     weapons: readonly StartingWeaponView[]
   ): Array<{ x: number; y: number; w: number; h: number; definitionId: string }> {
