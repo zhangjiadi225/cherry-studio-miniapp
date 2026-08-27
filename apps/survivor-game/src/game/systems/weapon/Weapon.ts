@@ -18,6 +18,17 @@ import { pools } from '../../utils/PoolManager';
 import { eventBus, GameEvent } from '../../events';
 import type { EnemyQuery } from '../enemy/EnemyQuery';
 import { getWeaponEvolutionIds, hasAnyWeaponEvolution, hasWeaponEvolution } from '../../data/weaponEvolutions';
+import { getBuiltinWeaponContentId, type WeaponData } from '../../data/weapons';
+import type { Registry, ReadonlyRegistry } from '../../../content/registry/Registry';
+import {
+  CoreWeaponBehaviorId,
+  type WeaponBehaviorHandler,
+} from '../../behaviors/weapon/WeaponBehavior';
+import {
+  buildEngineRegistrySnapshot,
+  type EnginePlugin,
+  type EngineRegistrySnapshot,
+} from '../../behaviors/EngineRegistry';
 
 const nearestEnemiesScratch: Enemy[] = [];
 const nearestDistancesScratch: number[] = [];
@@ -34,10 +45,15 @@ const RUNE_LANCE_MAX_LENGTH = 680;
 const RUNE_LANCE_DURATION = 0.18;
 const MOON_BLADE_ORBIT_SPEED = 4.8;
 
-export function createWeapon(type: WeaponType): Weapon {
-  const d = WEAPON_DATA[type];
+export function createWeapon(
+  type: WeaponType,
+  definition: WeaponData & { readonly id?: string } = WEAPON_DATA[type]
+): Weapon {
+  const d = definition;
   return {
     type,
+    definitionId: definition.id ?? getBuiltinWeaponContentId(type),
+    behaviorId: d.behaviorId,
     family: d.family,
     level: 1,
     cooldown: d.baseCooldown,
@@ -76,9 +92,11 @@ export function updateWeapon(
   player: Player,
   projectiles: Projectile[],
   dt: number,
-  enemyQuery: EnemyQuery
+  enemyQuery: EnemyQuery,
+  weaponBehaviors: ReadonlyRegistry<WeaponBehaviorHandler> = getDefaultWeaponBehaviorRegistry()
 ) {
-  if (w.type === WeaponType.GARLIC) return;
+  const behavior = weaponBehaviors.require(w.behaviorId);
+  if (behavior.mode === 'continuous') return;
 
   w.timer += dt;
   const effectiveCooldown = w.cooldown * getEvolutionCooldownMultiplier(w) * (1 - player.cooldownReduction);
@@ -89,39 +107,71 @@ export function updateWeapon(
 
   const castDamages = getCastDamages(w, effectiveDamage);
   let fired = false;
-  switch (w.type) {
-    case WeaponType.MAGIC_WAND:
-      for (const damage of castDamages) fired = fireMagicWand(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
-      break;
-    case WeaponType.FIRE_WAND:
-      for (const damage of castDamages) fired = fireFireWand(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
-      break;
-    case WeaponType.AXE:
-      for (const damage of castDamages) fired = fireAxe(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
-      break;
-    case WeaponType.RUNE_LANCE:
-      for (const damage of castDamages) fired = fireRuneLance(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
-      break;
-    case WeaponType.MOON_BLADE:
-      for (const damage of castDamages) fired = fireMoonBlade(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
-      break;
-    case WeaponType.LIGHTNING:
-      for (const damage of castDamages) fired = fireLightning(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
-      break;
-    case WeaponType.WHIP:
-      for (const damage of castDamages) fired = fireWhip(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
-      break;
-    case WeaponType.BIBLE:
-      for (const damage of castDamages) fired = fireBible(w, player, projectiles, damage, effectiveArea) || fired;
-      break;
-    case WeaponType.HOLY_WATER:
-      for (const damage of castDamages) fired = fireHolyWater(w, player, projectiles, damage, effectiveArea, enemyQuery) || fired;
-      break;
+  for (const damage of castDamages) {
+    fired = behavior.fire({
+      weapon: w,
+      player,
+      projectiles,
+      damage,
+      area: effectiveArea,
+      enemyQuery,
+    }) || fired;
   }
   if (fired) {
     w.timer = 0;
     eventBus.emit(GameEvent.WEAPON_FIRE, w.type);
   }
+}
+
+function registerCoreWeaponBehaviors(registry: Registry<WeaponBehaviorHandler>): void {
+  const register = (
+    id: string,
+    mode: WeaponBehaviorHandler['mode'],
+    fire: WeaponBehaviorHandler['fire']
+  ) => registry.register(id, Object.freeze({ id, mode, fire }));
+
+  register(CoreWeaponBehaviorId.WHIP, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
+    fireWhip(weapon, player, projectiles, damage, area, enemyQuery));
+  register(CoreWeaponBehaviorId.MAGIC_WAND, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
+    fireMagicWand(weapon, player, projectiles, damage, area, enemyQuery));
+  register(CoreWeaponBehaviorId.BIBLE, 'cast', ({ weapon, player, projectiles, damage, area }) =>
+    fireBible(weapon, player, projectiles, damage, area));
+  register(CoreWeaponBehaviorId.GARLIC_AURA, 'continuous', () => false);
+  register(CoreWeaponBehaviorId.FIRE_WAND, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
+    fireFireWand(weapon, player, projectiles, damage, area, enemyQuery));
+  register(CoreWeaponBehaviorId.HOLY_WATER, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
+    fireHolyWater(weapon, player, projectiles, damage, area, enemyQuery));
+  register(CoreWeaponBehaviorId.LIGHTNING, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
+    fireLightning(weapon, player, projectiles, damage, area, enemyQuery));
+  register(CoreWeaponBehaviorId.AXE, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
+    fireAxe(weapon, player, projectiles, damage, area, enemyQuery));
+  register(CoreWeaponBehaviorId.RUNE_LANCE, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
+    fireRuneLance(weapon, player, projectiles, damage, area, enemyQuery));
+  register(CoreWeaponBehaviorId.MOON_BLADE, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
+    fireMoonBlade(weapon, player, projectiles, damage, area, enemyQuery));
+}
+
+export const CORE_WEAPON_BEHAVIOR_PLUGIN: EnginePlugin = Object.freeze({
+  id: 'builtin.plugin.weapon-behaviors',
+  version: '1.0.0',
+  register(api) {
+    registerCoreWeaponBehaviors(api.weaponBehaviors);
+  },
+});
+
+export function createCoreWeaponBehaviorRegistry(): ReadonlyRegistry<WeaponBehaviorHandler> {
+  return createCoreEngineRegistrySnapshot().weaponBehaviors;
+}
+
+export function createCoreEngineRegistrySnapshot(): EngineRegistrySnapshot {
+  return buildEngineRegistrySnapshot([CORE_WEAPON_BEHAVIOR_PLUGIN]);
+}
+
+let defaultWeaponBehaviorRegistry: ReadonlyRegistry<WeaponBehaviorHandler> | undefined;
+
+function getDefaultWeaponBehaviorRegistry(): ReadonlyRegistry<WeaponBehaviorHandler> {
+  defaultWeaponBehaviorRegistry ??= createCoreWeaponBehaviorRegistry();
+  return defaultWeaponBehaviorRegistry;
 }
 
 function findNearestEnemies(

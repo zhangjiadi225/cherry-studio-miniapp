@@ -1,13 +1,7 @@
 import { Game } from './game/Game';
-import { MUTE_STORAGE_KEY } from './game/systems/audio/Audio';
-import {
-  loadMetaState,
-  META_STORAGE_KEY,
-  serializeMetaState,
-} from './game/systems/meta/MetaProgression';
+import { createBuiltinGameContentSnapshot } from './content/runtime/GameContentSnapshot';
 import { createAppHost } from './platform/AppHost';
-
-const PERF_STORAGE_KEY = 'survivor_perf';
+import { AppStateStore } from './platform/AppStateStore';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 if (!canvas) {
@@ -28,18 +22,19 @@ function getErrorMessage(error: unknown): string {
 
 async function bootstrap() {
   const host = createAppHost();
-  const [rawMeta, rawMuted, rawPerf] = await Promise.all([
-    host.storage.get(META_STORAGE_KEY),
-    host.storage.get(MUTE_STORAGE_KEY),
-    host.storage.get(PERF_STORAGE_KEY),
-  ]);
+  const stateStore = await AppStateStore.open(host.storage);
+  const state = stateStore.getSnapshot();
+  const content = createBuiltinGameContentSnapshot(state.contentLibrary);
 
   const game = new Game(canvas, {
-    meta: loadMetaState(rawMeta),
-    muted: rawMuted === '1',
-    perfEnabled: new URLSearchParams(window.location.search).has('perf') || rawPerf === '1',
-    persistMeta: (meta) => host.storage.set(META_STORAGE_KEY, serializeMetaState(meta)),
-    persistMuted: (muted) => host.storage.set(MUTE_STORAGE_KEY, muted ? '1' : '0'),
+    content,
+    meta: state.meta,
+    muted: state.settings.muted,
+    perfEnabled:
+      new URLSearchParams(window.location.search).has('perf') ||
+      state.settings.perfEnabled,
+    persistMeta: (meta) => stateStore.setMeta(meta),
+    persistMuted: (muted) => stateStore.setMuted(muted),
   });
   host.onVisibilityChange((visible) => game.setHostVisible(visible));
 

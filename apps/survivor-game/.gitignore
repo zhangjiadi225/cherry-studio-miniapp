@@ -24,8 +24,7 @@ dist-ssr
 *.sw?
 .vercel
 
-# Local generated notes and previews
-docs/
+# Local generated previews
 output/
 
 # Local player sprite experiments

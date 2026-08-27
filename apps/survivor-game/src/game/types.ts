@@ -78,6 +78,8 @@ export interface Player extends PlayerMovement, PlayerCombatStats {
 
 export interface Weapon {
   type: WeaponType;
+  definitionId: string;
+  behaviorId: string;
   family: WeaponFamily;
   level: number;
   cooldown: number;

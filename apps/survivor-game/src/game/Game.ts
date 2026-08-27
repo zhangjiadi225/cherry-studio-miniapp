@@ -3,7 +3,7 @@ import {
   Camera, WeaponType, PassiveType, Weapon, PerformanceStats, MapObstacle, EnemyType, GenericModifierType
 } from './types';
 import {
-  SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS, ENEMY_DATA, WEAPON_DATA,
+  SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS,
   CONTACT_COOLDOWN,
   MAX_ENEMIES, STARTING_WEAPON_TYPES,
 } from './constants';
@@ -44,6 +44,7 @@ import { pools, clearAllPools } from './utils/PoolManager';
 import { SpatialGrid } from './utils/SpatialGrid';
 import { eventBus, gameState, GameEvent } from './events';
 import { GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from './data/modifiers';
+import type { GameContentSnapshot } from '../content/runtime/GameContentSnapshot';
 
 type ObjectiveBeat = {
   time: number;
@@ -52,6 +53,7 @@ type ObjectiveBeat = {
 };
 
 export interface GameOptions {
+  content: GameContentSnapshot;
   meta: MetaState;
   muted: boolean;
   perfEnabled: boolean;
@@ -93,6 +95,7 @@ export class Game {
   private enemyGrid = new SpatialGrid<Enemy>(240);
   private enemyQuery = new SpatialEnemyQuery(this.enemyGrid);
   private camera: Camera;
+  private readonly content: GameContentSnapshot;
   private meta: MetaState;
   private runDifficulty: RunDifficultyPreset;
   private objectiveBeats: ObjectiveBeat[];
@@ -169,6 +172,7 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement, options: GameOptions) {
     this.canvas = canvas;
+    this.content = options.content;
     this.meta = options.meta;
     this.runDifficulty = getRunDifficultyPreset(this.meta.selectedDifficulty);
     this.objectiveBeats = getObjectiveBeats(this.runDifficulty);
@@ -481,7 +485,7 @@ export class Game {
     const startingWeapon = STARTING_WEAPON_TYPES.includes(this.selectedStartingWeapon)
       ? this.selectedStartingWeapon
       : WeaponType.MAGIC_WAND;
-    this.player.weapons.push(createWeapon(startingWeapon));
+    this.player.weapons.push(createWeapon(startingWeapon, this.content.getWeaponByType(startingWeapon)));
     this.refreshWeaponRefs();
     this.activeBoss = undefined;
     this.enemies = [];
@@ -600,7 +604,14 @@ export class Game {
     this.updateMinimapEnemyCache(dt);
 
     for (const w of this.player.weapons) {
-      updateWeapon(w, this.player, this.projectiles, dt, this.enemyQuery);
+      updateWeapon(
+        w,
+        this.player,
+        this.projectiles,
+        dt,
+        this.enemyQuery,
+        this.content.weaponBehaviors
+      );
     }
 
     if (this.garlicWeapon) {
@@ -775,7 +786,7 @@ export class Game {
         const dmg = damagePlayer(this.player, e.damage);
         if (dmg > 0) {
           this.lastDamageSource = {
-            enemyName: ENEMY_DATA[e.type].name,
+            enemyName: this.content.getEnemyByType(e.type).name,
             damage: dmg,
             time: this.elapsed,
           };
@@ -800,7 +811,7 @@ export class Game {
         const dmg = damagePlayer(this.player, p.damage);
         if (dmg > 0) {
           this.lastDamageSource = {
-            enemyName: ENEMY_DATA[p.sourceType].name,
+            enemyName: this.content.getEnemyByType(p.sourceType).name,
             damage: dmg,
             time: this.elapsed,
           };
@@ -849,10 +860,20 @@ export class Game {
 
     const isElite = e.isElite;
     const particleCount = isElite ? 25 : 12;
-    spawnDeathParticles(this.particles, e.x, e.y, ENEMY_DATA[e.type].color, particleCount, {
-      speed: isElite ? 250 : 180, life: isElite ? 0.9 : 0.6,
-      radius: isElite ? 5 : 3, type: 'square', glow: true,
-    });
+    spawnDeathParticles(
+      this.particles,
+      e.x,
+      e.y,
+      this.content.getEnemyByType(e.type).color,
+      particleCount,
+      {
+        speed: isElite ? 250 : 180,
+        life: isElite ? 0.9 : 0.6,
+        radius: isElite ? 5 : 3,
+        type: 'square',
+        glow: true,
+      }
+    );
     if (isElite) {
       spawnDeathParticles(this.particles, e.x, e.y, '#ffd700', 10, {
         speed: 150, life: 0.8, radius: 4, type: 'star', glow: true,
@@ -936,7 +957,7 @@ export class Game {
       time: this.elapsed,
       kills: this.killCount,
       level: this.player.level,
-      weaponNames: this.player.weapons.map(w => WEAPON_DATA[w.type].name),
+      weaponNames: this.player.weapons.map((w) => this.content.getWeaponByType(w.type).name),
       soulFireEarned: this.meta.soulFire - previousSoulFire,
       totalSoulFire: this.meta.soulFire,
       runDuration: this.runDifficulty.duration,
@@ -1143,7 +1164,11 @@ export class Game {
     }
 
     if (this.activeBoss?.hp && this.activeBoss.hp > 0) {
-      this.renderer.drawBossBar(ENEMY_DATA[this.activeBoss.type].name, this.activeBoss.hp, this.activeBoss.maxHp);
+      this.renderer.drawBossBar(
+        this.content.getEnemyByType(this.activeBoss.type).name,
+        this.activeBoss.hp,
+        this.activeBoss.maxHp
+      );
     }
     if (this.bossWarningTimer > 0) this.renderer.drawBossWarning(this.bossWarningName, this.bossWarningTimer);
     if (this.damageFlashTimer > 0) this.renderer.drawDamageFlash(this.damageFlashTimer);
@@ -1167,7 +1192,7 @@ export class Game {
         time: this.elapsed,
         kills: this.killCount,
         level: this.player.level,
-        weaponNames: this.player.weapons.map(w => WEAPON_DATA[w.type].name),
+        weaponNames: this.player.weapons.map((w) => this.content.getWeaponByType(w.type).name),
         soulFireEarned: 0,
         totalSoulFire: this.meta.soulFire,
         runDuration: this.runDifficulty.duration,

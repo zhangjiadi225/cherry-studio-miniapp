@@ -6,6 +6,40 @@ import {
   type WeaponMetadata,
   type WeaponTag,
 } from '../types';
+import { CoreWeaponBehaviorId } from '../behaviors/weapon/WeaponBehavior';
+
+export interface WeaponData {
+  name: string;
+  icon: string;
+  desc: string;
+  family: WeaponFamily;
+  behaviorId: string;
+  metadata: WeaponMetadata;
+  baseDamage: number;
+  baseCooldown: number;
+  baseSpeed: number;
+  baseArea: number;
+  baseCount: number;
+  basePierce: number;
+  baseDuration: number;
+  baseKnockback: number;
+  perLevel: {
+    damage?: number;
+    cooldown?: number;
+    speed?: number;
+    area?: number;
+    count?: number;
+    pierce?: number;
+    duration?: number;
+    knockback?: number;
+    growthLabel?: string;
+  };
+  maxLevel?: number;
+}
+
+export function getBuiltinWeaponContentId(type: WeaponType): string {
+  return `builtin.weapon.${type.replaceAll('_', '-')}`;
+}
 
 export const WEAPON_TAG_LABELS: Record<WeaponTag, string> = {
   melee: '近战',
@@ -41,38 +75,13 @@ export function getWeaponMetadataLabel(metadata: WeaponMetadata): string {
   return labels.join(' · ');
 }
 
-export const WEAPON_DATA: Record<WeaponType, {
-  name: string;
-  icon: string;
-  desc: string;
-  family: WeaponFamily;
-  metadata: WeaponMetadata;
-  baseDamage: number;
-  baseCooldown: number;
-  baseSpeed: number;
-  baseArea: number;
-  baseCount: number;
-  basePierce: number;
-  baseDuration: number;
-  baseKnockback: number;
-  perLevel: {
-    damage?: number;
-    cooldown?: number;
-    speed?: number;
-    area?: number;
-    count?: number;
-    pierce?: number;
-    duration?: number;
-    knockback?: number;
-    growthLabel?: string;
-  };
-  maxLevel?: number;
-}> = {
+export const WEAPON_DATA: Record<WeaponType, WeaponData> = {
   [WeaponType.WHIP]: {
     name: '鞭子',
     icon: '🪄',
     desc: '短线光鞭自动朝附近敌人抽击，形态由进化决定',
     family: 'swing',
+    behaviorId: CoreWeaponBehaviorId.WHIP,
     metadata: { behavior: 'persistent_melee', displayMode: 'stowed', displayPriority: 100, tags: ['melee', 'piercing'] },
     baseDamage: 15,
     baseCooldown: 1.5,
@@ -90,6 +99,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '✦',
     desc: '角色旁的法器自动向最近敌人施放魔法弹',
     family: 'projectile',
+    behaviorId: CoreWeaponBehaviorId.MAGIC_WAND,
     metadata: { behavior: 'focus_cast', displayMode: 'relic', displayPriority: 66, tags: ['ranged'] },
     baseDamage: 10,
     baseCooldown: 1.2,
@@ -107,6 +117,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '📖',
     desc: '环绕玩家旋转的圣书',
     family: 'orbit',
+    behaviorId: CoreWeaponBehaviorId.BIBLE,
     metadata: { behavior: 'orbit_summon', displayMode: 'orbit', displayPriority: 80, tags: ['melee', 'piercing'] },
     baseDamage: 18,
     baseCooldown: 8,
@@ -124,6 +135,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '🧄',
     desc: '持续伤害周围的敌人',
     family: 'aura',
+    behaviorId: CoreWeaponBehaviorId.GARLIC_AURA,
     metadata: { behavior: 'damage_aura', displayMode: 'aura_source', displayPriority: 70, tags: ['melee'] },
     baseDamage: 5,
     baseCooldown: 0.5,
@@ -141,6 +153,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '🔥',
     desc: '角色旁的火焰法器自动点燃目标方向',
     family: 'projectile',
+    behaviorId: CoreWeaponBehaviorId.FIRE_WAND,
     metadata: { behavior: 'focus_cast', displayMode: 'relic', displayPriority: 64, tags: ['ranged'] },
     baseDamage: 25,
     baseCooldown: 2.0,
@@ -158,6 +171,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '💧',
     desc: '在敌人位置降下伤害区域',
     family: 'zone',
+    behaviorId: CoreWeaponBehaviorId.HOLY_WATER,
     metadata: { behavior: 'area_control', displayMode: 'relic', displayPriority: 60, tags: ['ranged'] },
     baseDamage: 10,
     baseCooldown: 5,
@@ -175,6 +189,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '⚡',
     desc: '随机打击屏幕内敌人',
     family: 'strike',
+    behaviorId: CoreWeaponBehaviorId.LIGHTNING,
     metadata: { behavior: 'body_enhancement', displayMode: 'body_mark', displayPriority: 90, tags: ['ranged'] },
     baseDamage: 30,
     baseCooldown: 3,
@@ -192,6 +207,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '🪓',
     desc: '朝目标方向挥出120度长柄斧横扫，并斩落范围内敌方弹幕',
     family: 'swing',
+    behaviorId: CoreWeaponBehaviorId.AXE,
     metadata: { behavior: 'cleave_melee', displayMode: 'stowed', displayPriority: 76, tags: ['melee', 'piercing'] },
     baseDamage: 32,
     baseCooldown: 2.2,
@@ -209,6 +225,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '⟡',
     desc: '从角色旁的符文枪架刺出高速贯穿枪芒',
     family: 'projectile',
+    behaviorId: CoreWeaponBehaviorId.RUNE_LANCE,
     metadata: { behavior: 'line_piercer', displayMode: 'relic', displayPriority: 58, tags: ['ranged', 'piercing'] },
     baseDamage: 18,
     baseCooldown: 1.65,
@@ -226,6 +243,7 @@ export const WEAPON_DATA: Record<WeaponType, {
     icon: '☾',
     desc: '月刃常驻环绕角色，发动时释放旋转穿透刃',
     family: 'projectile',
+    behaviorId: CoreWeaponBehaviorId.MOON_BLADE,
     metadata: { behavior: 'orbit_summon', displayMode: 'orbit', displayPriority: 62, tags: ['ranged', 'piercing'] },
     baseDamage: 12,
     baseCooldown: 2.4,

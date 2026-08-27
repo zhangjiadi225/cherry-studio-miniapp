@@ -1,6 +1,6 @@
 import { EnemyType, type EnemyEnhancement } from '../types';
 
-export const ENEMY_DATA: Record<EnemyType, {
+export interface EnemyData {
   name: string;
   baseHp: number;
   baseSpeed: number;
@@ -10,7 +10,13 @@ export const ENEMY_DATA: Record<EnemyType, {
   color: string;
   spawnAfter: number;
   enhancement?: EnemyEnhancement;
-}> = {
+}
+
+export function getBuiltinEnemyContentId(type: EnemyType): string {
+  return `builtin.enemy.${type.replaceAll('_', '-')}`;
+}
+
+export const ENEMY_DATA: Record<EnemyType, EnemyData> = {
   [EnemyType.ZOMBIE]: {
     name: '僵尸',
     baseHp: 20,
