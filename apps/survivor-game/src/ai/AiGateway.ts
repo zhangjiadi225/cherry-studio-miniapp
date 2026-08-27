@@ -3,6 +3,8 @@ export interface AiMessage {
   readonly content: string;
 }
 
+export type AiModelSlot = 'default' | 'quick';
+
 export interface AiRuntimeSnapshot {
   readonly permissions: Readonly<Record<string, boolean>>;
   readonly capabilities: {
@@ -13,7 +15,7 @@ export interface AiRuntimeSnapshot {
 
 export interface AiStreamRequest {
   readonly messages: readonly AiMessage[];
-  readonly modelSlot: 'default';
+  readonly modelSlot: AiModelSlot;
   readonly reasoning: 'off';
   readonly signal: AbortSignal;
   readonly callId: string;
@@ -25,7 +27,7 @@ export interface AiStreamRequest {
  * @cherry-miniapp/kit rather than accessing window.cherry or a model API directly.
  */
 export interface AiGateway {
-  getRuntimeSnapshot(modelSlot: 'default'): Promise<AiRuntimeSnapshot>;
+  getRuntimeSnapshot(modelSlot: AiModelSlot): Promise<AiRuntimeSnapshot>;
   streamText(request: AiStreamRequest): Promise<string>;
   isGatewayError(error: unknown): error is { readonly name: string; readonly message: string };
 }

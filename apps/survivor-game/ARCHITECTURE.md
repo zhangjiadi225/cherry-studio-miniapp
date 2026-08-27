@@ -20,7 +20,7 @@
 - 单文档 `AppStateStore`、冻结 Registry、动态内容快照和武器行为分派。
 - 投射物 `ContentPackV1`、严格 Validator、内容库原子安装和 AI 武器生成服务。
 
-当前 Registry 已注册 Delivery、Trigger、Targeting、施放点、发射调度/阵型、运动、碰撞、命中、Lifecycle、几何/精灵渲染、粒子和音效/镜头反馈原语及现有通用 Modifier。魔法法器与通过校验并启用的 AI Projectile、Zone、Aura、Strike、Swing 武器使用同一 Recipe 执行链；其他内置武器仍使用兼容行为。产品首页已改为 AI 游戏引擎工作台，可直接描述武器、查看 Cherry AI 连接状态，并在同一页面选择难度、系统武器或 AI 生成武器后开始游戏；统一的内容库用于查看内置内容与模块。Forge 可生成、预览、接受并在重载后选择武器。一次自动修复、Job 恢复管理 UI、包管理 UI 和 BehaviorGraph 尚未实现。
+当前 Registry 已注册 Delivery、Trigger、Targeting、施放点、发射调度/阵型、运动、碰撞、命中、Lifecycle、几何/精灵渲染、粒子和音效/镜头反馈原语及现有通用 Modifier。魔法法器与通过校验并启用的 AI Projectile、Zone、Aura、Strike、Swing 武器使用同一 Recipe 执行链；其他内置武器仍使用兼容行为。产品首页已改为 AI 游戏引擎工作台，可直接描述武器、查看 Cherry AI 连接状态，并在同一页面选择难度、系统武器或 AI 生成武器后开始游戏；统一的内容库用于查看内置内容与模块。Forge 先用轻量规划选择武器家族和核心原语，再用家族裁剪目录生成草案；格式、结构、兼容、平衡或性能错误最多触发一次定向修复。通过后可预览、接受并在重载后选择武器。Job 恢复管理 UI、包管理 UI 和 BehaviorGraph 尚未实现。
 
 ## 2. 当前目录
 
@@ -172,7 +172,7 @@ main.ts
 
 每件内置武器声明稳定 `behaviorId`。启动时 `Weapon.ts` 把现有 `fireXxx` 兼容行为与通用 Recipe 行为注册为冻结的 `WeaponBehaviorHandler`。Delivery、Trigger、Targeting、Cast Origin、Emission Schedule/Pattern、Projectile Motion、Collision、HitEffect、Lifecycle、Render、Particle Effect、Weapon Feedback 与 Weapon Modifier 分别拥有冻结 Registry；Capability Catalog 从这些 Registry 的公开 Descriptor 派生，不包含函数实现。
 
-魔法法器是当前第一件真实 Recipe 样板。AI Prompt 直接投影这份运行时数据和冻结 Capability Catalog，并发送 Modifier 的家族兼容信息。Recipe 在启动或升级安全点编译为只读 `WeaponRuntimePlan`；局内 Modifier 按固定阶段与稳定 ID 转换成受信任调整并重新执行预算检查。帧循环只执行已绑定处理器。弹体对象池会清理计划、周期命中 Map 与 Lifecycle 状态，反射或分裂弹体继承受限计划。
+魔法法器是当前第一件真实 Recipe 样板。规划 Prompt 只投影冻结 Capability Catalog 的 ID、种类和语义；生成 Prompt 再发送所选家族及核心机制需要的参数、兼容和预算子集，并继续使用真实魔法法器 Recipe 的字段投影作为结构示例。AI 草案不拥有版本、Delivery、Emitter 或重复 Burst 真值，这些字段由本地归一化层注入或从 Schedule 派生。Recipe 在启动或升级安全点编译为只读 `WeaponRuntimePlan`；局内 Modifier 按固定阶段与稳定 ID 转换成受信任调整并重新执行预算检查。帧循环只执行已绑定处理器。弹体对象池会清理计划、周期命中 Map 与 Lifecycle 状态，反射或分裂弹体继承受限计划。
 
 除基础直线圆弹外，当前目录还提供充能/Burst/螺旋、最低生命/种子随机/敌群目标、追踪/加速/回旋、分裂/弹跳、减速/灼烧/连锁/范围伤害、区域/光环/打击/挥击交付、周期区域/墙面反弹/地形阻挡、打包精灵、预警/冲击波粒子、白名单音色和镜头冲击。Particle Effect 只创建视觉实体并使用独立种子随机流；音效和镜头只消费类型化表现事件。编译器同时检查直接/派生弹体、周期命中、总效果伤害、粒子与反馈预算。
 
@@ -295,7 +295,7 @@ menu ↔ playing ↔ paused
 | v1 AppStateEnvelope 已接入，旧 Key 仅用于首次迁移 | 后续逐版本迁移、恢复 UI 与 RunCheckpoint |
 | 魔法法器与动态 AI 武器已进入原子 Projectile Recipe/Compiler；其余武器与部分展示仍有类型兼容分支 | 全部投射物复用原子 RuntimePlan + 完整 Lifecycle Registry + 声明式 ContentPack |
 | 内置武器/怪物快照已冻结；多数系统仍直接导入旧表 | 系统统一依赖已解析 Registry Snapshot |
-| AI Forge 已能调用 Cherry、流式取消、校验、预览、接受并安装动态武器 | 增加一次自动修复、启动恢复管理和内容包禁用/归档 UI |
+| AI Forge 已能两阶段调用 Cherry、流式取消、容错提取、单次定向修复、校验、预览、接受并安装动态武器 | 增加启动恢复管理和内容包禁用/归档 UI |
 | 自定义 ZIP 脚本 | 共享 `cherry-miniapp` CLI |
 
 迁移顺序和依赖规则以 [`TARGET_ARCHITECTURE.md`](./docs/architecture/TARGET_ARCHITECTURE.md) 为准。

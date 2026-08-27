@@ -4,6 +4,7 @@ import {
   type WeaponForgePreview,
   type WeaponForgeService,
 } from '../generation/WeaponForgeService';
+import type { WeaponGenerationStageV1 } from '../generation/GenerationJob';
 import { WeaponType, type WeaponType as WeaponTypeValue } from '../../game/types';
 import { WEAPON_ASSETS } from '../../game/renderers/WeaponSpriteRegistry';
 
@@ -23,14 +24,49 @@ function createButton(label: string, className = ''): HTMLButtonElement {
 }
 
 function errorMessage(error: unknown): string {
-  if (error instanceof WeaponForgeError && error.issues.length > 0) {
+  if (error instanceof WeaponForgeError) {
+    const heading = `${stageLabel(error.stage)}失败${error.requestId ? ` · ${error.requestId}` : ''}`;
     const details = error.issues
-      .slice(0, 5)
-      .map((issue) => `${issue.path}: ${issue.message}`)
-      .join('\n');
-    return `${error.message}\n${details}`;
+      .slice(0, 8)
+      .map((issue) => `[${issue.code}] ${issue.path}: ${issue.message}`);
+    if (error.retryable) details.push('该错误可重试。');
+    return [heading, error.message, ...details].join('\n');
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+function stageLabel(stage: WeaponGenerationStageV1): string {
+  const labels: Readonly<Record<WeaponGenerationStageV1, string>> = {
+    preflight: '调用前检查',
+    planning: '能力规划',
+    generation: '武器生成',
+    extraction: 'JSON 提取',
+    schema: '结构校验',
+    compatibility: '原语兼容校验',
+    balance: '平衡预算校验',
+    performance: '性能预算校验',
+    repair: '自动修复',
+    preview: '预览准备',
+    install: '内容安装',
+  };
+  return labels[stage];
+}
+
+function stageStatus(stage: WeaponGenerationStageV1): string {
+  const statuses: Readonly<Record<WeaponGenerationStageV1, string>> = {
+    preflight: '正在检查 Cherry AI 权限与模型能力…',
+    planning: 'Cherry AI 正在选择武器家族与核心原语…',
+    generation: 'Cherry AI 正在使用裁剪后的能力目录生成武器…',
+    extraction: '正在提取唯一的 JSON 武器草案…',
+    schema: '正在执行本地封闭结构校验…',
+    compatibility: '正在检查原语引用与组合兼容性…',
+    balance: '正在检查一级、满级与 Modifier 最坏平衡预算…',
+    performance: '正在检查弹体、派生实体与粒子性能预算…',
+    repair: '首次草案未通过，Cherry AI 正在执行一次定向修复…',
+    preview: '校验通过，正在准备安全预览…',
+    install: '正在安装已接受的武器内容包…',
+  };
+  return statuses[stage];
 }
 
 function formatNumber(value: unknown): string {
@@ -272,6 +308,10 @@ export class WeaponForgePanel {
     this.setBusy(true);
     try {
       const result = await this.options.service.generate(this.intent.value, {
+        onStage: (stage) => {
+          this.status.textContent = stageStatus(stage);
+          if (stage === 'generation' || stage === 'repair') this.stream.textContent = '';
+        },
         onChunk: (_chunk, accumulated) => {
           this.stream.textContent = accumulated.slice(-4_000);
           this.stream.scrollTop = this.stream.scrollHeight;

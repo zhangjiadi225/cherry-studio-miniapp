@@ -8,7 +8,7 @@
 
 ## 1. 目的
 
-当前实现进度：武器 `ContentPackV1`、封闭字段 Validator、引用/数值/一级与满级最坏 Modifier、派生弹体、伤害、粒子和反馈预算校验、内容库接受事务和启动期动态武器装配已经落地。Cherry AI Forge 已能生成、预览并由玩家接受 Projectile、Zone、Aura、Strike 或 Swing 武器；P0/P1/P2 的发射、运动、生命周期、命中、目标、交付、碰撞与视听原语均使用同一个 `WeaponRuntimePlan` 执行链。当前仍只支持一个 Pack 一件武器；怪物、行为图、版本迁移和包管理 UI 尚未完成。
+当前实现进度：武器 `ContentPackV1`、封闭字段 Validator、结构问题聚合、引用/数值/一级与满级最坏 Modifier、派生弹体、伤害、粒子和反馈预算校验、内容库接受事务和启动期动态武器装配已经落地。Cherry AI Forge 先规划并裁剪能力目录，再生成、归一化、最多修复一次、预览并由玩家接受 Projectile、Zone、Aura、Strike 或 Swing 武器；P0/P1/P2 的发射、运动、生命周期、命中、目标、交付、碰撞与视听原语均使用同一个 `WeaponRuntimePlan` 执行链。当前仍只支持一个 Pack 一件武器；怪物、行为图、版本迁移和包管理 UI 尚未完成。
 
 第一版最多同时启用 6 个生成武器 Pack。达到上限时必须先通过未来的包管理入口禁用已有内容；不能继续安装并让开局选择界面或运行时预算无界增长。
 

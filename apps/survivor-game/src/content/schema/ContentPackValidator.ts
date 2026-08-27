@@ -17,6 +17,7 @@ import type {
 } from '../../game/recipes/weapon/WeaponRecipe';
 import {
   compileProjectileWeaponRecipe,
+  WeaponRecipeCompileError,
   type WeaponRecipeCompilerRegistries,
   type WeaponRecipeRuntimeStats,
 } from '../../game/recipes/weapon/WeaponRecipeCompiler';
@@ -24,6 +25,7 @@ import { CoreWeaponPrimitiveId } from '../../game/behaviors/weapon/CoreProjectil
 import { APP_VERSION } from '../../application/AppVersion';
 
 export type ContentValidationErrorCode =
+  | 'INVALID_JSON'
   | 'INVALID_TYPE'
   | 'UNKNOWN_FIELD'
   | 'MISSING_FIELD'
@@ -31,6 +33,8 @@ export type ContentValidationErrorCode =
   | 'INVALID_ID'
   | 'INVALID_REFERENCE'
   | 'UNSUPPORTED_CONTENT'
+  | 'INCOMPATIBLE_PRIMITIVES'
+  | 'PERFORMANCE_BUDGET_EXCEEDED'
   | 'WEAPON_BUDGET_EXCEEDED'
   | 'RECIPE_COMPILE_FAILED';
 
@@ -58,6 +62,9 @@ const PROPOSAL_KEYS = ['proposalVersion', 'name', 'description', 'recipe', 'prog
 const RECIPE_KEYS = [
   'recipeVersion', 'delivery', 'trigger', 'targeting', 'emission', 'projectile', 'feedback',
   'modifierPolicy',
+] as const;
+const RECIPE_REQUIRED_KEYS = [
+  'recipeVersion', 'delivery', 'trigger', 'targeting', 'emission', 'projectile', 'modifierPolicy',
 ] as const;
 
 function compareSemver(left: string, right: string): number {
@@ -192,6 +199,177 @@ function primitiveRef(value: unknown, path: string): PrimitiveRefV1 {
 
 function optionalPrimitiveRef(value: unknown, path: string): PrimitiveRefV1 | undefined {
   return value === undefined ? undefined : primitiveRef(value, path);
+}
+
+const MAX_COLLECTED_SHAPE_ISSUES = 12;
+
+function addShapeIssue(
+  issues: ContentValidationIssue[],
+  code: ContentValidationErrorCode,
+  path: string,
+  message: string
+): void {
+  if (issues.length >= MAX_COLLECTED_SHAPE_ISSUES) return;
+  if (issues.some((candidate) => candidate.code === code && candidate.path === path)) return;
+  issues.push({ code, path, message });
+}
+
+function shapeRecord(
+  value: unknown,
+  path: string,
+  allowedKeys: readonly string[],
+  requiredKeys: readonly string[],
+  issues: ContentValidationIssue[]
+): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    addShapeIssue(issues, 'INVALID_TYPE', path, 'expected object');
+    return undefined;
+  }
+  const source = value as Record<string, unknown>;
+  const allowed = new Set(allowedKeys);
+  for (const key of Object.keys(source)) {
+    if (!allowed.has(key)) addShapeIssue(issues, 'UNKNOWN_FIELD', `${path}.${key}`, `unknown field "${key}"`);
+  }
+  for (const key of requiredKeys) {
+    if (!(key in source)) addShapeIssue(issues, 'MISSING_FIELD', `${path}.${key}`, `missing field "${key}"`);
+  }
+  return source;
+}
+
+function shapeArray(
+  value: unknown,
+  path: string,
+  issues: ContentValidationIssue[]
+): unknown[] | undefined {
+  if (!Array.isArray(value)) {
+    addShapeIssue(issues, 'INVALID_TYPE', path, 'expected array');
+    return undefined;
+  }
+  return value;
+}
+
+function collectPrimitiveRefShape(
+  value: unknown,
+  path: string,
+  issues: ContentValidationIssue[]
+): void {
+  const source = shapeRecord(value, path, ['primitiveId', 'params'], ['primitiveId', 'params'], issues);
+  if (!source) return;
+  if ('primitiveId' in source && typeof source.primitiveId !== 'string') {
+    addShapeIssue(issues, 'INVALID_TYPE', `${path}.primitiveId`, 'expected string');
+  }
+  if (
+    'params' in source &&
+    (typeof source.params !== 'object' || source.params === null || Array.isArray(source.params))
+  ) {
+    addShapeIssue(issues, 'INVALID_TYPE', `${path}.params`, 'expected object');
+  }
+}
+
+function collectPrimitiveRefArrayShape(
+  value: unknown,
+  path: string,
+  issues: ContentValidationIssue[]
+): void {
+  const values = shapeArray(value, path, issues);
+  values?.forEach((item, index) => collectPrimitiveRefShape(item, `${path}[${index}]`, issues));
+}
+
+function collectWeaponProposalShapeIssues(input: unknown): readonly ContentValidationIssue[] {
+  const issues: ContentValidationIssue[] = [];
+  const source = shapeRecord(input, '$', PROPOSAL_KEYS, PROPOSAL_KEYS, issues);
+  if (!source) return issues;
+
+  const recipe = shapeRecord(source.recipe, '$.recipe', RECIPE_KEYS, RECIPE_REQUIRED_KEYS, issues);
+  if (recipe) {
+    if (recipe.delivery !== 'projectile') {
+      collectPrimitiveRefShape(recipe.delivery, '$.recipe.delivery', issues);
+    }
+    collectPrimitiveRefShape(recipe.trigger, '$.recipe.trigger', issues);
+    collectPrimitiveRefShape(recipe.targeting, '$.recipe.targeting', issues);
+    const emission = shapeRecord(recipe.emission, '$.recipe.emission', [
+      'emitterId', 'schedule', 'origin', 'count', 'burstCount', 'burstInterval', 'pattern',
+    ], [
+      'emitterId', 'origin', 'count', 'burstCount', 'burstInterval', 'pattern',
+    ], issues);
+    if (emission) {
+      if (emission.schedule !== undefined) {
+        collectPrimitiveRefShape(emission.schedule, '$.recipe.emission.schedule', issues);
+      }
+      collectPrimitiveRefShape(emission.origin, '$.recipe.emission.origin', issues);
+      collectPrimitiveRefShape(emission.pattern, '$.recipe.emission.pattern', issues);
+    }
+
+    const projectile = shapeRecord(recipe.projectile, '$.recipe.projectile', [
+      'damage', 'radius', 'speed', 'lifetime', 'pierce', 'knockback', 'motion', 'collision',
+      'hitEffects', 'lifecycle', 'visual',
+    ], [
+      'damage', 'radius', 'speed', 'lifetime', 'pierce', 'knockback', 'motion', 'collision',
+      'hitEffects', 'lifecycle', 'visual',
+    ], issues);
+    if (projectile) {
+      collectPrimitiveRefShape(projectile.motion, '$.recipe.projectile.motion', issues);
+      collectPrimitiveRefShape(projectile.collision, '$.recipe.projectile.collision', issues);
+      collectPrimitiveRefArrayShape(projectile.hitEffects, '$.recipe.projectile.hitEffects', issues);
+      collectPrimitiveRefArrayShape(projectile.lifecycle, '$.recipe.projectile.lifecycle', issues);
+      const visual = shapeRecord(projectile.visual, '$.recipe.projectile.visual', [
+        'body', 'palette', 'scale', 'opacity', 'glow', 'layers', 'trail', 'particles', 'emitters',
+      ], ['body', 'palette', 'scale', 'opacity', 'layers'], issues);
+      if (visual) {
+        collectPrimitiveRefShape(visual.body, '$.recipe.projectile.visual.body', issues);
+        shapeRecord(
+          visual.palette,
+          '$.recipe.projectile.visual.palette',
+          ['primary', 'secondary', 'accent'],
+          ['primary'],
+          issues
+        );
+        if (visual.glow !== undefined) {
+          shapeRecord(
+            visual.glow,
+            '$.recipe.projectile.visual.glow',
+            ['color', 'radiusScale', 'intensity'],
+            ['color', 'radiusScale', 'intensity'],
+            issues
+          );
+        }
+        collectPrimitiveRefArrayShape(visual.layers, '$.recipe.projectile.visual.layers', issues);
+        if (visual.trail !== undefined) {
+          collectPrimitiveRefShape(visual.trail, '$.recipe.projectile.visual.trail', issues);
+        }
+        if (visual.particles !== undefined) {
+          collectPrimitiveRefShape(visual.particles, '$.recipe.projectile.visual.particles', issues);
+        }
+        if (visual.emitters !== undefined) {
+          collectPrimitiveRefArrayShape(visual.emitters, '$.recipe.projectile.visual.emitters', issues);
+        }
+      }
+    }
+
+    if (recipe.feedback !== undefined) {
+      collectPrimitiveRefArrayShape(recipe.feedback, '$.recipe.feedback', issues);
+    }
+    const modifierPolicy = shapeRecord(recipe.modifierPolicy, '$.recipe.modifierPolicy', [
+      'allowedIds', 'deniedIds',
+    ], ['allowedIds', 'deniedIds'], issues);
+    if (modifierPolicy) {
+      shapeArray(modifierPolicy.allowedIds, '$.recipe.modifierPolicy.allowedIds', issues);
+      shapeArray(modifierPolicy.deniedIds, '$.recipe.modifierPolicy.deniedIds', issues);
+    }
+  }
+
+  const parsedProgression = shapeRecord(source.progression, '$.progression', [
+    'maxLevel', 'perLevel',
+  ], ['maxLevel', 'perLevel'], issues);
+  if (parsedProgression) {
+    shapeRecord(parsedProgression.perLevel, '$.progression.perLevel', [
+      'damage', 'cooldown', 'projectileSpeed', 'projectileRadius', 'count', 'pierce', 'lifetime', 'knockback',
+    ], [], issues);
+  }
+  shapeRecord(source.balance, '$.balance', ['budgetTier', 'intendedRole'], [
+    'budgetTier', 'intendedRole',
+  ], issues);
+  return Object.freeze(issues);
 }
 
 function visualRecipe(value: unknown, path: string): ProjectileVisualRecipeV1 {
@@ -441,6 +619,20 @@ function validateCompiledProposal(
     }
   } catch (error) {
     if (error instanceof ValidationFailure) throw error;
+    if (error instanceof WeaponRecipeCompileError) {
+      const code: ContentValidationErrorCode = error.code === 'UNKNOWN_PRIMITIVE'
+        ? 'INVALID_REFERENCE'
+        : error.code === 'INCOMPATIBLE_PRIMITIVES'
+          ? 'INCOMPATIBLE_PRIMITIVES'
+          : [
+              'PROJECTILES_PER_CAST_EXCEEDED',
+              'PROJECTILE_CONCURRENCY_EXCEEDED',
+              'PARTICLE_BUDGET_EXCEEDED',
+            ].includes(error.code)
+            ? 'PERFORMANCE_BUDGET_EXCEEDED'
+            : 'RECIPE_COMPILE_FAILED';
+      issue(code, `recipe.${error.path}`, error.message);
+    }
     const message = error instanceof Error ? error.message : String(error);
     issue('RECIPE_COMPILE_FAILED', 'recipe', message);
   }
@@ -469,6 +661,8 @@ export function validateWeaponGenerationProposal(
   registries: WeaponRecipeCompilerRegistries,
   provisionalDefinitionId = 'ai.preview/weapon/main'
 ): ContentValidationResult<WeaponGenerationProposalV1> {
+  const shapeIssues = collectWeaponProposalShapeIssues(input);
+  if (shapeIssues.length > 0) return { ok: false, issues: shapeIssues };
   return resultOf(() => {
     const value = proposal(input, '$');
     validateCompiledProposal(value, provisionalDefinitionId, registries);

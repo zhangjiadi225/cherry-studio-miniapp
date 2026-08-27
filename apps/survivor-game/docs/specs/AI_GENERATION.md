@@ -2,7 +2,7 @@
 
 > 状态：Draft Spec
 >
-> 规范版本：0.3
+> 规范版本：0.4
 >
 > 更新日期：2026-08-27
 
@@ -12,7 +12,7 @@
 
 AI 输出始终是候选 Draft。游戏规则只接受经过本地校验且被玩家明确接受的 ContentPack。
 
-当前实现进度：武器任务已经通过本机链接的 `@cherry-miniapp/kit` 接入真实 Cherry Host。AI 引擎首页可收集玩家意图并进入同一个受控 Forge；Forge UI 可显示流式结果、预览一级/满级数值、Delivery 与全部原语引用、展示本地校验结果，并明确接受或拒绝。`weapon.v4` Prompt 会发送 P0/P1/P2 的完整冻结 Capability Catalog；单请求状态机、取消、单 JSON 提取、Draft 持久化、完整本地校验以及“接受 Job + 安装并启用 ContentPack”的原子写入已经落地。一次自动修复、启动恢复管理 UI 和内容包管理 UI 尚未接入。
+当前实现进度：武器任务已经通过本机链接的 `@cherry-miniapp/kit` 接入真实 Cherry Host。AI 引擎首页可收集玩家意图并进入同一个受控 Forge；`weapon-plan.v1` 先选择家族和最多 12 个核心原语，`weapon.v5` 只发送该家族需要的参数、兼容与预算目录，`weapon-repair.v1` 最多执行一次定向修复。Forge UI 显示当前阶段、稳定错误码、请求 ID、流式结果、一级/满级数值、Delivery 与全部原语引用，并明确接受或拒绝。单请求状态机、取消、唯一 JSON 对象提取、无歧义草案归一化、Draft 持久化、完整本地校验以及“接受 Job + 安装并启用 ContentPack”的原子写入已经落地。启动恢复管理 UI 和内容包管理 UI 尚未接入。
 
 ## 2. 支持的任务
 
@@ -36,6 +36,7 @@ AI 输出始终是候选 Draft。游戏规则只接受经过本地校验且被�
 | 任务 | 默认槽位 | Reasoning | 说明 |
 | --- | --- | --- | --- |
 | 武器/怪物完整生成 | `default` | `off` | 低频、结构较大 |
+| 武器能力规划 | `quick` | `off` | 只选择家族与核心原语；失败时使用本地意图路由 |
 | 行为变异 | `default` | `off` | 需要完整规则上下文 |
 | 命名、短描述 | `quick` | `off` | 短响应 |
 | 一次结构修复 | `quick` | `off` | 只修复校验错误，不重新设计 |
@@ -51,6 +52,7 @@ AI 输出始终是候选 Draft。游戏规则只接受经过本地校验且被�
 ```text
 idle
   → pending-persisted
+  → planning
   → streaming
   → received
   → validating
@@ -73,9 +75,13 @@ interface GenerationJobV1 {
   requestId: string
   task: 'weapon' | 'enemy' | 'behavior-mutation'
   promptVersion: string
-  modelSlot: 'default' | 'quick'
+  planningPromptVersion?: string
+  repairPromptVersion?: string
+  repairModelSlot?: 'default' | 'quick'
+  modelSlot: 'default'
   status:
     | 'pending'
+    | 'planning'
     | 'streaming'
     | 'received'
     | 'validating'
@@ -86,6 +92,10 @@ interface GenerationJobV1 {
     | 'interrupted'
     | 'failed'
   userIntent: string
+  stage?: 'preflight' | 'planning' | 'generation' | 'extraction' | 'schema' | 'compatibility' | 'balance' | 'performance' | 'repair' | 'preview' | 'install'
+  plan?: WeaponGenerationPlanV1
+  planningFallbackUsed?: boolean
+  repairAttempted?: boolean
   createdAt: string
   updatedAt: string
   rawResponse?: string
@@ -107,13 +117,19 @@ interface GenerationJobV1 {
 
 ## 5. Prompt 合同
 
-每个 Prompt 必须带有显式版本，并只包含完成任务所需的最小信息：
+每个 Prompt 必须带有显式版本，并只包含当前阶段所需的最小信息。武器任务分为：
+
+1. 规划阶段只发送 ID、种类、名称、描述和标签，让模型选择家族、定位和最多 12 个核心原语；规划格式失败时，本地仅根据玩家原始意图选择安全家族和显式关键词原语。
+2. 生成阶段从冻结 Catalog 中加入家族基础原语、规划原语及其 `requires` 闭包，只发送这部分参数、兼容、预算和兼容 Modifier。
+3. 修复阶段只发送原草案、稳定错误、允许目录、输出合同和真实 Recipe 的字段形状投影。
+
+生成 Prompt 包含：
 
 - 任务目标和玩家意图。
 - 当前 ContentPack schema 的任务相关子集。
 - 可引用的行为、Pattern、Modifier 和视觉原语 ID。
 - 每个武器/弹幕原语的参数 Schema、兼容关系和成本摘要；格式遵循 [`WEAPON_RECIPE.md`](./WEAPON_RECIPE.md)。
-- 当前任务的全部已发布原语，以及每个 Modifier 的兼容家族；最终由所选 Delivery 家族裁决 Modifier。
+- 所选家族基础原语、规划原语、依赖闭包，以及该家族兼容的 Modifier；最终仍由本地 Delivery 家族裁决 Modifier。
 - Prompt 必须要求遵守 `requires` / `conflictsWith`，并使线段/扇区碰撞与光束/圆弧渲染的几何参数保持语义一致。
 - 视觉 Particle Effect 的事件、参数边界、每秒生成量和理论同时在场预算。
 - 数值预算和硬限制摘要。
@@ -135,20 +151,20 @@ Prompt 文本属于产品代码，应与 `promptVersion` 一同变更。Prompt �
 
 提取规则：
 
-1. 接受一个裸 JSON 对象，或一个只包含 JSON 的 fenced code block。
+1. 接受一个裸 JSON 对象，或从短说明、fenced code block 前后文中扫描出的唯一完整 JSON 对象。
 2. 只允许一个顶层对象；多个候选对象必须拒绝。
 3. 解析结果类型为 `unknown`，不得直接断言为 ContentPack。
 4. 去除 code fence 不等于信任内容，随后必须运行完整 ContentPack Validator。
 5. 不执行字段中的代码、HTML、SVG、CSS、表达式或 URL。
 
-模型返回的解释文本不能作为规则真值，也不能作为校验成功依据。
+模型返回的解释文本会被丢弃，不能作为规则真值或校验成功依据。扫描器必须正确处理 JSON 字符串中的括号和转义；零个、不完整或多个顶层对象都拒绝。
 
 ## 7. 校验与修复
 
 校验顺序遵循 `CONTENT_PACK.md`。错误分为：
 
 - `repairable`：缺少必填展示字段、合法枚举拼写错误、引用了相近但不存在的原语 ID 等结构问题。
-- `non-repairable`：越权字段、可执行内容、严重超预算、未知 schema、多个顶层对象、恶意或不可判定内容。
+- `non-repairable`：可执行内容、未知 schema、多个顶层对象、恶意或不可判定内容。
 
 修复策略：
 
@@ -156,7 +172,9 @@ Prompt 文本属于产品代码，应与 `promptVersion` 一同变更。Prompt �
 - 修复请求只发送原 Draft、稳定错误码、字段路径和允许值，不要求模型重新设计全部内容。
 - 修复结果重新经过完整校验，不能只验证原失败字段。
 - 第二次失败直接进入 `failed`，由玩家修改意图或重新生成。
-- 本地代码可以对无语义歧义的展示字段做规范化，但不得偷偷改伤害、冷却、奖励或行为图来“让它通过”。
+- `quick` 修复若在收到任何模型文本前发生 `RateLimited`、`Unavailable` 或 `Internal`，可以使用新 `callId` 向 `default` 槽位回退一次；这属于传输降级，不增加结构修复次数。收到模型文本后的失败不得循环重试。
+- 本地代码只可以注入协议版本、固定 Emitter、已规划 Delivery，并从 Emission Schedule 派生重复的 Burst 兼容字段；不得偷偷改伤害、冷却、奖励、原语参数或行为图来“让它通过”。
+- 平衡或性能超限可以进入一次模型修复，但本地代码不直接缩放数值；修复结果仍要完整校验并由玩家确认。
 
 ## 8. Balance Policy
 
@@ -215,6 +233,8 @@ Cherry 错误以普通 `{ name, message }` 对象跨 Bridge，不是 `Error` 实
 | `Internal` | 显示通用失败 | 保留意图，不修改内容库 |
 
 任何未知错误按不可用处理并保留当前安全状态，不向用户展示堆栈或宿主内部细节。
+
+Vite DEV 的显式 Cherry Mock 默认继续返回真实魔法法器 Recipe 的字段投影，并让规划阶段固定使用 Projectile，避免维护影子家族武器。开发者可以在意图中加入以下仅开发标记构造反馈信号：`[mock:json-prefix]`、`[mock:truncated]`、`[mock:invalid-reference]`、`[mock:over-budget]`、`[mock:multiple-json]`。这些标记不属于生产 Prompt 协议；分别覆盖容错提取、一次修复、引用错误、预算错误和多对象拒绝路径。
 
 ## 12. 可复现性
 

@@ -2,7 +2,7 @@
 
 > 状态：Draft Spec
 >
-> 规范版本：0.4
+> 规范版本：0.5
 >
 > 更新日期：2026-08-27
 
@@ -195,6 +195,7 @@ interface ProjectileVisualRecipeV1 {
 - Modifier 的 `conflictsWith` 可以引用其他 Modifier 或当前配方原语；例如 `orbital-core` 与 `motion.orbit-player` 冲突，避免运行时覆盖配方声明的环绕参数。
 - `deniedIds` 用于表达明确冲突；本地 Modifier Registry 的冲突声明仍拥有最终决定权。
 - `emission.schedule` 与兼容字段 `burstCount` / `burstInterval` 必须精确一致；Burst 最少间隔 0.03 秒，运行时单帧最多追赶两次齐射。
+- AI 锻造草案只输出 `emission.schedule`；`burstCount` / `burstInterval` 由本地归一化层从已注册 Schedule 参数派生。完整 ContentPack 和运行时 Recipe 继续保存三者，以兼容既有内容和热路径计划。
 - `area-periodic` 必须声明 `tickInterval` 和 `maxTargetsPerTick`；同一敌人使用池化冷却 Map，不能靠无限 `hitEnemies` 集合重复命中。
 - Zone、Aura、Strike 和 Swing 的 Delivery Descriptor 通过 `requires` 约束对应的 Origin、Stationary Motion 与 Collision 组合。
 - `feedback` 最多 6 项，只能发送类型化表现事件；静音设置和 `prefers-reduced-motion` 分别裁决音效与镜头冲击。
@@ -202,6 +203,10 @@ interface ProjectileVisualRecipeV1 {
 ## 7. 真实样板与 AI 参数所有权
 
 首个样板使用现有“魔法法器”的真实内置 Recipe。该 Recipe 必须由当前游戏直接编译和执行，并保持现有数值、升级、碰撞与视觉结果；Prompt 所需示例从这份 Recipe 投影，不能复制成另一份手写 JSON。
+
+AI 锻造分两层合同：规划层只选择 `family`、`intendedRole` 和原语 ID；生成层输出精简 Draft。精简 Draft 不包含 `proposalVersion`、`recipeVersion`、`delivery`、`emitterId`、`burstCount` 或 `burstInterval`。本地归一化层使用已验证的规划家族注入 Delivery，使用固定 Emitter，并从 Schedule 派生 Burst 兼容字段，再交给同一个完整 Proposal Validator。
+
+Zone、Aura、Strike、Swing 的家族模板是由 Delivery Descriptor `requires` 和 Catalog 白名单组成的约束 Profile，不是隐藏武器或可安装内容。结构示例仍只从真实内置 Recipe 投影；不得为 Prompt 或开发 Mock 维护一套运行时不消费的影子武器数值。
 
 在这个合同中：
 
