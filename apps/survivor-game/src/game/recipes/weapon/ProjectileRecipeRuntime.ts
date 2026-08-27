@@ -13,6 +13,7 @@ export interface ProjectileRecipeRuntimeAdapter {
     y: number,
     vx: number,
     vy: number,
+    headingAngle: number,
     damage: number,
     radius: number,
     lifetime: number,
@@ -28,20 +29,30 @@ export function fireProjectileRecipe(
   const { weapon, player, damage, enemyQuery } = context;
   const plan = weapon.runtimePlan;
   if (!plan) return false;
-  if (plan.emission.burstCount !== 1 || plan.emission.burstInterval !== 0) return false;
 
   const count = plan.emission.count;
-  const targetCount = plan.targeting.select(player, enemyQuery, count, targetScratch);
+  const targetCount = plan.targeting.select(
+    player,
+    enemyQuery,
+    count,
+    targetScratch,
+    weapon.castSequence ?? 0
+  );
   let fired = false;
   for (let i = 0; i < count; i++) {
     const target = targetCount > 0 ? targetScratch[i % targetCount] : undefined;
-    plan.emission.origin.resolve(player, i, count, originScratch);
     const fallbackAngle = plan.targeting.fallback === 'forward'
       ? (player.facingLeft ? Math.PI : 0)
       : (i / count) * Math.PI * 2 + player.animTimer * 0.1;
-    const baseAngle = target
-      ? Math.atan2(target.y - originScratch.y, target.x - originScratch.x)
+    const targetAngle = target
+      ? Math.atan2(target.y - player.y, target.x - player.x)
       : fallbackAngle;
+    plan.emission.origin.resolve(player, i, count, originScratch, target, targetAngle);
+    const targetDx = target ? target.x - originScratch.x : 0;
+    const targetDy = target ? target.y - originScratch.y : 0;
+    const baseAngle = target && targetDx * targetDx + targetDy * targetDy > 0.0001
+      ? Math.atan2(targetDy, targetDx)
+      : targetAngle;
     const angle = plan.emission.pattern.resolveAngle(baseAngle, i, count);
     fired = adapter.spawn(
       context,
@@ -50,6 +61,7 @@ export function fireProjectileRecipe(
       originScratch.y,
       Math.cos(angle) * plan.projectile.speed,
       Math.sin(angle) * plan.projectile.speed,
+      angle,
       damage,
       plan.projectile.radius * player.area,
       plan.projectile.lifetime,

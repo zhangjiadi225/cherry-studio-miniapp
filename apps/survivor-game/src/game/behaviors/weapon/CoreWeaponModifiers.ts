@@ -72,7 +72,9 @@ export const CORE_WEAPON_MODIFIER_PLUGIN: EnginePlugin = Object.freeze<EnginePlu
           description: modifier.desc,
           maxStacks: modifier.maxStacks,
           compatibleFamilies: Object.freeze([...modifier.compatibleFamilies]),
-          conflictsWith: Object.freeze([]),
+          conflictsWith: modifier.id === GenericModifierType.ORBITAL_CORE
+            ? Object.freeze(['builtin.motion.orbit-player'])
+            : Object.freeze([]),
           estimatedCostPerStack: modifier.priceTier,
         }),
         getAdjustments(stacks) {

@@ -128,14 +128,17 @@ function createGeneratedWeaponDefinition(
     name: blueprint.name,
     icon: '✦',
     desc: blueprint.description,
-    family: 'projectile',
+    family: blueprint.family,
     behaviorId: CoreWeaponBehaviorId.PROJECTILE_RECIPE,
     recipe,
     metadata: {
-      behavior: 'focus_cast',
+      behavior: blueprint.family === 'zone' ? 'area_control' :
+        blueprint.family === 'aura' ? 'damage_aura' :
+        blueprint.family === 'swing' ? 'cleave_melee' :
+        blueprint.family === 'orbit' ? 'orbit_summon' : 'focus_cast',
       displayMode: 'none',
       displayPriority: 65,
-      tags: ['ranged'],
+      tags: blueprint.family === 'swing' || blueprint.family === 'aura' ? ['melee'] : ['ranged'],
     },
     baseDamage: recipe.projectile.damage,
     baseCooldown: cooldown,

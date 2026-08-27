@@ -55,7 +55,10 @@ const SEMVER_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9a-z.-]+)?$/i;
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const RESERVED_TEXT_PATTERN = /<\/?(?:script|style|svg|iframe)|javascript:|data:/i;
 const PROPOSAL_KEYS = ['proposalVersion', 'name', 'description', 'recipe', 'progression', 'balance'] as const;
-const RECIPE_KEYS = ['recipeVersion', 'delivery', 'trigger', 'targeting', 'emission', 'projectile', 'modifierPolicy'] as const;
+const RECIPE_KEYS = [
+  'recipeVersion', 'delivery', 'trigger', 'targeting', 'emission', 'projectile', 'feedback',
+  'modifierPolicy',
+] as const;
 
 function compareSemver(left: string, right: string): number {
   const parse = (value: string) => {
@@ -192,9 +195,14 @@ function optionalPrimitiveRef(value: unknown, path: string): PrimitiveRefV1 | un
 }
 
 function visualRecipe(value: unknown, path: string): ProjectileVisualRecipeV1 {
-  const source = closedRecord(value, path, ['body', 'palette', 'scale', 'opacity', 'glow', 'layers', 'trail', 'particles']);
+  const source = closedRecord(value, path, [
+    'body', 'palette', 'scale', 'opacity', 'glow', 'layers', 'trail', 'particles', 'emitters',
+  ]);
   const palette = closedRecord(required(source, 'palette', path), `${path}.palette`, ['primary', 'secondary', 'accent']);
   const layers = arrayValue(required(source, 'layers', path), `${path}.layers`, 8);
+  const emitters = source.emitters === undefined
+    ? []
+    : arrayValue(source.emitters, `${path}.emitters`, 4);
   let glow: ProjectileVisualRecipeV1['glow'];
   if (source.glow !== undefined) {
     const rawGlow = closedRecord(source.glow, `${path}.glow`, ['color', 'radiusScale', 'intensity']);
@@ -221,13 +229,16 @@ function visualRecipe(value: unknown, path: string): ProjectileVisualRecipeV1 {
     layers: layers.map((item, index) => primitiveRef(item, `${path}.layers[${index}]`)),
     ...(source.trail === undefined ? {} : { trail: optionalPrimitiveRef(source.trail, `${path}.trail`) }),
     ...(source.particles === undefined ? {} : { particles: optionalPrimitiveRef(source.particles, `${path}.particles`) }),
+    ...(source.emitters === undefined ? {} : {
+      emitters: emitters.map((item, index) => primitiveRef(item, `${path}.emitters[${index}]`)),
+    }),
   };
 }
 
 function weaponRecipe(value: unknown, path: string): ProjectileWeaponRecipeV1 {
   const source = closedRecord(value, path, RECIPE_KEYS);
   const emission = closedRecord(required(source, 'emission', path), `${path}.emission`, [
-    'emitterId', 'origin', 'count', 'burstCount', 'burstInterval', 'pattern',
+    'emitterId', 'schedule', 'origin', 'count', 'burstCount', 'burstInterval', 'pattern',
   ]);
   const projectile = closedRecord(required(source, 'projectile', path), `${path}.projectile`, [
     'damage', 'radius', 'speed', 'lifetime', 'pierce', 'knockback', 'motion', 'collision',
@@ -240,6 +251,9 @@ function weaponRecipe(value: unknown, path: string): ProjectileWeaponRecipeV1 {
   const lifecycle = arrayValue(required(projectile, 'lifecycle', `${path}.projectile`), `${path}.projectile.lifecycle`, 6);
   const allowedIds = arrayValue(required(modifierPolicy, 'allowedIds', `${path}.modifierPolicy`), `${path}.modifierPolicy.allowedIds`, 16);
   const deniedIds = arrayValue(required(modifierPolicy, 'deniedIds', `${path}.modifierPolicy`), `${path}.modifierPolicy.deniedIds`, 16);
+  const feedback = source.feedback === undefined
+    ? []
+    : arrayValue(source.feedback, `${path}.feedback`, 6);
 
   const parsedHitEffects = hitEffects.map((item, index) =>
     primitiveRef(item, `${path}.projectile.hitEffects[${index}]`)
@@ -261,13 +275,21 @@ function weaponRecipe(value: unknown, path: string): ProjectileWeaponRecipeV1 {
     issue('INVALID_VALUE', `${path}.projectile.hitEffects`, 'damageScale must be greater than zero');
   }
 
+  const rawDelivery = required(source, 'delivery', path);
+  const delivery = rawDelivery === 'projectile'
+    ? 'projectile' as const
+    : primitiveRef(rawDelivery, `${path}.delivery`);
+
   return {
     recipeVersion: numberValue(required(source, 'recipeVersion', path), `${path}.recipeVersion`, 1, 1, true) as 1,
-    delivery: enumValue(required(source, 'delivery', path), `${path}.delivery`, ['projectile'] as const),
+    delivery,
     trigger: primitiveRef(required(source, 'trigger', path), `${path}.trigger`),
     targeting: primitiveRef(required(source, 'targeting', path), `${path}.targeting`),
     emission: {
       emitterId: enumValue(required(emission, 'emitterId', `${path}.emission`), `${path}.emission.emitterId`, ['builtin.emitter.projectile'] as const),
+      ...(emission.schedule === undefined ? {} : {
+        schedule: primitiveRef(emission.schedule, `${path}.emission.schedule`),
+      }),
       origin: primitiveRef(required(emission, 'origin', `${path}.emission`), `${path}.emission.origin`),
       count: numberValue(required(emission, 'count', `${path}.emission`), `${path}.emission.count`, 1, 64, true),
       burstCount: numberValue(required(emission, 'burstCount', `${path}.emission`), `${path}.emission.burstCount`, 1, 8, true),
@@ -287,6 +309,9 @@ function weaponRecipe(value: unknown, path: string): ProjectileWeaponRecipeV1 {
       lifecycle: lifecycle.map((item, index) => primitiveRef(item, `${path}.projectile.lifecycle[${index}]`)),
       visual: visualRecipe(required(projectile, 'visual', `${path}.projectile`), `${path}.projectile.visual`),
     },
+    ...(source.feedback === undefined ? {} : {
+      feedback: feedback.map((item, index) => primitiveRef(item, `${path}.feedback[${index}]`)),
+    }),
     modifierPolicy: {
       allowedIds: allowedIds.map((id, index) => stableId(id, `${path}.modifierPolicy.allowedIds[${index}]`)),
       deniedIds: deniedIds.map((id, index) => stableId(id, `${path}.modifierPolicy.deniedIds[${index}]`)),
@@ -368,15 +393,6 @@ function maxLevelStats(value: WeaponGenerationProposalV1): WeaponRecipeRuntimeSt
   };
 }
 
-function getDamageScale(value: WeaponGenerationProposalV1): number {
-  const damageEffect = value.recipe.projectile.hitEffects.find((ref) =>
-    ref.primitiveId === CoreWeaponPrimitiveId.EFFECT_DAMAGE
-  );
-  return typeof damageEffect?.params.damageScale === 'number'
-    ? damageEffect.params.damageScale
-    : 1;
-}
-
 function validateCompiledProposal(
   value: WeaponGenerationProposalV1,
   definitionId: string,
@@ -407,16 +423,21 @@ function validateCompiledProposal(
       ),
     });
     const tier = value.balance.budgetTier;
-    const damageScale = getDamageScale(value);
-    const baseDps = basePlan.projectile.damage * damageScale * basePlan.budget.directProjectilesPerSecond;
-    const maxDps = maxPlan.projectile.damage * damageScale * maxPlan.budget.directProjectilesPerSecond;
+    const periodicHitMultiplier = (plan: typeof basePlan) => plan.projectile.collision.repeatHitInterval > 0
+      ? Math.min(8, Math.ceil(plan.projectile.lifetime / plan.projectile.collision.repeatHitInterval)) *
+        plan.projectile.collision.maximumTargetsPerTick
+      : 1;
+    const baseDps = basePlan.projectile.damage * basePlan.budget.maximumDamageMultiplierPerHit *
+      basePlan.budget.directProjectilesPerSecond * periodicHitMultiplier(basePlan);
+    const maxDps = maxPlan.projectile.damage * maxPlan.budget.maximumDamageMultiplierPerHit *
+      maxPlan.budget.directProjectilesPerSecond * periodicHitMultiplier(maxPlan);
     const baseLimit = 45 * tier;
     const maxLimit = 150 * tier;
     if (baseDps > baseLimit) {
-      issue('WEAPON_BUDGET_EXCEEDED', 'recipe', `base direct DPS ${baseDps.toFixed(1)} exceeds ${baseLimit}`);
+      issue('WEAPON_BUDGET_EXCEEDED', 'recipe', `base bounded DPS ${baseDps.toFixed(1)} exceeds ${baseLimit}`);
     }
     if (maxDps > maxLimit) {
-      issue('WEAPON_BUDGET_EXCEEDED', 'progression', `max-level direct DPS ${maxDps.toFixed(1)} exceeds ${maxLimit}`);
+      issue('WEAPON_BUDGET_EXCEEDED', 'progression', `max-level bounded DPS ${maxDps.toFixed(1)} exceeds ${maxLimit}`);
     }
   } catch (error) {
     if (error instanceof ValidationFailure) throw error;
@@ -465,7 +486,9 @@ function weaponBlueprint(value: unknown, path: string, packId: string): WeaponBl
   return {
     ...parsedProposal,
     id,
-    family: enumValue(required(source, 'family', path), `${path}.family`, ['projectile'] as const),
+    family: enumValue(required(source, 'family', path), `${path}.family`, [
+      'projectile', 'strike', 'aura', 'orbit', 'zone', 'swing',
+    ] as const),
   };
 }
 
@@ -497,6 +520,14 @@ export function validateContentPack(
       if (seenIds.has(weapon.id)) issue('INVALID_ID', '$.weapons', `duplicate weapon ID ${weapon.id}`);
       seenIds.add(weapon.id);
       validateCompiledProposal(weapon, weapon.id, registries);
+      const compiled = compileProjectileWeaponRecipe(weapon.id, weapon.recipe, registries);
+      if (weapon.family !== compiled.delivery.family) {
+        issue(
+          'INVALID_VALUE',
+          '$.weapons',
+          `weapon family ${weapon.family} does not match delivery family ${compiled.delivery.family}`
+        );
+      }
     }
     const tags = arrayValue(required(metadata, 'tags', '$.metadata'), '$.metadata.tags', 12)
       .map((tag, index) => stringValue(tag, `$.metadata.tags[${index}]`, 1, 32));

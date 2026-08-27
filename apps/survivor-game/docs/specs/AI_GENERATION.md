@@ -2,7 +2,7 @@
 
 > 状态：Draft Spec
 >
-> 规范版本：0.1
+> 规范版本：0.3
 >
 > 更新日期：2026-08-27
 
@@ -12,7 +12,7 @@
 
 AI 输出始终是候选 Draft。游戏规则只接受经过本地校验且被玩家明确接受的 ContentPack。
 
-当前实现进度：武器任务已经通过本机链接的 `@cherry-miniapp/kit` 接入真实 Cherry Host。AI 引擎首页可收集玩家意图并进入同一个受控 Forge；Forge UI 可显示流式结果、预览一级/满级数值与原语引用、展示本地校验结果，并明确接受或拒绝。单请求状态机、取消、单 JSON 提取、Draft 持久化、完整本地校验以及“接受 Job + 安装并启用 ContentPack”的原子写入已经落地；接受后重载冻结内容快照，武器可作为开局选择进入真实战斗。一次自动修复、启动恢复管理 UI 和内容包管理 UI 尚未接入。
+当前实现进度：武器任务已经通过本机链接的 `@cherry-miniapp/kit` 接入真实 Cherry Host。AI 引擎首页可收集玩家意图并进入同一个受控 Forge；Forge UI 可显示流式结果、预览一级/满级数值、Delivery 与全部原语引用、展示本地校验结果，并明确接受或拒绝。`weapon.v4` Prompt 会发送 P0/P1/P2 的完整冻结 Capability Catalog；单请求状态机、取消、单 JSON 提取、Draft 持久化、完整本地校验以及“接受 Job + 安装并启用 ContentPack”的原子写入已经落地。一次自动修复、启动恢复管理 UI 和内容包管理 UI 尚未接入。
 
 ## 2. 支持的任务
 
@@ -113,6 +113,9 @@ interface GenerationJobV1 {
 - 当前 ContentPack schema 的任务相关子集。
 - 可引用的行为、Pattern、Modifier 和视觉原语 ID。
 - 每个武器/弹幕原语的参数 Schema、兼容关系和成本摘要；格式遵循 [`WEAPON_RECIPE.md`](./WEAPON_RECIPE.md)。
+- 当前任务的全部已发布原语，以及每个 Modifier 的兼容家族；最终由所选 Delivery 家族裁决 Modifier。
+- Prompt 必须要求遵守 `requires` / `conflictsWith`，并使线段/扇区碰撞与光束/圆弧渲染的几何参数保持语义一致。
+- 视觉 Particle Effect 的事件、参数边界、每秒生成量和理论同时在场预算。
 - 数值预算和硬限制摘要。
 - 一个最小有效示例。
 - 输出要求：只返回一个 JSON 对象，不返回 Markdown 解释。
@@ -168,6 +171,7 @@ AI 可以提出数值，本地 Balance Policy（平衡策略，即根据引擎�
 - 单次与持续弹幕数量。
 - WeaponRecipe 在一级、满级和兼容 Modifier 满层时的最坏弹幕与派生深度。
 - 召唤、范围查询和粒子开销。
+- Burst 追赶、Lifecycle 派生深度、周期区域 `maxTargetsPerTick`、多目标效果总伤害与视听反馈频率。
 - Boss 招式前摇与安全窗口。
 
 Validator 可以返回建议区间供玩家理解，但第一版不得自动重写规则数值。以后若增加“自动平衡”，必须展示原值、调整值和原因，并再次要求玩家确认。

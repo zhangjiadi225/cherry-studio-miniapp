@@ -1,6 +1,7 @@
 import type {
   Enemy,
   GenericModifierType,
+  Particle,
   Player,
   Projectile,
   WeaponFamily,
@@ -13,14 +14,18 @@ import type {
 
 export type WeaponPrimitiveKind =
   | 'trigger'
+  | 'delivery'
   | 'targeting'
   | 'cast-origin'
+  | 'emission-schedule'
   | 'emission-pattern'
   | 'projectile-motion'
   | 'collision'
   | 'hit-effect'
   | 'lifecycle'
-  | 'render';
+  | 'render'
+  | 'particle'
+  | 'feedback';
 
 export type WeaponPrimitiveParameterErrorCode =
   | 'UNKNOWN_PRIMITIVE_PARAM'
@@ -74,6 +79,22 @@ export interface WeaponPrimitive<TResolved> {
 export interface ResolvedWeaponTrigger {
   readonly primitiveId: string;
   readonly cooldown: number;
+  readonly chargeDuration: number;
+}
+
+export interface ResolvedWeaponDelivery {
+  readonly primitiveId: string;
+  readonly family: WeaponFamily;
+  readonly activationDelay: number;
+  initialize(projectile: Projectile, player: Player): void;
+  update(projectile: Projectile, dt: number, player?: Player): boolean | void;
+  canCollide(projectile: Projectile): boolean;
+}
+
+export interface ResolvedEmissionSchedule {
+  readonly primitiveId: string;
+  readonly burstCount: number;
+  readonly burstInterval: number;
 }
 
 export interface ResolvedTargeting {
@@ -83,13 +104,21 @@ export interface ResolvedTargeting {
     player: Player,
     enemyQuery: EnemyQuery,
     count: number,
-    output: Enemy[]
+    output: Enemy[],
+    castSeed: number
   ): number;
 }
 
 export interface ResolvedCastOrigin {
   readonly primitiveId: string;
-  resolve(player: Player, index: number, total: number, output: { x: number; y: number }): void;
+  resolve(
+    player: Player,
+    index: number,
+    total: number,
+    output: { x: number; y: number },
+    target?: Enemy,
+    fallbackAngle?: number
+  ): void;
 }
 
 export interface ResolvedEmissionPattern {
@@ -99,14 +128,23 @@ export interface ResolvedEmissionPattern {
 
 export interface ResolvedProjectileMotion {
   readonly primitiveId: string;
-  update(projectile: Projectile, dt: number, player?: Player): void;
+  update(
+    projectile: Projectile,
+    dt: number,
+    player?: Player,
+    enemyQuery?: EnemyQuery
+  ): boolean | void;
 }
 
 export interface ResolvedCollisionBehavior {
   readonly primitiveId: string;
   readonly stopOnMap: boolean;
+  readonly mapResponse: 'pass' | 'expire' | 'bounce';
+  readonly repeatHitInterval: number;
+  readonly maximumTargetsPerTick: number;
   getLookupRadius(projectile: Projectile): number;
   overlaps(projectile: Projectile, enemy: Enemy): boolean;
+  handleMapCollision(projectile: Projectile): boolean;
 }
 
 export interface ProjectileHitEffectContext {
@@ -114,15 +152,44 @@ export interface ProjectileHitEffectContext {
   readonly enemy: Enemy;
   dealDamage(scale: number): boolean;
   applyKnockback(scale: number): void;
+  applySlow(speedMultiplier: number, duration: number): void;
+  applyBurn(damagePerSecondScale: number, duration: number): void;
+  dealAreaDamage(radius: number, damageScale: number, maxTargets: number): void;
+  dealChainDamage(range: number, damageScale: number, maxTargets: number): void;
 }
 
 export interface ResolvedHitEffect {
   readonly primitiveId: string;
+  readonly maximumDamageMultiplier: number;
+  readonly maximumExtraTargets: number;
   apply(context: ProjectileHitEffectContext): void;
+}
+
+export type ProjectileLifecycleEvent = 'hit' | 'expire';
+
+export interface ProjectileLifecycleContext {
+  readonly projectile: Projectile;
+  readonly enemy?: Enemy;
+  readonly event: ProjectileLifecycleEvent;
+  readonly triggerCount: number;
+  setTriggerCount(value: number): void;
+  spawnChild(
+    angle: number,
+    damageScale: number,
+    speedScale: number,
+    lifetimeScale: number,
+    inheritLifecycle: boolean
+  ): boolean;
+  redirect(angle: number, speedScale: number): void;
+  preserveProjectile(): void;
 }
 
 export interface ResolvedProjectileLifecycle {
   readonly primitiveId: string;
+  readonly event: ProjectileLifecycleEvent;
+  readonly maximumChildren: number;
+  readonly maximumDepth: number;
+  handle(context: ProjectileLifecycleContext): void;
 }
 
 export interface ProjectileRenderPrimitiveContext {
@@ -143,6 +210,47 @@ export interface ResolvedProjectileRenderPrimitive {
   draw(context: ProjectileRenderPrimitiveContext): void;
 }
 
+export type ProjectileParticleEvent = 'spawn' | 'trail' | 'hit' | 'kill' | 'expire';
+
+export interface ProjectileParticleEffectContext {
+  readonly particles: Particle[];
+  readonly projectile: Projectile;
+  readonly x: number;
+  readonly y: number;
+  readonly dt: number;
+  readonly seed: number;
+  readonly palette: {
+    readonly primary: string;
+    readonly secondary?: string;
+    readonly accent?: string;
+  };
+}
+
+export interface ResolvedProjectileParticleEffect {
+  readonly primitiveId: string;
+  readonly event: ProjectileParticleEvent;
+  readonly emissionInterval: number;
+  readonly particlesPerEmission: number;
+  readonly maxParticleLifetime: number;
+  emit(context: ProjectileParticleEffectContext): void;
+}
+
+export type WeaponFeedbackEvent = 'charge' | 'cast' | 'hit' | 'kill' | 'expire';
+
+export interface WeaponFeedbackContext {
+  readonly definitionId: string;
+  readonly event: WeaponFeedbackEvent;
+  readonly x: number;
+  readonly y: number;
+}
+
+export interface ResolvedWeaponFeedbackEffect {
+  readonly primitiveId: string;
+  readonly event: WeaponFeedbackEvent;
+  readonly estimatedCost: number;
+  emit(context: WeaponFeedbackContext): void;
+}
+
 export interface ResolvedProjectileVisual {
   readonly body: ResolvedProjectileRenderPrimitive;
   readonly palette: {
@@ -160,27 +268,35 @@ export interface ResolvedProjectileVisual {
   readonly layers: readonly ResolvedProjectileRenderPrimitive[];
   readonly trail?: ResolvedProjectileRenderPrimitive;
   readonly particles?: ResolvedProjectileRenderPrimitive;
+  readonly emitters: readonly ResolvedProjectileParticleEffect[];
 }
 
 export interface ResolvedWeaponBudget {
   readonly directProjectilesPerCast: number;
   readonly directProjectilesPerSecond: number;
   readonly theoreticalConcurrentProjectiles: number;
+  readonly estimatedParticlesPerSecond: number;
+  readonly theoreticalConcurrentParticles: number;
+  readonly maximumDerivedProjectilesPerCast: number;
+  readonly maximumDamageMultiplierPerHit: number;
   readonly estimatedCostPerSecond: number;
 }
 
 export interface WeaponRuntimePlan {
   readonly definitionId: string;
+  readonly delivery: ResolvedWeaponDelivery;
   readonly trigger: ResolvedWeaponTrigger;
   readonly targeting: ResolvedTargeting;
   readonly emission: {
     readonly emitterId: 'builtin.emitter.projectile';
+    readonly schedule: ResolvedEmissionSchedule;
     readonly origin: ResolvedCastOrigin;
     readonly count: number;
     readonly burstCount: number;
     readonly burstInterval: number;
     readonly pattern: ResolvedEmissionPattern;
   };
+  readonly feedback: readonly ResolvedWeaponFeedbackEffect[];
   readonly projectile: {
     readonly damage: number;
     readonly radius: number;
@@ -202,14 +318,18 @@ export interface WeaponRuntimePlan {
 }
 
 export type WeaponTriggerPrimitive = WeaponPrimitive<ResolvedWeaponTrigger>;
+export type WeaponDeliveryPrimitive = WeaponPrimitive<ResolvedWeaponDelivery>;
 export type TargetingPrimitive = WeaponPrimitive<ResolvedTargeting>;
 export type CastOriginPrimitive = WeaponPrimitive<ResolvedCastOrigin>;
+export type EmissionSchedulePrimitive = WeaponPrimitive<ResolvedEmissionSchedule>;
 export type EmissionPatternPrimitive = WeaponPrimitive<ResolvedEmissionPattern>;
 export type ProjectileMotionPrimitive = WeaponPrimitive<ResolvedProjectileMotion>;
 export type CollisionBehaviorPrimitive = WeaponPrimitive<ResolvedCollisionBehavior>;
 export type HitEffectPrimitive = WeaponPrimitive<ResolvedHitEffect>;
 export type ProjectileLifecyclePrimitive = WeaponPrimitive<ResolvedProjectileLifecycle>;
 export type ProjectileRenderPrimitive = WeaponPrimitive<ResolvedProjectileRenderPrimitive>;
+export type ProjectileParticlePrimitive = WeaponPrimitive<ResolvedProjectileParticleEffect>;
+export type WeaponFeedbackPrimitive = WeaponPrimitive<ResolvedWeaponFeedbackEffect>;
 
 export type WeaponModifierPhase =
   | 'stat-additive'

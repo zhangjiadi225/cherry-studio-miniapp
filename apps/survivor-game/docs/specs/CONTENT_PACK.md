@@ -2,13 +2,13 @@
 
 > 状态：Draft Spec
 >
-> 规范版本：0.2
+> 规范版本：0.4
 >
 > 更新日期：2026-08-27
 
 ## 1. 目的
 
-当前实现进度：投射物 `ContentPackV1`、封闭字段 Validator、引用/数值/一级与满级最坏 Modifier 预算校验、内容库接受事务和启动期动态武器装配已经落地。Cherry AI Forge 已能生成、预览并由玩家接受内容；已接受并启用的 AI 武器使用与内置魔法法器相同的 `WeaponRuntimePlan` 执行链。当前只支持一个 Pack 一件 projectile 武器；怪物、行为图、版本迁移、Lifecycle 派生能力和包管理 UI 尚未完成。
+当前实现进度：武器 `ContentPackV1`、封闭字段 Validator、引用/数值/一级与满级最坏 Modifier、派生弹体、伤害、粒子和反馈预算校验、内容库接受事务和启动期动态武器装配已经落地。Cherry AI Forge 已能生成、预览并由玩家接受 Projectile、Zone、Aura、Strike 或 Swing 武器；P0/P1/P2 的发射、运动、生命周期、命中、目标、交付、碰撞与视听原语均使用同一个 `WeaponRuntimePlan` 执行链。当前仍只支持一个 Pack 一件武器；怪物、行为图、版本迁移和包管理 UI 尚未完成。
 
 第一版最多同时启用 6 个生成武器 Pack。达到上限时必须先通过未来的包管理入口禁用已有内容；不能继续安装并让开局选择界面或运行时预算无界增长。
 
@@ -113,7 +113,7 @@ interface WeaponBlueprintV1 {
   id: string
   name: string
   description: string
-  family: 'projectile'
+  family: 'projectile' | 'strike' | 'aura' | 'orbit' | 'zone' | 'swing'
   recipe: ProjectileWeaponRecipeV1
   progression: {
     maxLevel: number
@@ -138,9 +138,9 @@ interface WeaponBlueprintV1 {
 要求：
 
 - `recipe` 的 Trigger、Targeting、Cast Origin、Emission、Motion、Collision、HitEffect、Lifecycle、Render 和 Modifier 引用必须存在于冻结的 Engine Registry。
-- 第一阶段只允许 `family: "projectile"`；Aura、Orbit、Strike、Zone 和 Swing 继续通过内置兼容适配器运行，不作为 AI 可安装配方。
+- `family` 必须与 `recipe.delivery` 编译出的家族一致；当前可安装 Delivery 为 Projectile、Zone、Aura、Strike 和 Swing，Orbit 由已注册运动原语表达但尚无独立 Delivery。
 - 所有数值必须是有限数，禁止 `NaN`、`Infinity` 和隐式字符串转换。
-- 冷却、数量、持续时间、穿透、范围和 Lifecycle 派生数量必须通过当前 Balance Policy 的硬边界。
+- 冷却/充能/Burst 时间轴、数量、持续时间、穿透、周期命中数、范围和 Lifecycle 派生数量必须通过当前 Balance Policy 的硬边界。
 - `progression.perLevel` 只能修改列出的白名单属性；一级、满级和兼容 Modifier 满层必须分别检查。
 - AI 不得声明任意 on-hit 表达式、字段 Patch 或 Modifier 公式；效果只能引用注册的原语。
 - 配方 Schema、原语目录、Modifier 装配顺序、运行时编译和示例见 [`WEAPON_RECIPE.md`](./WEAPON_RECIPE.md)。

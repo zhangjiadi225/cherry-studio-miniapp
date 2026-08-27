@@ -4,6 +4,8 @@ import {
   type WeaponForgePreview,
   type WeaponForgeService,
 } from '../generation/WeaponForgeService';
+import { WeaponType, type WeaponType as WeaponTypeValue } from '../../game/types';
+import { WEAPON_ASSETS } from '../../game/renderers/WeaponSpriteRegistry';
 
 export interface WeaponForgePanelOptions {
   readonly service: WeaponForgeService;
@@ -51,8 +53,22 @@ function createPreviewContent(proposal: WeaponGenerationProposalV1): DocumentFra
   orb.style.borderColor = recipe.projectile.visual.palette.secondary ?? recipe.projectile.visual.palette.primary;
   orb.style.boxShadow = `0 0 22px ${recipe.projectile.visual.glow?.color ?? recipe.projectile.visual.palette.primary}`;
   const visualLabel = document.createElement('span');
-  visualLabel.textContent = '受限参数视觉预览';
-  visual.append(orb, visualLabel);
+  const spriteAsset = recipe.projectile.visual.body.primitiveId === 'builtin.render.sprite'
+    ? recipe.projectile.visual.body.params.asset
+    : undefined;
+  const validWeaponTypes = Object.values(WeaponType) as readonly string[];
+  if (typeof spriteAsset === 'string' && validWeaponTypes.includes(spriteAsset)) {
+    const image = document.createElement('img');
+    image.src = WEAPON_ASSETS[spriteAsset as WeaponTypeValue].url;
+    image.alt = '';
+    image.width = 56;
+    image.height = 56;
+    visualLabel.textContent = `打包精灵：${spriteAsset}`;
+    visual.append(image, visualLabel);
+  } else {
+    visualLabel.textContent = '受限参数视觉预览';
+    visual.append(orb, visualLabel);
+  }
   const title = document.createElement('h3');
   title.textContent = proposal.name;
   const description = document.createElement('p');
@@ -62,6 +78,7 @@ function createPreviewContent(proposal: WeaponGenerationProposalV1): DocumentFra
 
   const values: readonly [string, string][] = [
     ['定位', proposal.balance.intendedRole],
+    ['交付', recipe.delivery === 'projectile' ? 'builtin.delivery.projectile' : recipe.delivery.primitiveId],
     ['预算阶级', String(proposal.balance.budgetTier)],
     ['最高等级', String(proposal.progression.maxLevel)],
     ['基础伤害', formatNumber(proposal.recipe.projectile.damage)],
@@ -90,18 +107,23 @@ function createPreviewContent(proposal: WeaponGenerationProposalV1): DocumentFra
   const references = document.createElement('p');
   references.className = 'weapon-forge-references';
   references.textContent = [
+    recipe.delivery === 'projectile' ? 'builtin.delivery.projectile' : recipe.delivery.primitiveId,
     recipe.trigger.primitiveId,
     recipe.targeting.primitiveId,
+    recipe.emission.schedule?.primitiveId,
     recipe.emission.origin.primitiveId,
     recipe.emission.pattern.primitiveId,
     recipe.projectile.motion.primitiveId,
     recipe.projectile.collision.primitiveId,
     ...recipe.projectile.hitEffects.map((effect) => effect.primitiveId),
+    ...recipe.projectile.lifecycle.map((effect) => effect.primitiveId),
     recipe.projectile.visual.body.primitiveId,
-  ].join(' · ');
+    ...(recipe.projectile.visual.emitters ?? []).map((effect) => effect.primitiveId),
+    ...(recipe.feedback ?? []).map((effect) => effect.primitiveId),
+  ].filter((value): value is string => value !== undefined).join(' · ');
   const checks = document.createElement('p');
   checks.className = 'weapon-forge-checks';
-  checks.textContent = '✓ 封闭结构  ✓ 原语引用  ✓ 一级/满级平衡  ✓ Modifier 最坏预算  ✓ 弹幕性能上限';
+  checks.textContent = '✓ 封闭结构  ✓ 原语兼容  ✓ 一级/满级平衡  ✓ Modifier 最坏预算  ✓ 派生弹幕/粒子/反馈上限';
   fragment.append(visual, title, description, stats, progression, references, checks);
   return fragment;
 }

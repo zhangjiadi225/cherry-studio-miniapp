@@ -1,4 +1,4 @@
-import type { Enemy, EnemyProjectile, GameState, GenericModifierType, UpgradeOption, WeaponType } from '../types';
+import type { Enemy, EnemyProjectile, GameState, GenericModifierType, UpgradeOption, WeaponFeedbackSignal, WeaponType } from '../types';
 import type { DesktopTab } from '../systems/meta/MetaProgression';
 import { GameEvent } from './GameEvents';
 
@@ -16,6 +16,7 @@ export interface GameEventMap {
   [GameEvent.BOSS_SPAWN]: [boss: Enemy];
   [GameEvent.BOSS_DEATH]: [boss: Enemy];
   [GameEvent.WEAPON_FIRE]: [weaponType: WeaponType];
+  [GameEvent.WEAPON_FEEDBACK]: [signal: WeaponFeedbackSignal];
   [GameEvent.MODIFIER_TRIGGER]: [modifierType: GenericModifierType];
   [GameEvent.XP_COLLECTED]: [amount: number];
   [GameEvent.UPGRADE_SELECT]: [option: UpgradeOption];

@@ -136,6 +136,11 @@ export interface Weapon {
     readonly evolution4?: WeaponEvolutionId;
     readonly evolution8?: WeaponEvolutionId;
   };
+  castSequence?: number;
+  chargeRemaining?: number;
+  pendingBurstRemaining?: number;
+  pendingBurstTimer?: number;
+  pendingBurstDamage?: number;
   purchaseValue?: number;
 }
 
@@ -174,6 +179,11 @@ export interface Enemy {
   traitDuration: number;
   traitDirX: number;
   traitDirY: number;
+  slowMultiplier: number;
+  slowRemaining: number;
+  burnDamagePerSecond: number;
+  burnRemaining: number;
+  burnTickTimer: number;
 }
 
 export interface Projectile {
@@ -208,10 +218,41 @@ export interface Projectile {
   lightningSeed?: number;
   beamLength?: number;
   arcAngle?: number;
+  headingAngle?: number;
+  visualEffectSequence?: number;
+  visualTrailTimer?: number;
   evolutionIds?: WeaponEvolutionId[];
   runtimePlan?: WeaponRuntimePlan;
   useLegacyProjectileSprite?: boolean;
+  previousX?: number;
+  previousY?: number;
+  activationRemaining?: number;
+  deliveryOffsetX?: number;
+  deliveryOffsetY?: number;
+  motionAge?: number;
+  returnPhase?: boolean;
+  visualSpawnPending?: boolean;
+  hitCooldowns?: Map<number, number>;
+  lifecycleTriggerCounts?: Map<string, number>;
+  lifecycleDepth?: number;
+  lifecycleSuppressed?: boolean;
+  mapBounceCount?: number;
+  collisionHitsThisFrame?: number;
 }
+
+export type WeaponAudioCue = 'charge' | 'cast' | 'impact' | 'burst' | 'pulse';
+
+export type WeaponFeedbackSignal =
+  | {
+      readonly kind: 'audio';
+      readonly cue: WeaponAudioCue;
+      readonly intensity: number;
+    }
+  | {
+      readonly kind: 'camera';
+      readonly duration: number;
+      readonly intensity: number;
+    };
 
 export type EnemyProjectileKind = 'cultist_bolt' | 'demon_fire' | 'wraith_orb';
 

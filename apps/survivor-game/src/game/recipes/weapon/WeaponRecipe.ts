@@ -12,6 +12,8 @@ export interface PrimitiveRefV1 {
   readonly params: PrimitiveParamsV1;
 }
 
+export type WeaponDeliveryRefV1 = 'projectile' | PrimitiveRefV1;
+
 export interface ProjectileVisualRecipeV1 {
   readonly body: PrimitiveRefV1;
   readonly palette: {
@@ -29,15 +31,17 @@ export interface ProjectileVisualRecipeV1 {
   readonly layers: readonly PrimitiveRefV1[];
   readonly trail?: PrimitiveRefV1;
   readonly particles?: PrimitiveRefV1;
+  readonly emitters?: readonly PrimitiveRefV1[];
 }
 
 export interface ProjectileWeaponRecipeV1 {
   readonly recipeVersion: 1;
-  readonly delivery: 'projectile';
+  readonly delivery: WeaponDeliveryRefV1;
   readonly trigger: PrimitiveRefV1;
   readonly targeting: PrimitiveRefV1;
   readonly emission: {
     readonly emitterId: 'builtin.emitter.projectile';
+    readonly schedule?: PrimitiveRefV1;
     readonly origin: PrimitiveRefV1;
     readonly count: number;
     readonly burstCount: number;
@@ -57,6 +61,7 @@ export interface ProjectileWeaponRecipeV1 {
     readonly lifecycle: readonly PrimitiveRefV1[];
     readonly visual: ProjectileVisualRecipeV1;
   };
+  readonly feedback?: readonly PrimitiveRefV1[];
   readonly modifierPolicy: {
     readonly allowedIds: readonly string[];
     readonly deniedIds: readonly string[];

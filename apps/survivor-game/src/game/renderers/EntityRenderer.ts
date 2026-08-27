@@ -1295,6 +1295,7 @@ function drawRuntimeProjectileVisual(
   visual.body.draw(primitiveContext);
   for (const layer of visual.layers) layer.draw(primitiveContext);
   visual.trail?.draw(primitiveContext);
+  visual.particles?.draw(primitiveContext);
   return true;
 }
 

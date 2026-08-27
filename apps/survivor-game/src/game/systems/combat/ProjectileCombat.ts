@@ -1,6 +1,6 @@
 import { Enemy, Projectile, Particle, DamageNumber, WeaponType, type EnemyProjectile, type GenericModifierType, type Player } from '../../types';
 import { ENEMY_DATA, GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK, MAX_ACTIVE_PLAYER_PROJECTILES } from '../../constants';
-import { damageEnemy } from '../enemy/Enemy';
+import { applyEnemyBurn, applyEnemySlow, damageEnemy } from '../enemy/Enemy';
 import type { MapSystem } from '../map/MapSystem';
 import { pushDamageNumber } from '../../effects/DamageNumber';
 import {
@@ -14,12 +14,39 @@ import { updateProjectile } from '../weapon/Weapon';
 import { pools } from '../../utils/PoolManager';
 import { circlesOverlap } from '../../utils/math';
 import type { EnemyQuery } from '../enemy/EnemyQuery';
+import type { ProjectileParticleEvent } from '../../recipes/weapon/WeaponRuntimePlan';
 
 const MODIFIERS = Object.values(GENERIC_MODIFIER_DATA);
 const PROJECTILE_COLLISION_LOOKUP_PADDING = 64;
 const REFLECTION_DAMAGE_RATIO = 0.72;
 const REFLECTION_ANGLE_STEP = Math.PI * 0.36;
 const RUNE_REFLECTION_BEAM_MAX_LENGTH = 360;
+const effectTargetsScratch: Enemy[] = [];
+
+function hashString(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function particleEventSeed(
+  definitionId: string,
+  projectile: Projectile,
+  event: ProjectileParticleEvent,
+  sequence: number
+): number {
+  const eventValue = event === 'spawn' ? 1 : event === 'trail' ? 2 : event === 'hit' ? 3 : event === 'kill' ? 4 : 5;
+  return (
+    hashString(definitionId) ^
+    Math.imul(sequence + 1, 0x9e3779b1) ^
+    Math.imul(Math.round(projectile.x * 16), 0x85ebca6b) ^
+    Math.imul(Math.round(projectile.y * 16), 0xc2b2ae35) ^
+    eventValue
+  ) >>> 0;
+}
 
 export interface ProjectileCombatContext {
   player: Player;
@@ -37,18 +64,30 @@ export class ProjectileCombat {
     for (let i = 0; i < projectileCount; i++) {
       const projectile = ctx.projectiles[i];
       if (projectile.life <= 0) continue;
-      if (!updateProjectile(projectile, dt, ctx.player)) {
-        projectile.life = 0;
+      this.updateRepeatHitCooldowns(projectile, dt);
+      if (projectile.visualSpawnPending) {
+        projectile.visualSpawnPending = false;
+        this.emitProjectileParticles(ctx, projectile, 'spawn');
+      }
+      if (!updateProjectile(projectile, dt, ctx.player, ctx.enemyQuery)) {
+        this.expireRuntimeProjectile(ctx, projectile);
         continue;
       }
+      this.emitProjectileParticles(ctx, projectile, 'trail', projectile.x, projectile.y, dt);
       if (
         this.shouldUseMapProjectileCollision(projectile) &&
         ctx.mapSystem.handleProjectileCollision(projectile.x, projectile.y, projectile.radius)
       ) {
-        projectile.life = 0;
-        continue;
+        const collision = projectile.runtimePlan?.projectile.collision;
+        if (!collision || !collision.handleMapCollision(projectile)) {
+          this.expireRuntimeProjectile(ctx, projectile);
+          continue;
+        }
       }
       this.clearEnemyProjectilesWithAxe(projectile, ctx);
+
+      if (projectile.runtimePlan && !projectile.runtimePlan.delivery.canCollide(projectile)) continue;
+      projectile.collisionHitsThisFrame = 0;
 
       let projectileExpired = false;
       ctx.enemyQuery.forNearby(
@@ -57,25 +96,56 @@ export class ProjectileCombat {
         this.getProjectileLookupRadius(projectile),
         (enemy) => {
           if (projectileExpired || enemy.hp <= 0) return;
-          if (projectile.hitEnemies.has(enemy.id)) return;
+          const collision = projectile.runtimePlan?.projectile.collision;
+          if (
+            collision &&
+            collision.repeatHitInterval > 0 &&
+            (projectile.collisionHitsThisFrame ?? 0) >= collision.maximumTargetsPerTick
+          ) return;
+          if (!this.canHitEnemy(projectile, enemy.id)) return;
           if (!this.projectileOverlapsEnemy(projectile, enemy)) return;
 
-          const isDead = this.applyProjectileHit(ctx, projectile, enemy);
+          const hitResult = this.applyProjectileHit(ctx, projectile, enemy);
+          projectile.collisionHitsThisFrame = (projectile.collisionHitsThisFrame ?? 0) + 1;
+          if ((projectile.runtimePlan?.projectile.collision.repeatHitInterval ?? 0) > 0) return;
           projectile.pierceCount++;
-          if (projectile.pierceCount > projectile.pierce) {
-            if (projectile.type === WeaponType.FIRE_WAND && isDead) {
+          if (projectile.pierceCount > projectile.pierce && !hitResult.preserved) {
+            if (projectile.type === WeaponType.FIRE_WAND && hitResult.isDead) {
               spawnExplosionParticles(ctx.particles, enemy.x, enemy.y, '#ff6600', 15, {
                 speed: 200, life: 0.7, radius: 5, type: 'spark', glow: true,
                 innerColor: '#ffcc00', ringCount: 6,
               });
             }
-            projectile.life = 0;
+            this.expireRuntimeProjectile(ctx, projectile);
             projectileExpired = true;
           }
         }
       );
     }
     this.releaseDeadProjectiles(ctx.projectiles);
+  }
+
+  private updateRepeatHitCooldowns(projectile: Projectile, dt: number): void {
+    if (!projectile.hitCooldowns || projectile.hitCooldowns.size === 0) return;
+    for (const [enemyId, remaining] of projectile.hitCooldowns) {
+      const next = remaining - dt;
+      if (next <= 0) projectile.hitCooldowns.delete(enemyId);
+      else projectile.hitCooldowns.set(enemyId, next);
+    }
+  }
+
+  private canHitEnemy(projectile: Projectile, enemyId: number): boolean {
+    const repeatInterval = projectile.runtimePlan?.projectile.collision.repeatHitInterval ?? 0;
+    if (repeatInterval > 0) return !projectile.hitCooldowns?.has(enemyId);
+    return !projectile.hitEnemies.has(enemyId);
+  }
+
+  private expireRuntimeProjectile(ctx: ProjectileCombatContext, projectile: Projectile): void {
+    if (projectile.life <= 0 && !projectile.runtimePlan) return;
+    this.triggerProjectileLifecycle(ctx, projectile, 'expire');
+    this.emitProjectileParticles(ctx, projectile, 'expire');
+    this.emitWeaponFeedback(projectile, 'expire', projectile.x, projectile.y);
+    projectile.life = 0;
   }
 
   private shouldUseMapProjectileCollision(projectile: Projectile): boolean {
@@ -188,8 +258,18 @@ export class ProjectileCombat {
     projectiles.length = write;
   }
 
-  private applyProjectileHit(ctx: ProjectileCombatContext, projectile: Projectile, enemy: Enemy): boolean {
-    projectile.hitEnemies.add(enemy.id);
+  private applyProjectileHit(
+    ctx: ProjectileCombatContext,
+    projectile: Projectile,
+    enemy: Enemy
+  ): { isDead: boolean; preserved: boolean } {
+    const repeatInterval = projectile.runtimePlan?.projectile.collision.repeatHitInterval ?? 0;
+    if (repeatInterval > 0) {
+      projectile.hitCooldowns ??= new Map<number, number>();
+      projectile.hitCooldowns.set(enemy.id, repeatInterval);
+    } else {
+      projectile.hitEnemies.add(enemy.id);
+    }
     const knockbackSourceX = projectile.type === WeaponType.AXE && projectile.originX !== undefined ? projectile.originX : projectile.x;
     const knockbackSourceY = projectile.type === WeaponType.AXE && projectile.originY !== undefined ? projectile.originY : projectile.y;
     const dir = { x: enemy.x - knockbackSourceX, y: enemy.y - knockbackSourceY };
@@ -209,6 +289,18 @@ export class ProjectileCombat {
         },
         applyKnockback(scale: number) {
           knockbackScale += scale;
+        },
+        applySlow(speedMultiplier: number, duration: number) {
+          applyEnemySlow(enemy, speedMultiplier, duration);
+        },
+        applyBurn(damagePerSecondScale: number, duration: number) {
+          applyEnemyBurn(enemy, projectile.damage * damagePerSecondScale, duration);
+        },
+        dealAreaDamage: (radius: number, damageScale: number, maxTargets: number) => {
+          this.dealAreaEffect(ctx, projectile, enemy, radius, damageScale, maxTargets);
+        },
+        dealChainDamage: (range: number, damageScale: number, maxTargets: number) => {
+          this.dealChainEffect(ctx, projectile, enemy, range, damageScale, maxTargets);
         },
       };
       for (const effect of projectile.runtimePlan.projectile.hitEffects) {
@@ -250,8 +342,243 @@ export class ProjectileCombat {
     const dmgColor = this.getProjectileDamageColor(projectile);
     const dmgSize = appliedDamage >= 30 ? 18 : appliedDamage >= 20 ? 16 : 14;
     pushDamageNumber(ctx.damageNumbers, enemy.x, enemy.y, appliedDamage, dmgColor, dmgSize);
+    this.emitProjectileParticles(ctx, projectile, 'hit', enemy.x, enemy.y);
+    this.emitWeaponFeedback(projectile, 'hit', enemy.x, enemy.y);
+    if (isDead) {
+      this.emitProjectileParticles(ctx, projectile, 'kill', enemy.x, enemy.y);
+      this.emitWeaponFeedback(projectile, 'kill', enemy.x, enemy.y);
+    }
     this.triggerProjectileModifiers(ctx, projectile, enemy, isDead);
-    return isDead;
+    const preserved = this.triggerProjectileLifecycle(ctx, projectile, 'hit', enemy);
+    return { isDead, preserved };
+  }
+
+  private dealAreaEffect(
+    ctx: ProjectileCombatContext,
+    projectile: Projectile,
+    source: Enemy,
+    radius: number,
+    damageScale: number,
+    maxTargets: number
+  ): void {
+    let hits = 0;
+    ctx.enemyQuery.forNearby(source.x, source.y, radius, (target) => {
+      if (hits >= maxTargets || target.hp <= 0 || target.id === source.id) return;
+      this.dealSecondaryDamage(ctx, projectile, target, projectile.damage * damageScale);
+      hits++;
+    });
+  }
+
+  private dealChainEffect(
+    ctx: ProjectileCombatContext,
+    projectile: Projectile,
+    source: Enemy,
+    range: number,
+    damageScale: number,
+    maxTargets: number
+  ): void {
+    effectTargetsScratch.length = 0;
+    ctx.enemyQuery.forNearby(source.x, source.y, range, (target) => {
+      if (target.hp > 0 && target.id !== source.id) effectTargetsScratch.push(target);
+    });
+    effectTargetsScratch.sort((left, right) => {
+      const ldx = left.x - source.x;
+      const ldy = left.y - source.y;
+      const rdx = right.x - source.x;
+      const rdy = right.y - source.y;
+      return ldx * ldx + ldy * ldy - rdx * rdx - rdy * rdy || left.id - right.id;
+    });
+    let fromX = source.x;
+    let fromY = source.y;
+    for (let index = 0; index < Math.min(maxTargets, effectTargetsScratch.length); index++) {
+      const target = effectTargetsScratch[index];
+      spawnChainLightningParticle(ctx.particles, fromX, fromY, target.x, target.y);
+      this.dealSecondaryDamage(ctx, projectile, target, projectile.damage * damageScale);
+      fromX = target.x;
+      fromY = target.y;
+    }
+  }
+
+  private dealSecondaryDamage(
+    ctx: ProjectileCombatContext,
+    projectile: Projectile,
+    enemy: Enemy,
+    damage: number
+  ): void {
+    damageEnemy(enemy, damage, 0, 0);
+    pushDamageNumber(
+      ctx.damageNumbers,
+      enemy.x,
+      enemy.y,
+      damage,
+      this.getProjectileDamageColor(projectile),
+      damage >= 30 ? 18 : damage >= 20 ? 16 : 14
+    );
+  }
+
+  private emitProjectileParticles(
+    ctx: ProjectileCombatContext,
+    projectile: Projectile,
+    event: ProjectileParticleEvent,
+    x = projectile.x,
+    y = projectile.y,
+    dt = 0
+  ): void {
+    const plan = projectile.runtimePlan;
+    if (!plan || plan.projectile.visual.emitters.length === 0) return;
+    const effects = plan.projectile.visual.emitters;
+
+    if (event === 'trail') {
+      let effect: (typeof effects)[number] | undefined;
+      for (const candidate of effects) {
+        if (candidate.event === event) {
+          effect = candidate;
+          break;
+        }
+      }
+      if (!effect) return;
+      projectile.visualTrailTimer = (projectile.visualTrailTimer ?? 0) + dt;
+      let emissions = 0;
+      while (projectile.visualTrailTimer >= effect.emissionInterval && emissions < 2) {
+        projectile.visualTrailTimer -= effect.emissionInterval;
+        this.emitProjectileParticleEffect(ctx, projectile, effect, event, x, y, dt);
+        emissions++;
+      }
+      if (emissions === 2) {
+        projectile.visualTrailTimer %= effect.emissionInterval;
+      }
+      return;
+    }
+
+    for (const effect of effects) {
+      if (effect.event !== event) continue;
+      this.emitProjectileParticleEffect(ctx, projectile, effect, event, x, y, dt);
+    }
+  }
+
+  private emitProjectileParticleEffect(
+    ctx: ProjectileCombatContext,
+    projectile: Projectile,
+    effect: NonNullable<Projectile['runtimePlan']>['projectile']['visual']['emitters'][number],
+    event: ProjectileParticleEvent,
+    x: number,
+    y: number,
+    dt: number
+  ): void {
+    const plan = projectile.runtimePlan!;
+    const sequence = projectile.visualEffectSequence ?? 0;
+    projectile.visualEffectSequence = sequence + 1;
+    effect.emit({
+      particles: ctx.particles,
+      projectile,
+      x,
+      y,
+      dt,
+      seed: particleEventSeed(plan.definitionId, projectile, event, sequence),
+      palette: plan.projectile.visual.palette,
+    });
+  }
+
+  private emitWeaponFeedback(
+    projectile: Projectile,
+    event: 'charge' | 'cast' | 'hit' | 'kill' | 'expire',
+    x: number,
+    y: number
+  ): void {
+    const plan = projectile.runtimePlan;
+    if (!plan) return;
+    for (const effect of plan.feedback) {
+      if (effect.event === event) {
+        effect.emit({ definitionId: plan.definitionId, event, x, y });
+      }
+    }
+  }
+
+  private triggerProjectileLifecycle(
+    ctx: ProjectileCombatContext,
+    projectile: Projectile,
+    event: 'hit' | 'expire',
+    enemy?: Enemy
+  ): boolean {
+    const plan = projectile.runtimePlan;
+    if (!plan || projectile.lifecycleSuppressed) return false;
+    let preserved = false;
+    projectile.lifecycleTriggerCounts ??= new Map<string, number>();
+    for (const effect of plan.projectile.lifecycle) {
+      if (effect.event !== event) continue;
+      const triggerCount = projectile.lifecycleTriggerCounts.get(effect.primitiveId) ?? 0;
+      effect.handle({
+        projectile,
+        enemy,
+        event,
+        triggerCount,
+        setTriggerCount: (value) => {
+          projectile.lifecycleTriggerCounts!.set(effect.primitiveId, Math.max(0, Math.floor(value)));
+        },
+        spawnChild: (angle, damageScale, speedScale, lifetimeScale, inheritLifecycle) =>
+          this.spawnLifecycleChild(
+            ctx,
+            projectile,
+            angle,
+            damageScale,
+            speedScale,
+            lifetimeScale,
+            inheritLifecycle
+          ),
+        redirect(angle, speedScale) {
+          const speed = Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) * speedScale;
+          projectile.headingAngle = angle;
+          projectile.vx = Math.cos(angle) * speed;
+          projectile.vy = Math.sin(angle) * speed;
+        },
+        preserveProjectile() {
+          preserved = true;
+        },
+      });
+    }
+    return preserved;
+  }
+
+  private spawnLifecycleChild(
+    ctx: ProjectileCombatContext,
+    source: Projectile,
+    angle: number,
+    damageScale: number,
+    speedScale: number,
+    lifetimeScale: number,
+    inheritLifecycle: boolean
+  ): boolean {
+    if (ctx.projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES || !source.runtimePlan) return false;
+    const child = pools.projectiles.acquire();
+    const speed = Math.sqrt(source.vx * source.vx + source.vy * source.vy) * speedScale;
+    child.x = source.x;
+    child.y = source.y;
+    child.vx = Math.cos(angle) * speed;
+    child.vy = Math.sin(angle) * speed;
+    child.damage = source.damage * damageScale;
+    child.radius = source.radius;
+    child.life = Math.max(0.05, source.maxLife * lifetimeScale);
+    child.maxLife = child.life;
+    child.pierce = source.pierce;
+    child.pierceCount = 0;
+    child.type = source.type;
+    child.knockback = source.knockback;
+    child.modifierMask = source.modifierMask;
+    child.chainDone = false;
+    child.pulseDone = false;
+    child.reflectRemaining = source.reflectRemaining;
+    child.animTimer = 0;
+    child.headingAngle = angle;
+    child.runtimePlan = source.runtimePlan;
+    child.useLegacyProjectileSprite = source.useLegacyProjectileSprite;
+    child.evolutionIds = source.evolutionIds ? [...source.evolutionIds] : undefined;
+    child.lifecycleDepth = (source.lifecycleDepth ?? 0) + 1;
+    child.lifecycleSuppressed = !inheritLifecycle;
+    child.visualSpawnPending = true;
+    child.activationRemaining = source.runtimePlan.delivery.activationDelay;
+    source.runtimePlan.delivery.initialize(child, ctx.player);
+    ctx.projectiles.push(child);
+    return true;
   }
 
   private triggerProjectileModifiers(ctx: ProjectileCombatContext, projectile: Projectile, enemy: Enemy, isDead: boolean) {
@@ -328,6 +655,9 @@ export class ProjectileCombat {
   private getProjectileDirection(projectile: Projectile, fallbackTarget?: Enemy): { x: number; y: number } {
     const speed = Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy);
     if (speed > 0.01) return { x: projectile.vx / speed, y: projectile.vy / speed };
+    if (projectile.headingAngle !== undefined) {
+      return { x: Math.cos(projectile.headingAngle), y: Math.sin(projectile.headingAngle) };
+    }
     if (projectile.originX !== undefined && projectile.originY !== undefined) {
       const dx = projectile.x - projectile.originX;
       const dy = projectile.y - projectile.originY;

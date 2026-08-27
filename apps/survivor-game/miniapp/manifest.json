@@ -8,7 +8,7 @@
     "zh": "通过 Cherry AI 描述、生成并验证武器，再把它投入确定性生存战斗的本地 AI 游戏引擎。",
     "en": "A local AI game engine for describing, generating, validating, and battle-testing weapons through Cherry AI."
   },
-  "version": "0.1.0-dev.3",
+  "version": "0.1.0-dev.5",
   "entry": "index.html",
   "icon": {
     "path": "sprites/units/player_wanderer.png",

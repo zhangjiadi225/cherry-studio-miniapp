@@ -29,7 +29,12 @@ import {
   type EnginePlugin,
   type EngineRegistrySnapshot,
 } from '../../behaviors/EngineRegistry';
-import { CORE_PROJECTILE_PRIMITIVE_PLUGIN } from '../../behaviors/weapon/CoreProjectilePrimitives';
+import {
+  CORE_PROJECTILE_PRIMITIVE_PLUGIN,
+  CoreWeaponPrimitiveId,
+} from '../../behaviors/weapon/CoreProjectilePrimitives';
+import { CORE_PROJECTILE_PARTICLE_PLUGIN } from '../../behaviors/weapon/CoreProjectileParticlePrimitives';
+import { CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN } from '../../behaviors/weapon/CoreAdvancedWeaponPrimitives';
 import {
   CORE_WEAPON_MODIFIER_PLUGIN,
   getCoreWeaponModifierId,
@@ -309,29 +314,101 @@ export function updateWeapon(
 
   w.timer += dt;
   const runtimePlan = behavior.usesRuntimePlan ? w.runtimePlan : undefined;
+  if (runtimePlan && (w.pendingBurstRemaining ?? 0) > 0) {
+    w.pendingBurstTimer = (w.pendingBurstTimer ?? runtimePlan.emission.burstInterval) - dt;
+    let catchUpVolleys = 0;
+    while ((w.pendingBurstRemaining ?? 0) > 0 && (w.pendingBurstTimer ?? 0) <= 0 && catchUpVolleys < 2) {
+      fireWeaponVolley(
+        w,
+        behavior,
+        player,
+        projectiles,
+        w.pendingBurstDamage ?? runtimePlan.projectile.damage * player.might,
+        w.area * player.area,
+        enemyQuery
+      );
+      w.pendingBurstRemaining = (w.pendingBurstRemaining ?? 1) - 1;
+      w.pendingBurstTimer = (w.pendingBurstTimer ?? 0) + runtimePlan.emission.burstInterval;
+      catchUpVolleys++;
+    }
+    if ((w.pendingBurstRemaining ?? 0) <= 0) {
+      w.pendingBurstRemaining = undefined;
+      w.pendingBurstTimer = undefined;
+      w.pendingBurstDamage = undefined;
+      w.castSequence = (w.castSequence ?? 0) + 1;
+    } else if (catchUpVolleys === 2 && (w.pendingBurstTimer ?? 0) <= 0) {
+      w.pendingBurstTimer = runtimePlan.emission.burstInterval;
+    }
+    return;
+  }
   const effectiveCooldown = (runtimePlan?.trigger.cooldown ??
     w.cooldown * getEvolutionCooldownMultiplier(w)) * (1 - player.cooldownReduction);
   if (w.timer < effectiveCooldown) return;
+
+  if (runtimePlan && runtimePlan.trigger.chargeDuration > 0) {
+    if (w.chargeRemaining === undefined) {
+      w.chargeRemaining = runtimePlan.trigger.chargeDuration;
+      emitWeaponFeedback(runtimePlan, 'charge', player.x, player.y);
+    }
+    w.chargeRemaining = Math.max(0, w.chargeRemaining - dt);
+    if (w.chargeRemaining > 0) return;
+    w.chargeRemaining = undefined;
+  }
 
   const effectiveDamage = (runtimePlan?.projectile.damage ??
     w.damage * getEvolutionDamageMultiplier(w)) * player.might;
   const effectiveArea = w.area * player.area;
 
-  const castDamages = getCastDamages(w, effectiveDamage);
+  const fired = fireWeaponVolley(
+    w, behavior, player, projectiles, effectiveDamage, effectiveArea, enemyQuery
+  );
+  if (fired) {
+    w.timer = 0;
+    if (runtimePlan && runtimePlan.emission.burstCount > 1) {
+      w.pendingBurstRemaining = runtimePlan.emission.burstCount - 1;
+      w.pendingBurstTimer = runtimePlan.emission.burstInterval;
+      w.pendingBurstDamage = effectiveDamage;
+    } else {
+      w.castSequence = (w.castSequence ?? 0) + 1;
+    }
+    eventBus.emit(GameEvent.WEAPON_FIRE, w.type);
+  }
+}
+
+function fireWeaponVolley(
+  weapon: Weapon,
+  behavior: WeaponBehaviorHandler,
+  player: Player,
+  projectiles: Projectile[],
+  damage: number,
+  area: number,
+  enemyQuery: EnemyQuery
+): boolean {
   let fired = false;
-  for (const damage of castDamages) {
+  for (const castDamage of getCastDamages(weapon, damage)) {
     fired = behavior.fire({
-      weapon: w,
+      weapon,
       player,
       projectiles,
-      damage,
-      area: effectiveArea,
+      damage: castDamage,
+      area,
       enemyQuery,
     }) || fired;
   }
-  if (fired) {
-    w.timer = 0;
-    eventBus.emit(GameEvent.WEAPON_FIRE, w.type);
+  if (fired && weapon.runtimePlan) {
+    emitWeaponFeedback(weapon.runtimePlan, 'cast', player.x, player.y);
+  }
+  return fired;
+}
+
+function emitWeaponFeedback(
+  plan: WeaponRuntimePlan,
+  event: 'charge' | 'cast' | 'hit' | 'kill' | 'expire',
+  x: number,
+  y: number
+): void {
+  for (const effect of plan.feedback) {
+    if (effect.event === event) effect.emit({ definitionId: plan.definitionId, event, x, y });
   }
 }
 
@@ -385,6 +462,8 @@ export function createCoreWeaponBehaviorRegistry(): ReadonlyRegistry<WeaponBehav
 export function createCoreEngineRegistrySnapshot(): EngineRegistrySnapshot {
   return buildEngineRegistrySnapshot([
     CORE_PROJECTILE_PRIMITIVE_PLUGIN,
+    CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN,
+    CORE_PROJECTILE_PARTICLE_PLUGIN,
     CORE_WEAPON_MODIFIER_PLUGIN,
     CORE_WEAPON_BEHAVIOR_PLUGIN,
   ]);
@@ -499,6 +578,8 @@ function getEvolutionDamageMultiplier(w: Weapon): number {
 function canApplyProjectileOrbit(w: Weapon, projectile: Projectile): boolean {
   const speed = Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy);
   return w.family === 'projectile' &&
+    projectile.runtimePlan?.projectile.motion.primitiveId !==
+      CoreWeaponPrimitiveId.MOTION_ORBIT_PLAYER &&
     speed > 0.1 &&
     projectile.gravY === undefined &&
     projectile.beamLength === undefined &&
@@ -651,8 +732,8 @@ function spawnPooledWeaponProjectile(
 }
 
 const PROJECTILE_RECIPE_RUNTIME_ADAPTER: ProjectileRecipeRuntimeAdapter = Object.freeze<ProjectileRecipeRuntimeAdapter>({
-  spawn(context, plan, x, y, vx, vy, damage, radius, lifetime, pierce, knockback) {
-    return spawnPooledWeaponProjectile(
+  spawn(context, plan, x, y, vx, vy, headingAngle, damage, radius, lifetime, pierce, knockback) {
+    const projectile = spawnPooledWeaponProjectile(
       context.weapon,
       context.projectiles,
       x,
@@ -666,7 +747,14 @@ const PROJECTILE_RECIPE_RUNTIME_ADAPTER: ProjectileRecipeRuntimeAdapter = Object
       context.weapon.type,
       knockback,
       plan
-    ) !== undefined;
+    );
+    if (!projectile) return false;
+    projectile.headingAngle = headingAngle;
+    projectile.activationRemaining = plan.delivery.activationDelay;
+    projectile.visualSpawnPending = true;
+    projectile.lifecycleDepth = 0;
+    plan.delivery.initialize(projectile, context.player);
+    return true;
   },
 });
 
@@ -1126,10 +1214,20 @@ export function getGarlicRadius(w: Weapon, player: Player): number {
     (hasWeaponEvolution(w, WeaponEvolutionId.GARLIC_WARD) ? 1.08 : 1);
 }
 
-export function updateProjectile(p: Projectile, dt: number, player?: Player): boolean {
+export function updateProjectile(
+  p: Projectile,
+  dt: number,
+  player?: Player,
+  enemyQuery?: EnemyQuery
+): boolean {
   p.animTimer += dt * 5;
   p.life -= dt;
   if (p.life <= 0) return false;
+  p.previousX = p.x;
+  p.previousY = p.y;
+  if (p.activationRemaining !== undefined && p.activationRemaining > 0) {
+    p.activationRemaining = Math.max(0, p.activationRemaining - dt);
+  }
 
   if (p.orbitFollowPlayer && p.orbitAngle !== undefined && p.orbitRadius !== undefined && p.orbitSpeed !== undefined) {
     p.orbitAngle += p.orbitSpeed * dt;
@@ -1140,8 +1238,8 @@ export function updateProjectile(p: Projectile, dt: number, player?: Player): bo
   }
 
   if (p.runtimePlan) {
-    p.runtimePlan.projectile.motion.update(p, dt, player);
-    return true;
+    if (p.runtimePlan.delivery.update(p, dt, player) === false) return false;
+    return p.runtimePlan.projectile.motion.update(p, dt, player, enemyQuery) !== false;
   }
 
   switch (p.type) {

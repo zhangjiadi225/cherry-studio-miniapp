@@ -3,15 +3,19 @@ import {
   WeaponPrimitiveParameterError,
   type CastOriginPrimitive,
   type CollisionBehaviorPrimitive,
+  type EmissionSchedulePrimitive,
   type EmissionPatternPrimitive,
   type HitEffectPrimitive,
   type ProjectileLifecyclePrimitive,
   type ProjectileMotionPrimitive,
+  type ProjectileParticlePrimitive,
   type ProjectileRenderPrimitive,
   type ResolvedProjectileRenderPrimitive,
   type TargetingPrimitive,
   type TrustedWeaponModifierHandler,
   type WeaponCapabilityCatalogV1,
+  type WeaponDeliveryPrimitive,
+  type WeaponFeedbackPrimitive,
   type WeaponPrimitiveDescriptorV1,
   type WeaponRuntimePlan,
   type WeaponTriggerPrimitive,
@@ -23,12 +27,19 @@ import type {
   TrustedWeaponPlanAdjustment,
   WeaponRecipeNumericStat,
 } from './WeaponRecipe';
+import { CoreAdvancedWeaponPrimitiveId } from '../../behaviors/weapon/CoreAdvancedWeaponPrimitives';
 
 const MAX_DIRECT_PROJECTILES_PER_CAST = 64;
 const MAX_THEORETICAL_CONCURRENT_PROJECTILES = 420;
 const MAX_HIT_EFFECTS = 8;
 const MAX_LIFECYCLE_EFFECTS = 6;
 const MAX_RENDER_LAYERS = 8;
+const MAX_PARTICLE_EFFECTS = 4;
+const MAX_FEEDBACK_EFFECTS = 6;
+const MAX_DERIVED_PROJECTILES_PER_CAST = 96;
+const MAX_DAMAGE_MULTIPLIER_PER_HIT = 64;
+const MAX_PARTICLES_PER_SECOND = 320;
+const MAX_THEORETICAL_CONCURRENT_PARTICLES = 480;
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i;
 
 export type WeaponRecipeCompileErrorCode =
@@ -37,8 +48,10 @@ export type WeaponRecipeCompileErrorCode =
   | 'UNKNOWN_PRIMITIVE_PARAM'
   | 'MISSING_PRIMITIVE_PARAM'
   | 'INVALID_PRIMITIVE_PARAM'
+  | 'INCOMPATIBLE_PRIMITIVES'
   | 'PROJECTILES_PER_CAST_EXCEEDED'
   | 'PROJECTILE_CONCURRENCY_EXCEEDED'
+  | 'PARTICLE_BUDGET_EXCEEDED'
   | 'RUNTIME_PLAN_UNRESOLVED';
 
 export class WeaponRecipeCompileError extends Error {
@@ -54,14 +67,18 @@ export class WeaponRecipeCompileError extends Error {
 
 export interface WeaponRecipeCompilerRegistries {
   readonly weaponTriggers: ReadonlyRegistry<WeaponTriggerPrimitive>;
+  readonly weaponDeliveries: ReadonlyRegistry<WeaponDeliveryPrimitive>;
   readonly targetingStrategies: ReadonlyRegistry<TargetingPrimitive>;
   readonly castOrigins: ReadonlyRegistry<CastOriginPrimitive>;
+  readonly emissionSchedules: ReadonlyRegistry<EmissionSchedulePrimitive>;
   readonly emissionPatterns: ReadonlyRegistry<EmissionPatternPrimitive>;
   readonly projectileMotions: ReadonlyRegistry<ProjectileMotionPrimitive>;
   readonly collisionBehaviors: ReadonlyRegistry<CollisionBehaviorPrimitive>;
   readonly hitEffects: ReadonlyRegistry<HitEffectPrimitive>;
   readonly projectileLifecycles: ReadonlyRegistry<ProjectileLifecyclePrimitive>;
   readonly projectileRenderers: ReadonlyRegistry<ProjectileRenderPrimitive>;
+  readonly projectileParticleEffects: ReadonlyRegistry<ProjectileParticlePrimitive>;
+  readonly weaponFeedbackEffects: ReadonlyRegistry<WeaponFeedbackPrimitive>;
   readonly weaponModifiers: ReadonlyRegistry<TrustedWeaponModifierHandler>;
 }
 
@@ -175,6 +192,9 @@ function compileVisual(
   if (recipe.layers.length > MAX_RENDER_LAYERS) {
     fail('projectile.visual.layers', `maximum ${MAX_RENDER_LAYERS} layers`);
   }
+  if ((recipe.emitters?.length ?? 0) > MAX_PARTICLE_EFFECTS) {
+    fail('projectile.visual.emitters', `maximum ${MAX_PARTICLE_EFFECTS} effects`);
+  }
 
   if (recipe.glow) {
     assertColor(recipe.glow.color, 'projectile.visual.glow.color');
@@ -188,6 +208,16 @@ function compileVisual(
   const layers = recipe.layers.map((ref, index) =>
     resolveRender(ref, `projectile.visual.layers[${index}]`)
   );
+  const emitters = (recipe.emitters ?? []).map((ref, index) =>
+    resolvePrimitive(
+      registries.projectileParticleEffects,
+      ref,
+      `projectile.visual.emitters[${index}]`
+    )
+  );
+  if (emitters.filter((effect) => effect.event === 'trail').length > 1) {
+    fail('projectile.visual.emitters', 'maximum one trail particle effect');
+  }
 
   return Object.freeze({
     body: resolveRender(recipe.body, 'projectile.visual.body'),
@@ -202,7 +232,59 @@ function compileVisual(
     particles: recipe.particles
       ? resolveRender(recipe.particles, 'projectile.visual.particles')
       : undefined,
+    emitters: Object.freeze(emitters),
   });
+}
+
+function collectRecipePrimitiveIds(recipe: ProjectileWeaponRecipeV1): ReadonlySet<string> {
+  const refs = [
+    ...(recipe.delivery === 'projectile' ? [] : [recipe.delivery]),
+    recipe.trigger,
+    recipe.targeting,
+    ...(recipe.emission.schedule ? [recipe.emission.schedule] : []),
+    recipe.emission.origin,
+    recipe.emission.pattern,
+    recipe.projectile.motion,
+    recipe.projectile.collision,
+    ...recipe.projectile.hitEffects,
+    ...recipe.projectile.lifecycle,
+    recipe.projectile.visual.body,
+    ...recipe.projectile.visual.layers,
+    ...(recipe.projectile.visual.trail ? [recipe.projectile.visual.trail] : []),
+    ...(recipe.projectile.visual.particles ? [recipe.projectile.visual.particles] : []),
+    ...(recipe.projectile.visual.emitters ?? []),
+    ...(recipe.feedback ?? []),
+  ];
+  const ids = new Set(refs.map((ref) => ref.primitiveId));
+  if (recipe.delivery === 'projectile') {
+    ids.add(CoreAdvancedWeaponPrimitiveId.DELIVERY_PROJECTILE);
+  }
+  return ids;
+}
+
+function getDeliveryRef(recipe: ProjectileWeaponRecipeV1): PrimitiveRefV1 {
+  return recipe.delivery === 'projectile'
+    ? Object.freeze({
+        primitiveId: CoreAdvancedWeaponPrimitiveId.DELIVERY_PROJECTILE,
+        params: Object.freeze({}),
+      })
+    : recipe.delivery;
+}
+
+function getScheduleRef(recipe: ProjectileWeaponRecipeV1): PrimitiveRefV1 {
+  if (recipe.emission.schedule) return recipe.emission.schedule;
+  return recipe.emission.burstCount === 1
+    ? Object.freeze({
+        primitiveId: CoreAdvancedWeaponPrimitiveId.EMISSION_SINGLE,
+        params: Object.freeze({}),
+      })
+    : Object.freeze({
+        primitiveId: CoreAdvancedWeaponPrimitiveId.EMISSION_BURST,
+        params: Object.freeze({
+          burstCount: recipe.emission.burstCount,
+          burstInterval: recipe.emission.burstInterval,
+        }),
+      });
 }
 
 export function compileProjectileWeaponRecipe(
@@ -213,7 +295,6 @@ export function compileProjectileWeaponRecipe(
 ): WeaponRuntimePlan {
   assertStableId(definitionId);
   if (recipe.recipeVersion !== 1) fail('recipeVersion', 'only version 1 is supported');
-  if (recipe.delivery !== 'projectile') fail('delivery', 'only projectile delivery is supported');
   if (recipe.emission.emitterId !== 'builtin.emitter.projectile') {
     fail('emission.emitterId', 'unsupported emitter');
   }
@@ -237,12 +318,26 @@ export function compileProjectileWeaponRecipe(
   assertFiniteInRange(stats.knockback, 'projectile.knockback', 0, 1200);
   assertFiniteInRange(recipe.emission.burstCount, 'emission.burstCount', 1, 8, true);
   assertFiniteInRange(recipe.emission.burstInterval, 'emission.burstInterval', 0, 5);
-  if (recipe.emission.burstCount !== 1 || recipe.emission.burstInterval !== 0) {
-    throw new WeaponRecipeCompileError(
-      'RUNTIME_PLAN_UNRESOLVED',
-      'emission',
-      'burst scheduling is not implemented in the current runtime slice'
-    );
+  const delivery = resolvePrimitive(registries.weaponDeliveries, getDeliveryRef(recipe), 'delivery');
+  if (delivery.activationDelay >= stats.lifetime) {
+    fail('delivery', 'activation delay must be shorter than projectile lifetime');
+  }
+  const schedule = resolvePrimitive(registries.emissionSchedules, getScheduleRef(recipe), 'emission.schedule');
+  if (
+    schedule.burstCount !== recipe.emission.burstCount ||
+    schedule.burstInterval !== recipe.emission.burstInterval
+  ) {
+    fail('emission.schedule', 'schedule params must match burstCount and burstInterval');
+  }
+  if (schedule.burstCount === 1 && schedule.burstInterval !== 0) {
+    fail('emission.burstInterval', 'single emission requires burstInterval 0');
+  }
+  if (schedule.burstCount > 1 && schedule.burstInterval < 0.03) {
+    fail('emission.burstInterval', 'burst emission requires interval >= 0.03');
+  }
+  const castCycleDuration = stats.cooldown + baseTrigger.chargeDuration;
+  if ((schedule.burstCount - 1) * schedule.burstInterval >= castCycleDuration) {
+    fail('emission', 'burst duration must be shorter than the trigger cycle');
   }
 
   if (recipe.projectile.hitEffects.length > MAX_HIT_EFFECTS) {
@@ -277,7 +372,26 @@ export function compileProjectileWeaponRecipe(
   const lifecycle = recipe.projectile.lifecycle.map((ref, index) =>
     resolvePrimitive(registries.projectileLifecycles, ref, `projectile.lifecycle[${index}]`)
   );
+  if (
+    lifecycle.some((effect) =>
+      effect.primitiveId === CoreAdvancedWeaponPrimitiveId.LIFECYCLE_BOUNCE
+    ) && stats.pierce !== 0
+  ) {
+    fail('projectile.pierce', 'lifecycle bounce requires pierce 0');
+  }
+  if (collision.repeatHitInterval > 0 && stats.pierce !== 0) {
+    fail('projectile.pierce', 'periodic collision requires pierce 0');
+  }
   const visual = compileVisual(recipe.projectile.visual, registries);
+  if ((recipe.feedback?.length ?? 0) > MAX_FEEDBACK_EFFECTS) {
+    fail('feedback', `maximum ${MAX_FEEDBACK_EFFECTS} effects`);
+  }
+  const feedback = (recipe.feedback ?? []).map((ref, index) =>
+    resolvePrimitive(registries.weaponFeedbackEffects, ref, `feedback[${index}]`)
+  );
+  if (feedback.some((effect) => effect.event === 'charge') && trigger.chargeDuration === 0) {
+    fail('feedback', 'charge feedback requires a charge trigger');
+  }
 
   const castMultiplier = assertFiniteInRange(
     options.castMultiplier ?? 1,
@@ -286,7 +400,7 @@ export function compileProjectileWeaponRecipe(
     16,
     true
   );
-  const directProjectilesPerCast = stats.count * recipe.emission.burstCount * castMultiplier;
+  const directProjectilesPerCast = stats.count * schedule.burstCount * castMultiplier;
   if (directProjectilesPerCast > MAX_DIRECT_PROJECTILES_PER_CAST) {
     throw new WeaponRecipeCompileError(
       'PROJECTILES_PER_CAST_EXCEEDED',
@@ -294,8 +408,42 @@ export function compileProjectileWeaponRecipe(
       `${directProjectilesPerCast} exceeds ${MAX_DIRECT_PROJECTILES_PER_CAST}`
     );
   }
-  const directProjectilesPerSecond = directProjectilesPerCast / stats.cooldown;
-  const theoreticalConcurrentProjectiles = Math.ceil(directProjectilesPerSecond * stats.lifetime);
+  let maximumDerivedProjectilesPerCast = 0;
+  const lifecycleBranchingFactor = lifecycle.reduce(
+    (total, effect) => total + effect.maximumChildren,
+    0
+  );
+  const lifecycleMaximumDepth = lifecycle.reduce(
+    (maximum, effect) => Math.max(maximum, effect.maximumDepth),
+    0
+  );
+  let generationSize = directProjectilesPerCast;
+  for (let depth = 0; depth < lifecycleMaximumDepth; depth++) {
+    generationSize *= lifecycleBranchingFactor;
+    maximumDerivedProjectilesPerCast += generationSize;
+    if (maximumDerivedProjectilesPerCast > MAX_DERIVED_PROJECTILES_PER_CAST) break;
+  }
+  if (maximumDerivedProjectilesPerCast > MAX_DERIVED_PROJECTILES_PER_CAST) {
+    throw new WeaponRecipeCompileError(
+      'PROJECTILES_PER_CAST_EXCEEDED',
+      'projectile.lifecycle',
+      `${maximumDerivedProjectilesPerCast} derived projectiles exceed ${MAX_DERIVED_PROJECTILES_PER_CAST}`
+    );
+  }
+  const maximumDamageMultiplierPerHit = hitEffects.reduce(
+    (total, effect) => total + effect.maximumDamageMultiplier,
+    0
+  );
+  if (maximumDamageMultiplierPerHit > MAX_DAMAGE_MULTIPLIER_PER_HIT) {
+    fail(
+      'projectile.hitEffects',
+      `${maximumDamageMultiplierPerHit} damage multiplier exceeds ${MAX_DAMAGE_MULTIPLIER_PER_HIT}`
+    );
+  }
+  const directProjectilesPerSecond = directProjectilesPerCast / castCycleDuration;
+  const allProjectilesPerSecond =
+    (directProjectilesPerCast + maximumDerivedProjectilesPerCast) / castCycleDuration;
+  const theoreticalConcurrentProjectiles = Math.ceil(allProjectilesPerSecond * stats.lifetime);
   if (theoreticalConcurrentProjectiles > MAX_THEORETICAL_CONCURRENT_PROJECTILES) {
     throw new WeaponRecipeCompileError(
       'PROJECTILE_CONCURRENCY_EXCEEDED',
@@ -303,9 +451,88 @@ export function compileProjectileWeaponRecipe(
       `${theoreticalConcurrentProjectiles} exceeds ${MAX_THEORETICAL_CONCURRENT_PROJECTILES}`
     );
   }
+  let estimatedParticlesPerSecond = 0;
+  let theoreticalConcurrentParticles = 0;
+  const maximumHitEventsPerProjectile = collision.repeatHitInterval > 0
+    ? Math.min(8, Math.ceil(stats.lifetime / collision.repeatHitInterval)) *
+      collision.maximumTargetsPerTick
+    : stats.pierce + 1;
+  for (const effect of visual.emitters) {
+    let emissionsPerSecond: number;
+    switch (effect.event) {
+      case 'spawn':
+        emissionsPerSecond = allProjectilesPerSecond;
+        break;
+      case 'trail':
+        emissionsPerSecond = theoreticalConcurrentProjectiles / effect.emissionInterval;
+        break;
+      case 'hit':
+      case 'kill':
+        emissionsPerSecond = allProjectilesPerSecond * maximumHitEventsPerProjectile;
+        break;
+      case 'expire':
+        emissionsPerSecond = allProjectilesPerSecond;
+        break;
+    }
+    const particlesPerSecond = emissionsPerSecond * effect.particlesPerEmission;
+    estimatedParticlesPerSecond += particlesPerSecond;
+    theoreticalConcurrentParticles += Math.ceil(
+      particlesPerSecond * effect.maxParticleLifetime
+    );
+  }
+  if (
+    estimatedParticlesPerSecond > MAX_PARTICLES_PER_SECOND ||
+    theoreticalConcurrentParticles > MAX_THEORETICAL_CONCURRENT_PARTICLES
+  ) {
+    throw new WeaponRecipeCompileError(
+      'PARTICLE_BUDGET_EXCEEDED',
+      'projectile.visual.emitters',
+      `${estimatedParticlesPerSecond.toFixed(1)} particles/s and ` +
+        `${theoreticalConcurrentParticles} concurrent exceed ` +
+      `${MAX_PARTICLES_PER_SECOND}/s or ${MAX_THEORETICAL_CONCURRENT_PARTICLES} concurrent`
+    );
+  }
+  const estimatedFeedbackCostPerSecond = feedback.reduce((total, effect) => {
+    let eventRate: number;
+    switch (effect.event) {
+      case 'charge':
+      case 'cast':
+        eventRate = 1 / castCycleDuration;
+        break;
+      case 'hit':
+      case 'kill':
+        eventRate = allProjectilesPerSecond * maximumHitEventsPerProjectile;
+        break;
+      case 'expire':
+        eventRate = allProjectilesPerSecond;
+        break;
+    }
+    return total + eventRate * effect.estimatedCost;
+  }, 0);
 
   const allowedModifierIds = new Set(recipe.modifierPolicy.allowedIds);
   const deniedModifierIds = new Set(recipe.modifierPolicy.deniedIds);
+  const recipePrimitiveIds = collectRecipePrimitiveIds(recipe);
+  const primitiveDescriptors = collectDescriptors(registries);
+  for (const primitive of primitiveDescriptors) {
+    if (!recipePrimitiveIds.has(primitive.id)) continue;
+    const missing = primitive.compatibility.requires.find((id) => !recipePrimitiveIds.has(id));
+    if (missing) {
+      throw new WeaponRecipeCompileError(
+        'INCOMPATIBLE_PRIMITIVES',
+        'recipe',
+        `primitive "${primitive.id}" requires "${missing}"`
+      );
+    }
+    const conflict = primitive.compatibility.conflictsWith.find((id) => recipePrimitiveIds.has(id));
+    if (conflict) {
+      throw new WeaponRecipeCompileError(
+        'INCOMPATIBLE_PRIMITIVES',
+        'recipe',
+        `primitive "${primitive.id}" conflicts with "${conflict}"`
+      );
+    }
+  }
   if (allowedModifierIds.size !== recipe.modifierPolicy.allowedIds.length) {
     fail('modifierPolicy.allowedIds', 'duplicate modifier ID');
   }
@@ -322,8 +549,18 @@ export function compileProjectileWeaponRecipe(
         `unknown modifier "${id}"`
       );
     }
-    if (!handler.descriptor.compatibleFamilies.includes('projectile')) {
-      fail('modifierPolicy', `modifier "${id}" is incompatible with projectile weapons`);
+    if (!handler.descriptor.compatibleFamilies.includes(delivery.family)) {
+      fail('modifierPolicy', `modifier "${id}" is incompatible with ${delivery.family} weapons`);
+    }
+    const conflictingPrimitiveId = handler.descriptor.conflictsWith.find((primitiveId) =>
+      recipePrimitiveIds.has(primitiveId)
+    );
+    if (allowedModifierIds.has(id) && conflictingPrimitiveId) {
+      throw new WeaponRecipeCompileError(
+        'INCOMPATIBLE_PRIMITIVES',
+        'modifierPolicy.allowedIds',
+        `modifier "${id}" conflicts with "${conflictingPrimitiveId}"`
+      );
     }
     if (allowedModifierIds.has(id) && deniedModifierIds.has(id)) {
       fail('modifierPolicy', `modifier "${id}" cannot be both allowed and denied`);
@@ -332,16 +569,19 @@ export function compileProjectileWeaponRecipe(
 
   const plan: WeaponRuntimePlan = {
     definitionId,
+    delivery,
     trigger,
     targeting,
     emission: Object.freeze({
       emitterId: recipe.emission.emitterId,
+      schedule,
       origin,
       count: stats.count,
       burstCount: recipe.emission.burstCount,
       burstInterval: recipe.emission.burstInterval,
       pattern,
     }),
+    feedback: Object.freeze(feedback),
     projectile: Object.freeze({
       damage: stats.damage,
       radius: stats.radius,
@@ -363,7 +603,14 @@ export function compileProjectileWeaponRecipe(
       directProjectilesPerCast,
       directProjectilesPerSecond,
       theoreticalConcurrentProjectiles,
-      estimatedCostPerSecond: directProjectilesPerSecond * (1 + hitEffects.length * 0.25),
+      estimatedParticlesPerSecond,
+      theoreticalConcurrentParticles,
+      maximumDerivedProjectilesPerCast,
+      maximumDamageMultiplierPerHit,
+      estimatedCostPerSecond:
+        directProjectilesPerSecond * (1 + hitEffects.length * 0.25) +
+        estimatedParticlesPerSecond * 0.05 +
+        estimatedFeedbackCostPerSecond,
     }),
   };
 
@@ -375,14 +622,18 @@ function collectDescriptors(
 ): WeaponPrimitiveDescriptorV1[] {
   return [
     ...registries.weaponTriggers.values(),
+    ...registries.weaponDeliveries.values(),
     ...registries.targetingStrategies.values(),
     ...registries.castOrigins.values(),
+    ...registries.emissionSchedules.values(),
     ...registries.emissionPatterns.values(),
     ...registries.projectileMotions.values(),
     ...registries.collisionBehaviors.values(),
     ...registries.hitEffects.values(),
     ...registries.projectileLifecycles.values(),
     ...registries.projectileRenderers.values(),
+    ...registries.projectileParticleEffects.values(),
+    ...registries.weaponFeedbackEffects.values(),
   ]
     .map((primitive) => primitive.descriptor)
     .sort((left, right) => left.id.localeCompare(right.id));

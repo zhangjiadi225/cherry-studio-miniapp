@@ -91,6 +91,11 @@ export function createEnemy(
   enemy.traitDuration = 0;
   enemy.traitDirX = 0;
   enemy.traitDirY = 0;
+  enemy.slowMultiplier = 1;
+  enemy.slowRemaining = 0;
+  enemy.burnDamagePerSecond = 0;
+  enemy.burnRemaining = 0;
+  enemy.burnTickTimer = 0;
   return enemy;
 }
 
@@ -103,6 +108,24 @@ export function updateEnemy(
   e.animTimer += dt * 3;
   e.hitFlash = Math.max(0, e.hitFlash - dt * 5);
   e.contactCooldown = Math.max(0, e.contactCooldown - dt);
+  if (e.slowRemaining > 0) {
+    e.slowRemaining = Math.max(0, e.slowRemaining - dt);
+    if (e.slowRemaining === 0) e.slowMultiplier = 1;
+  }
+  if (e.burnRemaining > 0 && e.hp > 0) {
+    e.burnRemaining = Math.max(0, e.burnRemaining - dt);
+    e.burnTickTimer += dt;
+    const tickCount = Math.min(2, Math.floor(e.burnTickTimer / 0.2));
+    if (tickCount > 0) {
+      e.burnTickTimer -= tickCount * 0.2;
+      e.hp -= e.burnDamagePerSecond * tickCount * 0.2;
+      e.hitFlash = 1;
+    }
+    if (e.burnRemaining === 0) {
+      e.burnDamagePerSecond = 0;
+      e.burnTickTimer = 0;
+    }
+  }
 
   const dx = player.x - e.x;
   const dy = player.y - e.y;
@@ -135,8 +158,9 @@ export function updateEnemy(
     if (!traitMove.dashActive && e.trait === 'phase' && e.traitDuration > 0) moveScale *= 1.32;
     if (!traitMove.dashActive && traitMove.windup) moveScale *= 0.2;
 
-    e.x += dirX * e.speed * moveScale * dt;
-    e.y += dirY * e.speed * moveScale * dt;
+    const slowMultiplier = traitMove.dashActive ? 1 : e.slowMultiplier;
+    e.x += dirX * e.speed * moveScale * slowMultiplier * dt;
+    e.y += dirY * e.speed * moveScale * slowMultiplier * dt;
   }
 
   if (mapSystem && !phasing) {
@@ -166,6 +190,16 @@ export function damageEnemy(
   e.knockbackX += shielded ? knockbackX * 0.45 : knockbackX;
   e.knockbackY += shielded ? knockbackY * 0.45 : knockbackY;
   return e.hp <= 0;
+}
+
+export function applyEnemySlow(e: Enemy, speedMultiplier: number, duration: number): void {
+  e.slowMultiplier = Math.min(e.slowMultiplier, speedMultiplier);
+  e.slowRemaining = Math.max(e.slowRemaining, duration);
+}
+
+export function applyEnemyBurn(e: Enemy, damagePerSecond: number, duration: number): void {
+  e.burnDamagePerSecond = Math.max(e.burnDamagePerSecond, damagePerSecond);
+  e.burnRemaining = Math.max(e.burnRemaining, duration);
 }
 
 export function getEnemyEnhancement(

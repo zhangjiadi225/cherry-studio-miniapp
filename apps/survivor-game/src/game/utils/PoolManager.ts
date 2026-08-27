@@ -65,9 +65,26 @@ function resetProjectile(p: Projectile) {
   p.lightningSeed = undefined;
   p.beamLength = undefined;
   p.arcAngle = undefined;
+  p.headingAngle = undefined;
+  p.visualEffectSequence = undefined;
+  p.visualTrailTimer = undefined;
   p.evolutionIds = undefined;
   p.runtimePlan = undefined;
   p.useLegacyProjectileSprite = undefined;
+  p.previousX = undefined;
+  p.previousY = undefined;
+  p.activationRemaining = undefined;
+  p.deliveryOffsetX = undefined;
+  p.deliveryOffsetY = undefined;
+  p.motionAge = undefined;
+  p.returnPhase = undefined;
+  p.visualSpawnPending = undefined;
+  p.hitCooldowns?.clear();
+  p.lifecycleTriggerCounts?.clear();
+  p.lifecycleDepth = undefined;
+  p.lifecycleSuppressed = undefined;
+  p.mapBounceCount = undefined;
+  p.collisionHitsThisFrame = undefined;
 }
 
 function resetEnemyProjectile(p: EnemyProjectile) {
@@ -127,6 +144,11 @@ function resetEnemy(e: Enemy) {
   e.traitDuration = 0;
   e.traitDirX = 0;
   e.traitDirY = 0;
+  e.slowMultiplier = 1;
+  e.slowRemaining = 0;
+  e.burnDamagePerSecond = 0;
+  e.burnRemaining = 0;
+  e.burnTickTimer = 0;
 }
 
 export const pools = {
@@ -162,6 +184,8 @@ export const pools = {
       pierce: 0, pierceCount: 0,
       type: 'magic_wand' as any,
       hitEnemies: new Set<number>(),
+      hitCooldowns: new Map<number, number>(),
+      lifecycleTriggerCounts: new Map<string, number>(),
       knockback: 0,
       modifierMask: 0,
       animTimer: 0,
@@ -224,6 +248,11 @@ export const pools = {
       traitDuration: 0,
       traitDirX: 0,
       traitDirY: 0,
+      slowMultiplier: 1,
+      slowRemaining: 0,
+      burnDamagePerSecond: 0,
+      burnRemaining: 0,
+      burnTickTimer: 0,
     }),
     resetEnemy,
     256, 1024

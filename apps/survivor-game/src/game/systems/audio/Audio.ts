@@ -1,4 +1,4 @@
-import { GenericModifierType, WeaponType } from '../../types';
+import { GenericModifierType, WeaponType, type WeaponFeedbackSignal } from '../../types';
 import { eventBus, GameEvent } from '../../events';
 import { GENERIC_MODIFIER_DATA } from '../../constants';
 
@@ -12,6 +12,7 @@ export class AudioSystem {
   private muted: boolean;
   private readonly unsubs: Array<() => void> = [];
   private readonly modifierSoundTimes = new Map<GenericModifierType, number>();
+  private readonly weaponFeedbackSoundTimes = new Map<string, number>();
 
   constructor(muted = false) {
     this.muted = muted;
@@ -22,6 +23,7 @@ export class AudioSystem {
       eventBus.on(GameEvent.XP_COLLECTED, () => this.playXp()),
       eventBus.on(GameEvent.BOSS_WARNING, () => this.playBossWarning()),
       eventBus.on(GameEvent.WEAPON_FIRE, (weaponType) => this.playWeaponFire(weaponType)),
+      eventBus.on(GameEvent.WEAPON_FEEDBACK, (signal) => this.playWeaponFeedback(signal)),
       eventBus.on(GameEvent.MODIFIER_TRIGGER, (modifierType) => this.playModifierTrigger(modifierType))
     );
   }
@@ -109,6 +111,33 @@ export class AudioSystem {
   private playXp() {
     if (this.muted) return;
     this.playTone(740, 0.045, 'triangle', 0.035);
+  }
+
+  private playWeaponFeedback(signal: WeaponFeedbackSignal) {
+    if (this.muted || signal.kind !== 'audio') return;
+    const context = this.ensureContext();
+    if (!context) return;
+    const last = this.weaponFeedbackSoundTimes.get(signal.cue) ?? -Infinity;
+    if (context.currentTime - last < 0.045) return;
+    this.weaponFeedbackSoundTimes.set(signal.cue, context.currentTime);
+    const volume = 0.025 + signal.intensity * 0.045;
+    switch (signal.cue) {
+      case 'charge':
+        this.playSweep(180, 520, 0.14, 'sine', volume);
+        break;
+      case 'cast':
+        this.playTone(680, 0.055, 'triangle', volume);
+        break;
+      case 'impact':
+        this.playSweep(260, 110, 0.07, 'square', volume);
+        break;
+      case 'burst':
+        this.playSweep(520, 240, 0.06, 'sawtooth', volume);
+        break;
+      case 'pulse':
+        this.playSweep(310, 150, 0.09, 'sine', volume);
+        break;
+    }
   }
 
   private playModifierTrigger(modifierType: GenericModifierType) {

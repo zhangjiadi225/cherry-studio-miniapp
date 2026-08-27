@@ -2,7 +2,7 @@
 
 > 状态：Draft Spec
 >
-> 规范版本：0.2
+> 规范版本：0.4
 >
 > 更新日期：2026-08-27
 
@@ -14,9 +14,9 @@ AI 可以提供颜色、尺寸、速度、数量、阵型参数和受限视觉�
 
 当前代码中的 `builtin.weapon.magic-wand`、`builtin.weapon.fire-wand` 等 `behaviorId` 是迁移期兼容适配器。它们完成了从 `WeaponType switch` 到 Registry 分发的第一步，但仍然是一件武器对应一个较粗行为，不是最终原子层。
 
-当前投射物闭环已经包含 Trigger、Targeting、Cast Origin、Emission Pattern、Motion、Collision、HitEffect、Render、现有通用 Modifier Registry、Capability Catalog、严格编译和动态 ContentPack 装配。Lifecycle 数组目前只能为空，Burst 目前固定为单次；Validator 会拒绝引用未实现能力，而不会降级执行。
+当前 WeaponRecipe 闭环已经包含 Delivery、Trigger、Targeting、Cast Origin、Emission Schedule/Pattern、Motion、Collision、HitEffect、Lifecycle、Render、Particle、Audio/Camera Feedback、通用 Modifier Registry、Capability Catalog、严格编译和动态 ContentPack 装配。P0/P1/P2 路线图原语已经全部注册；旧的 `delivery: "projectile"` 仍作为兼容写法映射到 `builtin.delivery.projectile`。
 
-本规范第一阶段只要求打通普通玩家投射物武器。Aura、Orbit、Strike、Zone、Swing 等交付模式在现有实现保持不变，等投射物配方闭环稳定后再扩展，避免一次性抽象所有武器。
+Projectile、Zone、Aura、Strike 和 Swing 共用同一个池化弹体执行内核，但交付处理器拥有落点激活、玩家跟随和碰撞生效时机。Orbit 仍可由 `motion.orbit-player` 表达；其他内置武器的旧 `fireXxx` 迁移不属于本次协议扩展。
 
 ## 2. 核心原则
 
@@ -47,17 +47,21 @@ Modifier（修饰器，即在固定阶段变换已解析武器计划的可信局
 
 投射物武器第一阶段需要以下 Registry：
 
-| Registry | 引用字段 | 职责 | 首批原语示例 |
+| Registry | 引用字段 | 职责 | 当前已注册 |
 | --- | --- | --- | --- |
-| Weapon Trigger | `trigger.primitiveId` | 何时触发一次施放 | `builtin.trigger.cooldown` |
-| Targeting | `targeting.primitiveId` | 选择目标或方向 | `builtin.target.nearest`、`builtin.target.facing` |
-| Cast Origin | `emission.origin.primitiveId` | 从玩家、法器挂点或其他可信来源计算施放点 | `builtin.origin.player`、`builtin.origin.focus-relic` |
-| Emission Pattern | `emission.pattern.primitiveId` | 把数量映射为生成方向和偏移 | `builtin.pattern.single`、`builtin.pattern.fan`、`builtin.pattern.ring` |
-| Projectile Motion | `projectile.motion.primitiveId` | 每帧更新运动 | `builtin.motion.straight`、`builtin.motion.homing`、`builtin.motion.orbit` |
-| Collision Behavior | `projectile.collision.primitiveId` | 地图、敌人与穿透处理 | `builtin.collision.standard` |
-| Hit Effect | `projectile.hitEffects[]` | 命中后的规则效果 | `builtin.effect.damage`、`builtin.effect.knockback` |
-| Projectile Lifecycle | `projectile.lifecycle[]` | 生成、命中、到期或死亡时派生行为 | `builtin.lifecycle.split-on-hit`、`builtin.lifecycle.return` |
-| Render Primitive | `projectile.visual.*.primitiveId` | 形状、轨迹、光晕和粒子 | `builtin.render.circle` |
+| Weapon Delivery | `delivery.primitiveId` | 弹体、区域、光环、延迟打击或近战挥击的实体语义 | `builtin.delivery.projectile`、`zone`、`aura`、`strike`、`swing` |
+| Weapon Trigger | `trigger.primitiveId` | 何时触发一次施放 | `builtin.trigger.cooldown`、`builtin.trigger.charge` |
+| Targeting | `targeting.primitiveId` | 选择目标或方向 | `nearest`、`facing`、`lowest-hp`、`random-seeded`、`cluster` |
+| Cast Origin | `emission.origin.primitiveId` | 从玩家、法器挂点、目标地面或其他可信来源计算施放点 | `builtin.origin.player`、`builtin.origin.focus-relic`、`builtin.origin.target-ground` |
+| Emission Schedule | `emission.schedule.primitiveId` | 单次或固定时间轴连发 | `builtin.emission.single`、`builtin.emission.burst` |
+| Emission Pattern | `emission.pattern.primitiveId` | 把数量映射为生成方向和偏移 | `single`、`fan`、`ring`、`spiral` |
+| Projectile Motion | `projectile.motion.primitiveId` | 每帧更新运动 | `straight`、`stationary`、`orbit-player`、`homing`、`accelerating`、`return` |
+| Collision Behavior | `projectile.collision.primitiveId` | 地图、敌人与穿透处理 | `standard`、`segment`、`sector`、`area-periodic`、`wall-bounce`、`terrain-stop` |
+| Hit Effect | `projectile.hitEffects[]` | 命中后的规则效果 | `damage`、`knockback`、`slow`、`burn`、`chain`、`area-damage` |
+| Projectile Lifecycle | `projectile.lifecycle[]` | 命中或到期时派生行为 | `split-on-hit`、`split-on-expire`、`bounce` |
+| Render Primitive | `projectile.visual.*.primitiveId` | 不创建实体的形状、轨迹和静态视觉层 | `circle`、`ring`、`beam`、`arc`、`sprite` |
+| Particle Effect | `projectile.visual.emitters[]` | 在可信视觉事件点创建受预算约束的粒子实体 | `trail`、`hit-burst`、`explosion`、`telegraph`、`shockwave` |
+| Weapon Feedback | `feedback[]` | 向表现系统发送白名单音效或镜头请求 | `builtin.audio.cue`、`builtin.camera.impulse` |
 | Weapon Modifier | 局内 Modifier 栈 | 在固定阶段变换运行计划 | `builtin.modifier.double-shot`、`builtin.modifier.piercing` |
 
 原语 ID 使用稳定命名空间。AI 内容可以引用 `builtin.*`，但不能覆盖、别名化或在自己的 Pack 中声明新的处理器 ID。
@@ -74,15 +78,18 @@ interface PrimitiveDescriptorV1 {
   version: string
   kind:
     | 'trigger'
+    | 'delivery'
     | 'targeting'
     | 'cast-origin'
+    | 'emission-schedule'
     | 'emission-pattern'
     | 'projectile-motion'
     | 'collision'
     | 'hit-effect'
     | 'lifecycle'
     | 'render'
-    | 'modifier'
+    | 'particle'
+    | 'feedback'
   name: string
   description: string
   parameterSchema: {
@@ -121,17 +128,19 @@ interface PrimitiveRefV1 {
 
 interface ProjectileWeaponRecipeV1 {
   recipeVersion: 1
-  delivery: 'projectile'
+  delivery: 'projectile' | PrimitiveRefV1
   trigger: PrimitiveRefV1
   targeting: PrimitiveRefV1
   emission: {
     emitterId: 'builtin.emitter.projectile'
+    schedule?: PrimitiveRefV1
     origin: PrimitiveRefV1
     count: number
     burstCount: number
     burstInterval: number
     pattern: PrimitiveRefV1
   }
+  feedback?: PrimitiveRefV1[]
   projectile: {
     damage: number
     radius: number
@@ -164,22 +173,31 @@ interface ProjectileVisualRecipeV1 {
   layers: PrimitiveRefV1[]
   trail?: PrimitiveRefV1
   particles?: PrimitiveRefV1
+  emitters?: PrimitiveRefV1[]
 }
 ```
 
 要求：
 
 - `recipeVersion` 与 ContentPack `schemaVersion` 分开演进。
-- 第一版只接受 `delivery: "projectile"`；其他值必须拒绝，不能推测降级。
+- `delivery: "projectile"` 是兼容写法；新配方应引用已注册 Delivery 原语，ContentPack 的 `family` 必须与编译结果一致。
 - `PrimitiveRefV1.params` 必须通过所引用原语的封闭 Schema；禁止未知字段。
 - `count * burstCount` 是一次施放的直接生成数，必须以整数预算校验。
 - `emission.origin` 只计算施放点，不得读取内容 ID 或直接生成弹体。
+- 运行计划必须保留独立瞄准角；`speed: 0` 与 `motion.stationary` 不能让线段、扇区、光束或圆弧退化为固定世界方向。
 - `radius` 是规则碰撞半径；`visual.scale` 只控制展示，二者不能互相覆盖。
 - `hitEffects` 与 `lifecycle` 有数量上限，按数组顺序确定执行顺序。
 - `visual.body`、`layers`、`trail` 和 `particles` 只引用可信渲染原语；颜色与几何参数由内容提供，但不能包含 SVG/XML、CSS、Shader 或模块路径。
+- `visual.emitters` 最多包含 4 个 Particle Effect，其中最多一个持续拖尾；支持 `spawn`、`trail`、`hit`、`kill` 和 `expire` 事件。
+- Particle Effect 只能创建视觉粒子，不能施加伤害、击退、状态、掉落或修改战斗实体；链电、爆炸等同名战斗规则仍必须引用对应可信 HitEffect、Lifecycle 或 Modifier。
 - 渲染原语不得读取或修改伤害、碰撞、掉落和随机数等规则状态。
 - `allowedIds` 不能授予 Registry 中不存在或与配方不兼容的 Modifier。
+- Modifier 的 `conflictsWith` 可以引用其他 Modifier 或当前配方原语；例如 `orbital-core` 与 `motion.orbit-player` 冲突，避免运行时覆盖配方声明的环绕参数。
 - `deniedIds` 用于表达明确冲突；本地 Modifier Registry 的冲突声明仍拥有最终决定权。
+- `emission.schedule` 与兼容字段 `burstCount` / `burstInterval` 必须精确一致；Burst 最少间隔 0.03 秒，运行时单帧最多追赶两次齐射。
+- `area-periodic` 必须声明 `tickInterval` 和 `maxTargetsPerTick`；同一敌人使用池化冷却 Map，不能靠无限 `hitEnemies` 集合重复命中。
+- Zone、Aura、Strike 和 Swing 的 Delivery Descriptor 通过 `requires` 约束对应的 Origin、Stationary Motion 与 Collision 组合。
+- `feedback` 最多 6 项，只能发送类型化表现事件；静音设置和 `prefers-reduced-motion` 分别裁决音效与镜头冲击。
 
 ## 7. 真实样板与 AI 参数所有权
 
@@ -264,10 +282,12 @@ WeaponRecipeCompiler（武器配方编译器，即在非热路径把声明式配
 ```ts
 interface WeaponRuntimePlan {
   definitionId: string
+  delivery: ResolvedDelivery
   trigger: ResolvedTrigger
   targeting: ResolvedTargeting
   emission: ResolvedEmission
   projectileFactory: ResolvedProjectileFactory
+  feedback: ResolvedFeedback[]
   modifierStacks: ReadonlyMap<string, number>
   budget: ResolvedWeaponBudget
 }
@@ -300,12 +320,17 @@ interface WeaponRuntimePlan {
 至少计算：
 
 - `directProjectilesPerCast = count * burstCount`。
-- 冷却与 Burst 间隔下的每秒直接生成量。
+- 冷却、充能与 Burst 时间轴下的每秒直接生成量。
 - 生命周期原语可能产生的最大子代数量和最大派生深度。
 - `lifetime / cooldown` 下的理论同时在场数量。
 - Homing、Area Hit、Chain 等每颗弹幕的查询成本。
 - HitEffect 与视觉粒子的最坏触发次数。
+- 拖尾按理论弹体并发量计算；命中/击杀按最大穿透次数计算；到期按直接弹体生成率计算。
+- 当前单武器上限为每秒 320 个粒子、理论同时在场 480 个粒子，运行时仍受全局 800 粒子硬上限保护。
 - Modifier 满层后的一级和满级计划。
+- 单次施放最多 96 个理论派生弹体，单次命中的效果伤害倍数上限为 64；两者都在接受与升级前重新计算。
+- 周期区域的最坏命中次数同时乘以生命周期内 Tick 上限和 `maxTargetsPerTick`，并计入伤害、粒子和反馈预算。
+- Audio Cue 在音频系统按 Cue 节流；Camera Impulse 合并到现有镜头震动上限，并尊重系统减少动态效果偏好。
 
 禁止无界递归分裂。Lifecycle 原语必须声明：
 
@@ -343,6 +368,7 @@ MODIFIER_CONFLICT
 MODIFIER_NOT_SUPPORTED
 PROJECTILES_PER_CAST_EXCEEDED
 PROJECTILE_CONCURRENCY_EXCEEDED
+PARTICLE_BUDGET_EXCEEDED
 LIFECYCLE_DEPTH_EXCEEDED
 WEAPON_BUDGET_EXCEEDED
 RUNTIME_PLAN_UNRESOLVED
@@ -400,3 +426,20 @@ Storage 不保存：
 - 未知参数、未知原语、冲突 Modifier 和超预算组合得到稳定错误。
 - 同一 Recipe、Modifier 栈、引擎版本和随机种子产生相同战斗规则结果。
 - 内容包禁用后不进入下一局快照，但不影响持有旧快照的当前单局。
+
+## 16. P0/P1/P2 能力交付状态
+
+以下能力已完成可信处理器、封闭参数 Schema、兼容性、静态最坏预算和运行时硬上限，并从当前 Capability Catalog 发布给 AI。
+
+| 优先级 | 能力组 | 已发布原语 | 已落实的安全模型 |
+| --- | --- | --- | --- |
+| P0 | 发射调度 | `trigger.charge`、`emission.burst`、`pattern.spiral` | 单次/每秒生成上限、Burst 时间轴、暂停恢复 |
+| P0 | 运动 | `motion.homing`、`motion.accelerating`、`motion.return` | 每帧查询成本、转向上限、目标失效回退 |
+| P0 | 生命周期 | `lifecycle.split-on-hit`、`lifecycle.split-on-expire`、`lifecycle.bounce` | 子代数、派生深度、继承规则、全局弹体上限 |
+| P0 | 命中规则 | `effect.slow`、`effect.burn`、`effect.chain`、`effect.area-damage` | 状态叠加、持续时间、链次数、范围查询预算 |
+| P1 | 目标选择 | `target.lowest-hp`、`target.random-seeded`、`target.cluster` | 稳定排序、种子子流、聚类查询预算 |
+| P1 | 交付模式 | `delivery.zone`、`delivery.aura`、`delivery.strike`、`delivery.swing` | 独立实体计划、命中间隔、地图与玩家跟随语义 |
+| P1 | 碰撞 | `collision.area-periodic`、`collision.wall-bounce`、`collision.terrain-stop` | 重复命中冷却、反弹次数、地图查询预算 |
+| P2 | 反馈与视听 | `render.sprite`、`particle.telegraph`、`particle.shockwave`、`audio.cue`、`camera.impulse` | 仅打包资源白名单、无障碍开关、频率与并发预算 |
+
+后续新增原语仍按“合同与预算先于目录发布”的顺序推进。所有同名视觉效果与战斗规则继续分离，例如 `particle.explosion` 不能替代 `effect.area-damage`。

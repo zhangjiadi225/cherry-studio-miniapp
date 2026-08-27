@@ -23,11 +23,15 @@ export function createParticle(
     maxSpeed?: number;
     angle?: number;
     rotSpeed?: number;
+    random?: () => number;
   } = {}
 ): Particle {
+  const random = options.random ?? Math.random;
   const p = pools.particles.acquire();
-  const angle = options.angle ?? Math.random() * Math.PI * 2;
-  const spd = randFloat(options.minSpeed ?? speed * 0.3, options.maxSpeed ?? speed);
+  const angle = options.angle ?? random() * Math.PI * 2;
+  const minSpeed = options.minSpeed ?? speed * 0.3;
+  const maxSpeed = options.maxSpeed ?? speed;
+  const spd = minSpeed + random() * (maxSpeed - minSpeed);
   p.x = x;
   p.y = y;
   p.endX = undefined;
@@ -39,8 +43,8 @@ export function createParticle(
   p.radius = radius;
   p.color = color;
   p.alpha = 1;
-  p.rotation = Math.random() * Math.PI * 2;
-  p.rotSpeed = options.rotSpeed ?? randFloat(-3, 3);
+  p.rotation = random() * Math.PI * 2;
+  p.rotSpeed = options.rotSpeed ?? -3 + random() * 6;
   p.type = options.type ?? 'circle';
   p.trail = options.trail ?? false;
   p.glow = options.glow ?? false;

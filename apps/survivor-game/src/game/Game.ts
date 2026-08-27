@@ -174,6 +174,8 @@ export class Game {
   private readonly handleCanvasMouseMove = (e: MouseEvent) => this.onMouseMove(e);
   private readonly handleCanvasTouchStart = (e: TouchEvent) => this.onTouchStart(e);
   private readonly handleAnimationFrame = (time: number) => this.loop(time);
+  private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  private readonly unsubscribeWeaponFeedback: () => void;
 
   constructor(canvas: HTMLCanvasElement, options: GameOptions) {
     this.canvas = canvas;
@@ -187,6 +189,14 @@ export class Game {
     this.renderer = new Renderer(canvas);
     this.audio = new AudioSystem(options.muted);
     this.camera = createCamera();
+    this.unsubscribeWeaponFeedback = eventBus.on(GameEvent.WEAPON_FEEDBACK, (signal) => {
+      if (
+        signal.kind === 'camera' &&
+        !this.reducedMotion
+      ) {
+        shakeCamera(this.camera, signal.duration, signal.intensity);
+      }
+    });
     this.perfEnabled = options.perfEnabled;
 
     window.addEventListener('keydown', this.handleKeyDown);
@@ -209,6 +219,7 @@ export class Game {
     this.animationFrameId = 0;
     this.input.destroy();
     this.audio.destroy();
+    this.unsubscribeWeaponFeedback();
     this.renderer.destroy();
   }
 

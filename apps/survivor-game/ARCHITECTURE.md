@@ -20,7 +20,7 @@
 - 单文档 `AppStateStore`、冻结 Registry、动态内容快照和武器行为分派。
 - 投射物 `ContentPackV1`、严格 Validator、内容库原子安装和 AI 武器生成服务。
 
-当前 Registry 已注册首批投射物原语和现有通用 Modifier，魔法法器与通过校验并启用的 AI 投射物武器使用同一 Recipe 执行链；其他内置武器仍使用兼容行为。产品首页已改为 AI 游戏引擎工作台，可直接描述武器、查看 Cherry AI 连接状态，并在同一页面选择难度、系统武器或 AI 生成武器后开始游戏；统一的内容库用于查看内置内容与模块。Forge 可生成、预览、接受并在重载后选择武器。一次自动修复、Job 恢复管理 UI、包管理 UI 和 BehaviorGraph 尚未实现。
+当前 Registry 已注册 Delivery、Trigger、Targeting、施放点、发射调度/阵型、运动、碰撞、命中、Lifecycle、几何/精灵渲染、粒子和音效/镜头反馈原语及现有通用 Modifier。魔法法器与通过校验并启用的 AI Projectile、Zone、Aura、Strike、Swing 武器使用同一 Recipe 执行链；其他内置武器仍使用兼容行为。产品首页已改为 AI 游戏引擎工作台，可直接描述武器、查看 Cherry AI 连接状态，并在同一页面选择难度、系统武器或 AI 生成武器后开始游戏；统一的内容库用于查看内置内容与模块。Forge 可生成、预览、接受并在重载后选择武器。一次自动修复、Job 恢复管理 UI、包管理 UI 和 BehaviorGraph 尚未实现。
 
 ## 2. 当前目录
 
@@ -170,11 +170,13 @@ main.ts
 - 展示方式、行为标签和战斗标签。
 - 一级属性、每级成长和最大等级。
 
-每件内置武器声明稳定 `behaviorId`。启动时 `Weapon.ts` 把现有 `fireXxx` 兼容行为与通用 Recipe 投射物行为注册为冻结的 `WeaponBehaviorHandler`。Trigger、Targeting、Cast Origin、Emission Pattern、Projectile Motion、Collision、HitEffect、Render 与 Weapon Modifier 分别拥有冻结 Registry；Capability Catalog 从这些 Registry 的公开 Descriptor 派生，不包含函数实现。
+每件内置武器声明稳定 `behaviorId`。启动时 `Weapon.ts` 把现有 `fireXxx` 兼容行为与通用 Recipe 行为注册为冻结的 `WeaponBehaviorHandler`。Delivery、Trigger、Targeting、Cast Origin、Emission Schedule/Pattern、Projectile Motion、Collision、HitEffect、Lifecycle、Render、Particle Effect、Weapon Feedback 与 Weapon Modifier 分别拥有冻结 Registry；Capability Catalog 从这些 Registry 的公开 Descriptor 派生，不包含函数实现。
 
-魔法法器是当前第一件真实 Recipe 样板。AI Prompt 直接投影这份运行时数据和冻结 Capability Catalog。Recipe 在启动或升级安全点编译为只读 `WeaponRuntimePlan`；局内 Modifier 按固定阶段与稳定 ID 转换成受信任调整并重新执行预算检查。帧循环只执行已绑定处理器。弹体对象池会清理计划引用，反射弹体继承同一计划。
+魔法法器是当前第一件真实 Recipe 样板。AI Prompt 直接投影这份运行时数据和冻结 Capability Catalog，并发送 Modifier 的家族兼容信息。Recipe 在启动或升级安全点编译为只读 `WeaponRuntimePlan`；局内 Modifier 按固定阶段与稳定 ID 转换成受信任调整并重新执行预算检查。帧循环只执行已绑定处理器。弹体对象池会清理计划、周期命中 Map 与 Lifecycle 状态，反射或分裂弹体继承受限计划。
 
-通过 Validator 的 AI WeaponBlueprint 会转换为动态武器定义，保留自己的稳定 ID、名称、成长和视觉 Recipe，可作为开局武器并在战斗中升级、碰撞和造成伤害。其余九件内置武器仍使用粗粒度 `fireXxx` 兼容行为，特殊移动、碰撞和渲染仍有类型分支。Projectile Lifecycle 的实际回调与 Burst 调度尚未实现，因此生成内容只能提交当前 Capability Catalog 可以完整表达的组合。具体边界见 [`docs/specs/WEAPON_RECIPE.md`](./docs/specs/WEAPON_RECIPE.md)。
+除基础直线圆弹外，当前目录还提供充能/Burst/螺旋、最低生命/种子随机/敌群目标、追踪/加速/回旋、分裂/弹跳、减速/灼烧/连锁/范围伤害、区域/光环/打击/挥击交付、周期区域/墙面反弹/地形阻挡、打包精灵、预警/冲击波粒子、白名单音色和镜头冲击。Particle Effect 只创建视觉实体并使用独立种子随机流；音效和镜头只消费类型化表现事件。编译器同时检查直接/派生弹体、周期命中、总效果伤害、粒子与反馈预算。
+
+通过 Validator 的 AI WeaponBlueprint 会转换为动态武器定义，保留自己的稳定 ID、家族、名称、成长、几何/精灵视觉、粒子与反馈 Recipe，可作为开局武器并在战斗中升级、碰撞和造成伤害。其余九件内置武器仍使用粗粒度 `fireXxx` 兼容行为；这不影响生成内容使用已发布的 P0/P1/P2 原语。具体边界见 [`docs/specs/WEAPON_RECIPE.md`](./docs/specs/WEAPON_RECIPE.md)。
 
 ## 8. 怪物与攻击
 

@@ -1,4 +1,5 @@
 import type { ProjectileWeaponRecipeV1 } from '../../game/recipes/weapon/WeaponRecipe';
+import type { WeaponFamily } from '../../game/types';
 
 export const CONTENT_PACK_SCHEMA_VERSION = 1;
 export const WEAPON_PROPOSAL_VERSION = 1;
@@ -36,7 +37,7 @@ export interface WeaponGenerationProposalV1 {
 
 export interface WeaponBlueprintV1 extends WeaponGenerationProposalV1 {
   readonly id: string;
-  readonly family: 'projectile';
+  readonly family: WeaponFamily;
 }
 
 export interface AiProvenanceV1 {
@@ -103,7 +104,7 @@ export function createAcceptedWeaponPack(
     weapons: [{
       ...proposal,
       id: weaponId,
-      family: 'projectile',
+      family: getProposalWeaponFamily(proposal),
     }],
     enemies: [],
     attackProfiles: [],
@@ -117,6 +118,18 @@ export function createAcceptedWeaponPack(
     },
   };
   return deepFreeze(pack);
+}
+
+function getProposalWeaponFamily(proposal: WeaponGenerationProposalV1): WeaponFamily {
+  const delivery = proposal.recipe.delivery;
+  if (delivery === 'projectile') return 'projectile';
+  switch (delivery.primitiveId) {
+    case 'builtin.delivery.zone': return 'zone';
+    case 'builtin.delivery.aura': return 'aura';
+    case 'builtin.delivery.strike': return 'strike';
+    case 'builtin.delivery.swing': return 'swing';
+    default: return 'projectile';
+  }
 }
 
 function deepFreeze<T>(value: T): T {
