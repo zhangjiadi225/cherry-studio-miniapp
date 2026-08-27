@@ -1,4 +1,4 @@
-import { WeaponEvolutionId } from '../types';
+import { GenericModifierType, WeaponEvolutionId } from '../types';
 import { CoreWeaponPrimitiveId } from '../behaviors/weapon/CoreProjectilePrimitives';
 import { CoreWeaponModifierId } from '../behaviors/weapon/CoreWeaponModifiers';
 import type {
@@ -93,7 +93,16 @@ export const MAGIC_WAND_RECIPE = freezeProjectileWeaponRecipe({
     },
   },
   modifierPolicy: {
-    allowedIds: Object.values(CoreWeaponModifierId),
+    allowedIds: [
+      CoreWeaponModifierId[GenericModifierType.DOUBLE_CAST],
+      CoreWeaponModifierId[GenericModifierType.SPLIT_CORE],
+      CoreWeaponModifierId[GenericModifierType.REFLECTION_PRISM],
+      CoreWeaponModifierId[GenericModifierType.CHAIN_CONDUCTOR],
+      CoreWeaponModifierId[GenericModifierType.IMPACT_PULSE],
+      CoreWeaponModifierId[GenericModifierType.VELOCITY_RUNE],
+      CoreWeaponModifierId[GenericModifierType.ORBITAL_CORE],
+      CoreWeaponModifierId[GenericModifierType.DEATH_BURST],
+    ],
     deniedIds: [],
   },
 } as const satisfies ProjectileWeaponRecipeV1);

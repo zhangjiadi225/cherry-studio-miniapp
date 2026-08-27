@@ -2,9 +2,25 @@ import type { Enemy } from '../../types';
 import type { EnginePlugin } from '../EngineRegistry';
 import {
   WeaponPrimitiveParameterError,
+  type CastOriginPrimitive,
+  type CollisionBehaviorPrimitive,
+  type EmissionPatternPrimitive,
+  type HitEffectPrimitive,
   type PrimitiveParameterSchemaV1,
+  type ProjectileMotionPrimitive,
+  type ProjectileRenderPrimitive,
+  type ResolvedCastOrigin,
+  type ResolvedCollisionBehavior,
+  type ResolvedEmissionPattern,
+  type ResolvedHitEffect,
+  type ResolvedProjectileMotion,
+  type ResolvedProjectileRenderPrimitive,
+  type ResolvedTargeting,
+  type ResolvedWeaponTrigger,
+  type TargetingPrimitive,
   type WeaponPrimitiveDescriptorV1,
   type WeaponPrimitiveKind,
+  type WeaponTriggerPrimitive,
 } from '../../recipes/weapon/WeaponRuntimePlan';
 import type { PrimitiveParamsV1 } from '../../recipes/weapon/WeaponRecipe';
 
@@ -234,11 +250,11 @@ const circleRenderSchema = schema(
   { colorSlot: ['primary', 'secondary', 'accent'] }
 );
 
-export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
+export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze<EnginePlugin>({
   id: 'builtin.plugin.projectile-primitives',
   version: '1.0.0',
   register(api) {
-    api.weaponTriggers.register(CoreWeaponPrimitiveId.TRIGGER_COOLDOWN, Object.freeze({
+    api.weaponTriggers.register(CoreWeaponPrimitiveId.TRIGGER_COOLDOWN, Object.freeze<WeaponTriggerPrimitive>({
       descriptor: descriptor(
         CoreWeaponPrimitiveId.TRIGGER_COOLDOWN,
         'trigger',
@@ -250,14 +266,14 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       ),
       compile(params, path) {
         assertClosedParams(params, cooldownSchema, path);
-        return Object.freeze({
+        return Object.freeze<ResolvedWeaponTrigger>({
           primitiveId: CoreWeaponPrimitiveId.TRIGGER_COOLDOWN,
           cooldown: readNumber(params, 'cooldown', path, 0.2, 60),
         });
       },
     }));
 
-    api.targetingStrategies.register(CoreWeaponPrimitiveId.TARGET_NEAREST, Object.freeze({
+    api.targetingStrategies.register(CoreWeaponPrimitiveId.TARGET_NEAREST, Object.freeze<TargetingPrimitive>({
       descriptor: descriptor(
         CoreWeaponPrimitiveId.TARGET_NEAREST,
         'targeting',
@@ -272,7 +288,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
         const range = readNumber(params, 'range', path, 32, 2400);
         const fallback = readEnum(params, 'fallback', path, ['forward', 'radial'] as const, 'radial');
         const distances: number[] = [];
-        return Object.freeze({
+        return Object.freeze<ResolvedTargeting>({
           primitiveId: CoreWeaponPrimitiveId.TARGET_NEAREST,
           fallback,
           select(player, enemyQuery, count, output) {
@@ -303,7 +319,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
     }));
 
     const registerOrigin = (id: string, focusRelic: boolean) => {
-      api.castOrigins.register(id, Object.freeze({
+      api.castOrigins.register(id, Object.freeze<CastOriginPrimitive>({
         descriptor: descriptor(
           id,
           'cast-origin',
@@ -323,7 +339,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
           const xOffset = readNumber(params, 'xOffset', path, -6, 6, defaultXOffset);
           const yOffset = readNumber(params, 'yOffset', path, -6, 6, defaultYOffset);
           const spreadY = readNumber(params, 'spreadY', path, -4, 4, defaultSpreadY);
-          return Object.freeze({
+          return Object.freeze<ResolvedCastOrigin>({
             primitiveId: id,
             resolve(player, index, total, output) {
               const facingSign = player.facingLeft ? 1 : -1;
@@ -338,7 +354,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
     registerOrigin(CoreWeaponPrimitiveId.ORIGIN_PLAYER, false);
     registerOrigin(CoreWeaponPrimitiveId.ORIGIN_FOCUS_RELIC, true);
 
-    api.emissionPatterns.register(CoreWeaponPrimitiveId.PATTERN_SINGLE, Object.freeze({
+    api.emissionPatterns.register(CoreWeaponPrimitiveId.PATTERN_SINGLE, Object.freeze<EmissionPatternPrimitive>({
       descriptor: descriptor(
         CoreWeaponPrimitiveId.PATTERN_SINGLE,
         'emission-pattern',
@@ -350,7 +366,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       ),
       compile(params, path) {
         assertClosedParams(params, singlePatternSchema, path);
-        return Object.freeze({
+        return Object.freeze<ResolvedEmissionPattern>({
           primitiveId: CoreWeaponPrimitiveId.PATTERN_SINGLE,
           resolveAngle(baseAngle: number) {
             return baseAngle;
@@ -359,7 +375,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       },
     }));
 
-    api.emissionPatterns.register(CoreWeaponPrimitiveId.PATTERN_FAN, Object.freeze({
+    api.emissionPatterns.register(CoreWeaponPrimitiveId.PATTERN_FAN, Object.freeze<EmissionPatternPrimitive>({
       descriptor: descriptor(
         CoreWeaponPrimitiveId.PATTERN_FAN,
         'emission-pattern',
@@ -372,7 +388,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       compile(params, path) {
         assertClosedParams(params, fanPatternSchema, path);
         const spread = readNumber(params, 'spreadRadians', path, 0, Math.PI * 2);
-        return Object.freeze({
+        return Object.freeze<ResolvedEmissionPattern>({
           primitiveId: CoreWeaponPrimitiveId.PATTERN_FAN,
           resolveAngle(baseAngle, index, total) {
             if (total <= 1) return baseAngle;
@@ -382,7 +398,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       },
     }));
 
-    api.projectileMotions.register(CoreWeaponPrimitiveId.MOTION_STRAIGHT, Object.freeze({
+    api.projectileMotions.register(CoreWeaponPrimitiveId.MOTION_STRAIGHT, Object.freeze<ProjectileMotionPrimitive>({
       descriptor: descriptor(
         CoreWeaponPrimitiveId.MOTION_STRAIGHT,
         'projectile-motion',
@@ -394,7 +410,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       ),
       compile(params, path) {
         assertClosedParams(params, straightMotionSchema, path);
-        return Object.freeze({
+        return Object.freeze<ResolvedProjectileMotion>({
           primitiveId: CoreWeaponPrimitiveId.MOTION_STRAIGHT,
           update(projectile, dt) {
             projectile.x += projectile.vx * dt;
@@ -404,7 +420,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       },
     }));
 
-    api.collisionBehaviors.register(CoreWeaponPrimitiveId.COLLISION_STANDARD, Object.freeze({
+    api.collisionBehaviors.register(CoreWeaponPrimitiveId.COLLISION_STANDARD, Object.freeze<CollisionBehaviorPrimitive>({
       descriptor: descriptor(
         CoreWeaponPrimitiveId.COLLISION_STANDARD,
         'collision',
@@ -417,7 +433,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       compile(params, path) {
         assertClosedParams(params, standardCollisionSchema, path);
         const stopOnMap = readBoolean(params, 'stopOnMap', path, true);
-        return Object.freeze({
+        return Object.freeze<ResolvedCollisionBehavior>({
           primitiveId: CoreWeaponPrimitiveId.COLLISION_STANDARD,
           stopOnMap,
           getLookupRadius(projectile) {
@@ -433,7 +449,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       },
     }));
 
-    api.hitEffects.register(CoreWeaponPrimitiveId.EFFECT_DAMAGE, Object.freeze({
+    api.hitEffects.register(CoreWeaponPrimitiveId.EFFECT_DAMAGE, Object.freeze<HitEffectPrimitive>({
       descriptor: descriptor(
         CoreWeaponPrimitiveId.EFFECT_DAMAGE,
         'hit-effect',
@@ -446,7 +462,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       compile(params, path) {
         assertClosedParams(params, damageEffectSchema, path);
         const scale = readNumber(params, 'damageScale', path, 0, 8, 1);
-        return Object.freeze({
+        return Object.freeze<ResolvedHitEffect>({
           primitiveId: CoreWeaponPrimitiveId.EFFECT_DAMAGE,
           apply(context) {
             context.dealDamage(scale);
@@ -455,7 +471,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       },
     }));
 
-    api.hitEffects.register(CoreWeaponPrimitiveId.EFFECT_KNOCKBACK, Object.freeze({
+    api.hitEffects.register(CoreWeaponPrimitiveId.EFFECT_KNOCKBACK, Object.freeze<HitEffectPrimitive>({
       descriptor: descriptor(
         CoreWeaponPrimitiveId.EFFECT_KNOCKBACK,
         'hit-effect',
@@ -468,7 +484,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       compile(params, path) {
         assertClosedParams(params, knockbackEffectSchema, path);
         const scale = readNumber(params, 'knockbackScale', path, 0, 8, 1);
-        return Object.freeze({
+        return Object.freeze<ResolvedHitEffect>({
           primitiveId: CoreWeaponPrimitiveId.EFFECT_KNOCKBACK,
           apply(context) {
             context.applyKnockback(scale);
@@ -477,7 +493,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
       },
     }));
 
-    api.projectileRenderers.register(CoreWeaponPrimitiveId.RENDER_CIRCLE, Object.freeze({
+    api.projectileRenderers.register(CoreWeaponPrimitiveId.RENDER_CIRCLE, Object.freeze<ProjectileRenderPrimitive>({
       descriptor: descriptor(
         CoreWeaponPrimitiveId.RENDER_CIRCLE,
         'render',
@@ -506,7 +522,7 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze({
           0.2,
           0
         );
-        return Object.freeze({
+        return Object.freeze<ResolvedProjectileRenderPrimitive>({
           primitiveId: CoreWeaponPrimitiveId.RENDER_CIRCLE,
           draw(context) {
             const color = context.palette[colorSlot] ?? context.palette.primary;

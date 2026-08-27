@@ -370,7 +370,7 @@ function registerCoreWeaponBehaviors(registry: Registry<WeaponBehaviorHandler>):
     fireMoonBlade(weapon, player, projectiles, damage, area, enemyQuery));
 }
 
-export const CORE_WEAPON_BEHAVIOR_PLUGIN: EnginePlugin = Object.freeze({
+export const CORE_WEAPON_BEHAVIOR_PLUGIN: EnginePlugin = Object.freeze<EnginePlugin>({
   id: 'builtin.plugin.weapon-behaviors',
   version: '1.0.0',
   register(api) {
@@ -650,7 +650,7 @@ function spawnPooledWeaponProjectile(
   return p;
 }
 
-const PROJECTILE_RECIPE_RUNTIME_ADAPTER: ProjectileRecipeRuntimeAdapter = Object.freeze({
+const PROJECTILE_RECIPE_RUNTIME_ADAPTER: ProjectileRecipeRuntimeAdapter = Object.freeze<ProjectileRecipeRuntimeAdapter>({
   spawn(context, plan, x, y, vx, vy, damage, radius, lifetime, pierce, knockback) {
     return spawnPooledWeaponProjectile(
       context.weapon,

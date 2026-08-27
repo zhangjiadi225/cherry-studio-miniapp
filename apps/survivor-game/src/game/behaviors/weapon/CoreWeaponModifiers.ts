@@ -56,13 +56,13 @@ function getAdjustments(
   }
 }
 
-export const CORE_WEAPON_MODIFIER_PLUGIN: EnginePlugin = Object.freeze({
+export const CORE_WEAPON_MODIFIER_PLUGIN: EnginePlugin = Object.freeze<EnginePlugin>({
   id: 'builtin.plugin.weapon-modifiers',
   version: '1.0.0',
   register(api) {
     for (const modifier of Object.values(GENERIC_MODIFIER_DATA)) {
       const stableId = CoreWeaponModifierId[modifier.id];
-      const handler: TrustedWeaponModifierHandler = Object.freeze({
+      const handler: TrustedWeaponModifierHandler = Object.freeze<TrustedWeaponModifierHandler>({
         legacyType: modifier.id,
         descriptor: Object.freeze({
           id: stableId,
