@@ -55,7 +55,7 @@ survivor-game/
         │   └── DamageNumber.ts     # 伤害飘字
         │
         ├── renderers/              # 渲染子模块
-        │   ├── WorldRenderer.ts    # 地面网格/障碍物/竞技场边界
+        │   ├── WorldRenderer.ts    # 浅色地面/程序化标记/障碍物/竞技场边界
         │   ├── EntityRenderer.ts   # 玩家/敌人/弹幕/宝石/光环
         │   ├── EffectsRenderer.ts  # 粒子/飘字/闪光/Boss预警
         │   └── UIRenderer.ts       # HUD/小地图/菜单/升级/暂停/结算
@@ -129,7 +129,7 @@ survivor-game/
 
 | 渲染器 | 职责 | 状态 |
 |--------|------|------|
-| `WorldRenderer` | 地面网格、障碍物、竞技场边界 | 拥有离屏缓存（class） |
+| `WorldRenderer` | 浅色地面、视口内程序化标记、障碍物、竞技场边界 | 无大纹理缓存（class） |
 | `EntityRenderer` | 玩家、敌人、弹幕、宝石、光环 | 无状态函数 |
 | `EffectsRenderer` | 粒子、飘字、屏幕闪光、Boss 预警 | 无状态函数 |
 | `UIRenderer` | HUD、小地图、菜单、升级界面、暂停、结算 | 无状态函数 |

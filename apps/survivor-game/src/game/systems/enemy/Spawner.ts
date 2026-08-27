@@ -1,6 +1,7 @@
 import { Enemy, EnemyType, Player } from '../../types';
 import {
   ENEMY_DATA, SPAWN_DISTANCE,
+  ARENA_HALF,
   MAX_ENEMIES,
   BOSS_HP_MULT, BOSS_DMG_MULT, BOSS_XP_MULT, BOSS_MINION_COUNT,
 } from '../../constants';
@@ -10,6 +11,7 @@ import { getDifficultyParams, type DifficultyParams } from '../../data/difficult
 import { getRunDifficultyPreset, type RunDifficultyPreset } from '../../data/runDifficulties';
 
 const WRAITH_SHADOW_SPAWN_MULT = 0.45;
+const SPAWN_EDGE_MARGIN = 80;
 
 function isRangedPressureType(type: EnemyType, elapsed: number, unlockTimeMult: number): boolean {
   if (type === EnemyType.CULTIST) return true;
@@ -299,11 +301,25 @@ export class Spawner {
   }
 
   private getSpawnPosition(player: Player): { x: number; y: number } {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = SPAWN_DISTANCE + Math.random() * 200;
+    const limit = ARENA_HALF - SPAWN_EDGE_MARGIN;
+    let fallback = { x: player.x, y: player.y };
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = SPAWN_DISTANCE + Math.random() * 200;
+      const candidate = {
+        x: player.x + Math.cos(angle) * dist,
+        y: player.y + Math.sin(angle) * dist,
+      };
+      fallback = candidate;
+      if (Math.abs(candidate.x) <= limit && Math.abs(candidate.y) <= limit) {
+        return candidate;
+      }
+    }
+
     return {
-      x: player.x + Math.cos(angle) * dist,
-      y: player.y + Math.sin(angle) * dist,
+      x: Math.max(-limit, Math.min(limit, fallback.x)),
+      y: Math.max(-limit, Math.min(limit, fallback.y)),
     };
   }
 

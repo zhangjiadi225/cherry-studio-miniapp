@@ -1,7 +1,8 @@
 import type { MapZone } from '../types';
 
 export const COLORS = {
-  bg: '#070910',
+  bg: '#d8ddd2',
+  groundOutside: '#b8beb5',
   ground1: '#101827',
   ground2: '#0b1020',
   groundLine: '#24324d',

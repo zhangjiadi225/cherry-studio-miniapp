@@ -537,10 +537,21 @@ export function drawPlayer(rc: RenderContext, p: Player) {
   ctx.arc(p.x, p.y + bob, glowSize, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  const markerY = p.y + p.radius * 0.86;
+  ctx.save();
+  ctx.fillStyle = 'rgba(24,105,230,0.2)';
   ctx.beginPath();
-  ctx.ellipse(p.x, p.y + p.radius + 4, p.radius * 0.8, p.radius * 0.25, 0, 0, Math.PI * 2);
+  ctx.ellipse(p.x, markerY, p.radius * 1.35, p.radius * 0.62, 0, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = '#075fca';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.94)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(p.x, markerY, p.radius * 1.12, p.radius * 0.44, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 
   drawOrbitingWeaponAssets(ctx, p, bob);
   drawEquippedWeaponAssets(ctx, p, bob);
@@ -848,9 +859,9 @@ export function drawEnemy(rc: RenderContext, e: Enemy) {
 
   if (e.isBoss) drawBossAura(ctx, e, bob);
 
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillStyle = e.isBoss ? 'rgba(150,18,42,0.5)' : 'rgba(150,28,42,0.34)';
   ctx.beginPath();
-  ctx.ellipse(e.x, e.y + e.radius + 3, e.radius * 0.9, e.radius * 0.3, 0, 0, Math.PI * 2);
+  ctx.ellipse(e.x, e.y + e.radius + 3, e.radius * 1.02, e.radius * 0.34, 0, 0, Math.PI * 2);
   ctx.fill();
 
   if (e.attackWindup > 0) drawEnemyAttackCharge(ctx, e, bob);

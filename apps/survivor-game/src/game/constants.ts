@@ -9,7 +9,7 @@ export { WEAPON_DATA, STARTING_WEAPON_TYPES, getWeaponMetadataLabel } from './da
 
 // ===== Game =====
 export const GAME_DURATION = 9 * 60; // 9 minutes
-export const ARENA_SIZE = 6000;
+export const ARENA_SIZE = 4800;
 export const MAP_ZONE_SIZE = 1200;
 export const MAP_GRID_SIZE = 96;
 export const DIFFICULTY_INTERVAL = 30; // seconds

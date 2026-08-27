@@ -168,17 +168,20 @@ class SpriteRegistry {
     }
 
     const entry = this.getEntry(spec);
-    if (entry.state !== 'loaded' || !this.buildFrameCache(entry, spec)) {
-      return false;
-    }
+    if (entry.state !== 'loaded') return false;
 
-    const frameW = entry.frameWidth;
-    const frameH = entry.frameHeight;
+    const singleImage = spec.cols === 1 && spec.rows === 1 && spec.frameCount === 1;
+    if (!singleImage && !this.buildFrameCache(entry, spec)) return false;
+
+    const frameW = singleImage ? entry.image.naturalWidth : entry.frameWidth;
+    const frameH = singleImage ? entry.image.naturalHeight : entry.frameHeight;
     if (!Number.isFinite(frameW) || !Number.isFinite(frameH) || frameW <= 0 || frameH <= 0) {
       return false;
     }
 
-    const frame = entry.frames[frameIndex % entry.frames.length];
+    const frame: CanvasImageSource = singleImage
+      ? entry.image
+      : entry.frames[frameIndex % entry.frames.length];
     if (!frame) return false;
 
     const targetH = radius * spec.heightScale;
@@ -214,7 +217,9 @@ class SpriteRegistry {
     image.decoding = 'async';
     image.onload = () => {
       entry.state = image.naturalWidth > 0 && image.naturalHeight > 0 ? 'loaded' : 'failed';
-      if (entry.state === 'loaded') this.buildFrameCache(entry, spec);
+      if (entry.state === 'loaded' && (spec.cols > 1 || spec.rows > 1 || spec.frameCount > 1)) {
+        this.buildFrameCache(entry, spec);
+      }
     };
     image.onerror = () => {
       entry.state = 'failed';

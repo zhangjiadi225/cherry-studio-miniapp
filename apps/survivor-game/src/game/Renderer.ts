@@ -80,7 +80,6 @@ export class Renderer {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.rc.w = this.w;
     this.rc.h = this.h;
-    this.worldRenderer.rebuildCache(this.w, this.h);
   }
 
   getWidth() { return this.w; }
