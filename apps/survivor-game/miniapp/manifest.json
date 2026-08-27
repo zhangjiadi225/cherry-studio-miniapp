@@ -1,14 +1,14 @@
 {
   "id": "io.github.zhangjiadi225.survivor-game",
   "name": {
-    "zh": "暗夜幸存者",
-    "en": "Night Survivor"
+    "zh": "暗夜幸存者引擎",
+    "en": "Night Survivor Engine"
   },
   "description": {
-    "zh": "一款暗黑幻想风格的生存 Roguelike 游戏。击败夜潮、构筑武器并点亮永久成长星图。",
-    "en": "A dark-fantasy survival roguelike about defeating the night tide, building weapons, and unlocking permanent progression."
+    "zh": "通过 Cherry AI 描述、生成并验证武器，再把它投入确定性生存战斗的本地 AI 游戏引擎。",
+    "en": "A local AI game engine for describing, generating, validating, and battle-testing weapons through Cherry AI."
   },
-  "version": "0.1.0-dev.2",
+  "version": "0.1.0-dev.3",
   "entry": "index.html",
   "icon": {
     "path": "sprites/units/player_wanderer.png",

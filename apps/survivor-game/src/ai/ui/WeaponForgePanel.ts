@@ -120,6 +120,7 @@ export class WeaponForgePanel {
   private readonly close = createButton('关闭', 'weapon-forge-close');
   private currentPreview?: WeaponForgePreview;
   private available = true;
+  private launchVisible = true;
   private busy = false;
 
   constructor(private readonly options: WeaponForgePanelOptions) {
@@ -134,16 +135,16 @@ export class WeaponForgePanel {
     const header = document.createElement('header');
     const heading = document.createElement('div');
     const eyebrow = document.createElement('span');
-    eyebrow.textContent = 'CHERRY AI · DECLARATIVE FORGE';
+    eyebrow.textContent = 'CHERRY AI · DECLARATIVE WEAPON ENGINE';
     const title = document.createElement('h2');
     title.id = 'weapon-forge-title';
-    title.textContent = '原子武器锻造台';
+    title.textContent = 'AI 武器工作台';
     heading.append(eyebrow, title);
     header.append(heading, this.close);
 
     const guidance = document.createElement('p');
     guidance.className = 'weapon-forge-guidance';
-    guidance.textContent = '描述战斗体验即可。AI 只组合引擎已注册的原子能力，本地验证通过并由你接受后，武器才会进入游戏。';
+    guidance.textContent = 'AI 会把你的战斗设想组合成声明式武器配方；本地结构、平衡与性能验证通过，并由你接受后，武器才会进入游戏。';
     const label = document.createElement('label');
     label.htmlFor = 'weapon-forge-intent';
     label.textContent = '你想要怎样的武器？';
@@ -181,8 +182,20 @@ export class WeaponForgePanel {
 
   setAvailable(available: boolean): void {
     this.available = available;
-    this.launch.hidden = !available;
+    this.syncLaunchVisibility();
     if (!available && !this.shell.hidden) this.hide();
+  }
+
+  setLaunchVisible(visible: boolean): void {
+    this.launchVisible = visible;
+    this.syncLaunchVisibility();
+  }
+
+  openWithIntent(intent: string, generateImmediately = false): void {
+    const normalizedIntent = intent.trim();
+    if (normalizedIntent) this.intent.value = normalizedIntent;
+    this.open();
+    if (generateImmediately && !this.shell.hidden) void this.generateWeapon();
   }
 
   destroy(): void {
@@ -197,6 +210,10 @@ export class WeaponForgePanel {
     this.shell.hidden = false;
     this.options.onOpenChange(true);
     this.intent.focus();
+  }
+
+  private syncLaunchVisibility(): void {
+    this.launch.hidden = !this.available || !this.launchVisible;
   }
 
   private hide(): void {

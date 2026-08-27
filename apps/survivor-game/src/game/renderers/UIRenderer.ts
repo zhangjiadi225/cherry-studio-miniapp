@@ -719,7 +719,7 @@ type MenuLayout = {
   rail: Rect;
 };
 
-const DESKTOP_TABS: DesktopTab[] = ['start', 'skins', 'growth', 'codex'];
+const DESKTOP_TABS: DesktopTab[] = ['home', 'start', 'skins', 'growth', 'codex'];
 
 export function getDesktopStartButtonRect(w: number, h: number): Rect {
   const btnW = Math.min(320, Math.max(240, w * 0.26));
@@ -850,7 +850,7 @@ export function drawDesktop(
     drawCodexPanel(rc, activeCodexTab);
   }
 
-  drawDesktopTabs(rc, activeTab);
+  if (activeTab !== 'home') drawDesktopTabs(rc, activeTab);
 }
 
 export function getDesktopTabRects(w: number, h: number = 720): Array<Rect & { id: DesktopTab }> {
@@ -1483,12 +1483,14 @@ function drawCodexTabs(rc: RenderContext, activeTab: CodexTab) {
 function drawDesktopTabs(rc: RenderContext, activeTab: DesktopTab) {
   const { ctx, w, h } = rc;
   const labels: Record<DesktopTab, string> = {
+    home: '首页',
     start: '出征',
     skins: '衣橱',
     growth: '星图',
     codex: '图鉴',
   };
   const icons: Record<DesktopTab, string> = {
+    home: '⌂',
     start: '✦',
     skins: '●',
     growth: '◆',

@@ -1,5 +1,6 @@
 export const GameEvent = {
   STATE_CHANGE: 'state:change',
+  DESKTOP_TAB_CHANGE: 'desktop:tab-change',
   GAME_START: 'game:start',
   GAME_OVER: 'game:over',
   PLAYER_HIT: 'player:hit',

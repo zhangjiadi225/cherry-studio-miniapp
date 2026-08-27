@@ -20,7 +20,7 @@
 - 单文档 `AppStateStore`、冻结 Registry、动态内容快照和武器行为分派。
 - 投射物 `ContentPackV1`、严格 Validator、内容库原子安装和 AI 武器生成服务。
 
-当前 Registry 已注册首批投射物原语和现有通用 Modifier，魔法法器与通过校验并启用的 AI 投射物武器使用同一 Recipe 执行链；其他内置武器仍使用兼容行为。产品入口已通过 Cherry kit 提供玩家可见的 AI Forge，可生成、预览、接受并在重载后选择武器。一次自动修复、Job 恢复管理 UI、包管理 UI 和 BehaviorGraph 尚未实现。
+当前 Registry 已注册首批投射物原语和现有通用 Modifier，魔法法器与通过校验并启用的 AI 投射物武器使用同一 Recipe 执行链；其他内置武器仍使用兼容行为。产品首页已改为 AI 游戏引擎工作台，可直接描述武器、查看 Cherry/引擎状态，并进入战斗配置、Forge 和内容模块；Forge 可生成、预览、接受并在重载后选择武器。一次自动修复、Job 恢复管理 UI、包管理 UI 和 BehaviorGraph 尚未实现。
 
 ## 2. 当前目录
 
@@ -44,6 +44,7 @@ survivor-game/
     ├── application/
     │   └── AppVersion.ts           # 当前 App 版本真值
     ├── ai/                          # Cherry kit 适配器、Prompt、Job、Forge 服务与 UI
+    ├── ui/                          # 产品级 DOM 首页与工具入口
     ├── content/
     │   ├── registry/               # 稳定 ID、可冻结 Registry
     │   ├── runtime/                # 内置与已启用内容的只读运行时快照
@@ -84,6 +85,7 @@ main.ts
   ├─ AppHost：提供 Storage 与 Host 可见性
   ├─ AppStateStore：加载/迁移单一状态文档，串行持久化事务
   ├─ GameContentSnapshot：冻结内置行为、武器和怪物定义
+  ├─ EngineHomeScreen：AI 引擎首页、宿主状态与产品入口
   ├─ WeaponForgeService/Panel：通过 Cherry AI 生成、校验和接受内容
   └─ Game：输入、状态、单局循环、系统调度、桌面 UI 流程
        ├─ systems：确定性玩法系统
@@ -104,9 +106,10 @@ main.ts
 3. 读取稳定 Key `survivor-game:app-state` 中带 `stateVersion` 的文档；首次运行时读取三个旧 Key 并迁移，但不删除旧值。
 4. 把 AppState 的内容库交给装配器，通过核心 `EnginePlugin` 注册武器行为、投射物原语和 Modifier，校验所有已启用 ContentPack，并把内置魔法法器与动态投射物 Recipe 编译进冻结快照。启用 ID 缺失、内容无效或包未接受时阻止启动。
 5. 创建 `Game`，注入内容快照和 AppState 持久化回调。
-6. 创建 `WeaponForgeService` 与 Forge Panel，只在主菜单或结算边界开放生成；接受后重载并重建不可变内容快照。
-7. 将 Host 可见性事件同时转发给 Game 和 Forge，暂停游戏并取消在途 AI。
-8. 启动失败时显示可点击重试提示。
+6. 创建 `WeaponForgeService`、Forge Panel 与 `EngineHomeScreen`。首页显示 Capability 状态和最近生成武器，可把自然语言意图带入同一个 Forge；生成仍只允许在主菜单或结算边界发生。
+7. 接受内容后重载并重建不可变内容快照。
+8. 将 Host 可见性事件同时转发给 Game 和 Forge，暂停游戏并取消在途 AI。
+9. 启动失败时显示可点击重试提示。
 
 `AppHost` 只通过 `@cherry-miniapp/kit` 获取 Cherry Storage 与 Visibility；生产不再回退到 `localStorage`。普通浏览器仅在 Vite DEV 模式安装 kit 的显式 mock。`CherryKitAiGateway` 同样只委托 kit 的能力快照、流式调用、取消和错误识别，不让 Game Kernel 接触 Host API。当前依赖按用户确认链接到本机 foundation workspace，属于本地联合开发配置。目标约束见 [`docs/specs/CHERRY_RUNTIME.md`](./docs/specs/CHERRY_RUNTIME.md)。
 
@@ -218,7 +221,7 @@ menu ↔ playing ↔ paused
 
 ## 11. 渲染
 
-`Renderer` 持有 Canvas Context、尺寸与 `WorldRenderer`，将绘制委托给：
+`EngineHomeScreen` 使用 DOM/CSS 实现可输入、响应式的产品首页；进入战斗配置、衣橱、星图和图鉴后仍由 Canvas 桌面 UI 接管。`Renderer` 持有 Canvas Context、尺寸与 `WorldRenderer`，将绘制委托给：
 
 - `WorldRenderer`：背景、网格、边界和地图。
 - `EntityRenderer`：玩家、武器展示、怪物、弹幕和经验。

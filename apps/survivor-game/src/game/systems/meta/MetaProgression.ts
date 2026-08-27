@@ -28,7 +28,7 @@ export type MetaUpgradeId =
   | 'damage_path'
   | 'death_burst';
 
-export type DesktopTab = 'start' | 'growth' | 'skins' | 'codex';
+export type DesktopTab = 'home' | 'start' | 'growth' | 'skins' | 'codex';
 export type CodexTab = 'weapons' | 'passives' | 'enemies' | 'modules';
 
 export type SkinId = 'wanderer' | 'ember' | 'oracle';

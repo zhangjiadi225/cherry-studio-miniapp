@@ -7,6 +7,8 @@ import { createBuiltinGameContentSnapshot } from './content/runtime/GameContentS
 import { createAppHost } from './platform/AppHost';
 import { AppStateStore } from './platform/AppStateStore';
 import { installDevelopmentCherryMock } from './platform/DevelopmentCherryMock';
+import { APP_VERSION } from './application/AppVersion';
+import { EngineHomeScreen } from './ui/EngineHomeScreen';
 
 installDevelopmentCherryMock();
 
@@ -50,9 +52,43 @@ async function bootstrap() {
     onOpenChange: (open) => game.setExternalUiOpen(open),
     onAccepted: () => window.location.reload(),
   });
-  forgePanel.setAvailable(game.canOpenWeaponForge());
-  eventBus.on(GameEvent.STATE_CHANGE, () => {
+  const recentGeneratedWeapon = [...content.startingWeapons]
+    .reverse()
+    .find((weapon) => weapon.generated);
+  const homeScreen = new EngineHomeScreen({
+    appVersion: APP_VERSION,
+    primitiveCount: content.weaponCapabilityCatalog.primitives.length,
+    modifierCount: content.weaponCapabilityCatalog.modifiers.length,
+    enabledPackCount: Math.max(0, content.packIds.length - 1),
+    recentWeapon: recentGeneratedWeapon
+      ? {
+          name: recentGeneratedWeapon.name,
+          icon: recentGeneratedWeapon.icon,
+          description: recentGeneratedWeapon.desc,
+        }
+      : undefined,
+    onGenerate: (intent) => forgePanel.openWithIntent(intent, true),
+    onOpenForge: (intent) => forgePanel.openWithIntent(intent),
+    onOpenBattleSetup: () => game.openDesktopTab('start'),
+    onOpenContentLibrary: () => game.openContentLibrary(),
+    onOpenSkins: () => game.openDesktopTab('skins'),
+    onOpenGrowth: () => game.openDesktopTab('growth'),
+    onOpenCodex: () => game.openDesktopTab('codex'),
+  });
+  const syncProductUi = () => {
+    const homeActive = game.isEngineHomeActive();
+    homeScreen.setVisible(homeActive);
     forgePanel.setAvailable(game.canOpenWeaponForge());
+    forgePanel.setLaunchVisible(!homeActive);
+  };
+  syncProductUi();
+  eventBus.on(GameEvent.STATE_CHANGE, syncProductUi);
+  eventBus.on(GameEvent.DESKTOP_TAB_CHANGE, syncProductUi);
+  void cherryKitAiGateway.getRuntimeSnapshot('default').then((runtime) => {
+    homeScreen.setAiStatus(runtime.permissions['ai.chat'] === false ? 'denied' : 'connected');
+  }).catch((error) => {
+    console.warn('Cherry AI capability check failed', error);
+    homeScreen.setAiStatus('unavailable');
   });
   host.onVisibilityChange((visible) => {
     game.setHostVisible(visible);

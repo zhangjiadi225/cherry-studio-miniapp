@@ -1,8 +1,10 @@
 import type { Enemy, EnemyProjectile, GameState, GenericModifierType, UpgradeOption, WeaponType } from '../types';
+import type { DesktopTab } from '../systems/meta/MetaProgression';
 import { GameEvent } from './GameEvents';
 
 export interface GameEventMap {
   [GameEvent.STATE_CHANGE]: [state: GameState, previous: GameState];
+  [GameEvent.DESKTOP_TAB_CHANGE]: [tab: DesktopTab];
   [GameEvent.GAME_START]: [];
   [GameEvent.GAME_OVER]: [stats: { time: number; kills: number; level: number }];
   [GameEvent.PLAYER_HIT]: [damage: number, source: Enemy | EnemyProjectile];

@@ -101,7 +101,7 @@ export class Game {
   private objectiveBeats: ObjectiveBeat[];
   private readonly persistMeta: GameOptions['persistMeta'];
   private readonly persistMuted: GameOptions['persistMuted'];
-  private desktopTab: DesktopTab = 'start';
+  private desktopTab: DesktopTab = 'home';
   private codexTab: CodexTab = 'weapons';
   private selectedStartingWeaponId = 'builtin.weapon.magic-wand';
   private hoveredStarId?: MetaUpgradeNode['id'];
@@ -238,6 +238,21 @@ export class Game {
     return gameState.is('menu') || gameState.is('gameover');
   }
 
+  isEngineHomeActive(): boolean {
+    return gameState.is('menu') && this.desktopTab === 'home';
+  }
+
+  openDesktopTab(tab: DesktopTab): void {
+    if (!gameState.is('menu')) return;
+    this.setDesktopTab(tab);
+  }
+
+  openContentLibrary(): void {
+    if (!gameState.is('menu')) return;
+    this.codexTab = 'modules';
+    this.setDesktopTab('codex');
+  }
+
   // ──────────────────────────── Input Routing ────────────────────────────
 
   private onKeyDown(e: KeyboardEvent) {
@@ -270,7 +285,7 @@ export class Game {
           e.preventDefault();
           this.continueEndlessRun();
         } else if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') {
-          gameState.reset();
+          this.returnToHome();
         }
         break;
       case 'menu':
@@ -355,7 +370,7 @@ export class Game {
       return;
     }
     if (this.isPointInRect(x, y, buttons.desktop) || !canContinueEndless) {
-      gameState.reset();
+      this.returnToHome();
     }
   }
 
@@ -364,28 +379,36 @@ export class Game {
   }
 
   private handleDesktopKey(e: KeyboardEvent) {
-    if (e.code === 'Digit1') this.setDesktopTab('start');
-    else if (e.code === 'Digit2') this.setDesktopTab('skins');
-    else if (e.code === 'Digit3') this.setDesktopTab('growth');
-    else if (e.code === 'Digit4') this.setDesktopTab('codex');
+    if (e.code === 'Digit1') this.setDesktopTab('home');
+    else if (e.code === 'Digit2') this.setDesktopTab('start');
+    else if (e.code === 'Digit3') this.setDesktopTab('skins');
+    else if (e.code === 'Digit4') this.setDesktopTab('growth');
+    else if (e.code === 'Digit5') this.setDesktopTab('codex');
     else if (this.desktopTab === 'codex' && e.code === 'KeyQ') this.shiftCodexTab(-1);
     else if (this.desktopTab === 'codex' && e.code === 'KeyE') this.shiftCodexTab(1);
     else if (this.desktopTab === 'start' && e.code === 'KeyQ') this.shiftStartingWeapon(-1);
     else if (this.desktopTab === 'start' && e.code === 'KeyE') this.shiftStartingWeapon(1);
     else if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.shiftDesktopTab(-1);
     else if (e.code === 'ArrowRight' || e.code === 'KeyD') this.shiftDesktopTab(1);
-    else if (e.code === 'Enter' || e.code === 'Space') this.startGame();
+    else if (this.desktopTab === 'start' && (e.code === 'Enter' || e.code === 'Space')) this.startGame();
   }
 
   private shiftDesktopTab(dir: number) {
-    const tabs: DesktopTab[] = ['start', 'skins', 'growth', 'codex'];
+    const tabs: DesktopTab[] = ['home', 'start', 'skins', 'growth', 'codex'];
     const index = tabs.indexOf(this.desktopTab);
     this.setDesktopTab(tabs[(index + dir + tabs.length) % tabs.length]);
   }
 
   private setDesktopTab(tab: DesktopTab) {
+    if (this.desktopTab === tab) return;
     this.desktopTab = tab;
     if (tab !== 'growth') this.hoveredStarId = undefined;
+    eventBus.emit(GameEvent.DESKTOP_TAB_CHANGE, tab);
+  }
+
+  private returnToHome() {
+    this.setDesktopTab('home');
+    gameState.reset();
   }
 
   private shiftCodexTab(dir: number) {
