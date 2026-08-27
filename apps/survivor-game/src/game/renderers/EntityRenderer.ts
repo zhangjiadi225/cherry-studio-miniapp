@@ -1259,11 +1259,63 @@ function getProjectileAngle(p: Projectile, fallback = 0): number {
   return speed > 0.1 ? Math.atan2(p.vy, p.vx) : fallback;
 }
 
+function drawRuntimeProjectileVisual(
+  rc: RenderContext,
+  p: Projectile,
+  lifeAlpha: number
+): boolean {
+  const visual = p.runtimePlan?.projectile.visual;
+  if (!visual) return false;
+
+  const { ctx } = rc;
+  if (visual.glow) {
+    ctx.save();
+    ctx.globalAlpha = lifeAlpha * visual.opacity * visual.glow.intensity;
+    ctx.fillStyle = visual.glow.color;
+    ctx.beginPath();
+    ctx.arc(
+      p.x,
+      p.y,
+      p.radius * visual.scale * visual.glow.radiusScale,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+    ctx.restore();
+  }
+
+  const primitiveContext = {
+    ctx,
+    projectile: p,
+    palette: visual.palette,
+    lifeAlpha,
+    recipeScale: visual.scale,
+    recipeOpacity: visual.opacity,
+  };
+  visual.body.draw(primitiveContext);
+  for (const layer of visual.layers) layer.draw(primitiveContext);
+  visual.trail?.draw(primitiveContext);
+  return true;
+}
+
 export function drawProjectile(rc: RenderContext, p: Projectile) {
   const { ctx } = rc;
   if (p.radius <= 0 || p.maxLife <= 0 || p.life <= 0) return;
   const lifeRatio = Math.max(0, Math.min(1, p.life / p.maxLife));
   const alpha = Math.min(1, lifeRatio / 0.3);
+
+  if (drawRuntimeProjectileVisual(rc, p, alpha)) {
+    if (p.type === WeaponType.MAGIC_WAND) {
+      weaponSpriteRegistry.drawWeapon(ctx, WeaponType.MAGIC_WAND, p.x, p.y, p.radius * 3.1, {
+        alpha,
+        rotation: getProjectileAngle(p) + Math.PI / 4,
+        glow: false,
+        evolutionIds: p.evolutionIds,
+        evolutionIntensity: 0.72,
+      });
+    }
+    return;
+  }
 
   switch (p.type) {
     case WeaponType.MAGIC_WAND:

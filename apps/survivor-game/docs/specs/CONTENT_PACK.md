@@ -2,15 +2,17 @@
 
 > 状态：Draft Spec
 >
-> 规范版本：0.1
+> 规范版本：0.2
 >
 > 更新日期：2026-08-27
 
 ## 1. 目的
 
-当前实现进度：稳定 ID Registry、启动期 `EnginePlugin` 合同、内置武器/怪物只读快照和粗粒度武器 `behaviorId` 分派已落地。WeaponRecipe 原子 Registry、Compiler、ContentPack 类型、Validator、迁移、内容库安装和 AI 内容装配尚未实现，因此当前运行时只接受内置内容。
+当前实现进度：稳定 ID Registry、启动期 `EnginePlugin` 合同、内置武器/怪物只读快照和粗粒度武器 `behaviorId` 分派已落地。投射物 Trigger、Targeting、Cast Origin、Emission Pattern、Motion、Collision、HitEffect 与 Render 原语 Registry、Capability Catalog、WeaponRecipeCompiler 以及首件内置武器迁移已经开始落地。ContentPack 运行时类型、完整 Validator、迁移、内容库安装、Modifier/Lifecycle 原语闭环和 AI 内容装配尚未实现，因此当前运行时仍只接受内置内容。
 
 ContentPack（内容包，即可以被验证、保存和安装的声明式玩法数据）是内置内容与 AI 生成内容进入游戏的唯一运行时协议。
+
+应用不内置用于证明生成能力的固定示例内容。颜色、尺寸、速度、数量、名称、描述和受限视觉组合等实例值由内置内容或 AI ContentPack 提供；应用只拥有可信规则原语、校验、预算与确定性执行。
 
 它解决以下问题：
 
@@ -133,7 +135,7 @@ interface WeaponBlueprintV1 {
 
 要求：
 
-- `recipe` 的 Trigger、Targeting、Emission、Motion、Collision、HitEffect、Lifecycle、Render 和 Modifier 引用必须存在于冻结的 Engine Registry。
+- `recipe` 的 Trigger、Targeting、Cast Origin、Emission、Motion、Collision、HitEffect、Lifecycle、Render 和 Modifier 引用必须存在于冻结的 Engine Registry。
 - 第一阶段只允许 `family: "projectile"`；Aura、Orbit、Strike、Zone 和 Swing 继续通过内置兼容适配器运行，不作为 AI 可安装配方。
 - 所有数值必须是有限数，禁止 `NaN`、`Infinity` 和隐式字符串转换。
 - 冷却、数量、持续时间、穿透、范围和 Lifecycle 派生数量必须通过当前 Balance Policy 的硬边界。
@@ -324,7 +326,7 @@ draft
 ## 13. 首版验收条件
 
 - 现有一件内置投射物武器可以无行为变化地表示为 ContentPack + WeaponRecipe。
-- 第二件投射物武器只增加配方数据，不增加内容专属执行分支。
+- 第二件现有投射物武器迁移后只保留配方数据，不增加内容专属执行分支。
 - 未知 Primitive、冲突 Modifier、越界数值、重复 ID 和图循环能被稳定拒绝。
 - AI Draft 无法绕过玩家确认进入 Registry。
 - Registry Snapshot 创建后不可被 Content Library 原地修改。

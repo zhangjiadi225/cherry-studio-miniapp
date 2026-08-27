@@ -29,6 +29,17 @@ import {
   type EnginePlugin,
   type EngineRegistrySnapshot,
 } from '../../behaviors/EngineRegistry';
+import { CORE_PROJECTILE_PRIMITIVE_PLUGIN } from '../../behaviors/weapon/CoreProjectilePrimitives';
+import {
+  compileProjectileWeaponRecipe,
+  type WeaponRecipeCompilerRegistries,
+} from '../../recipes/weapon/WeaponRecipeCompiler';
+import type { TrustedWeaponPlanAdjustment } from '../../recipes/weapon/WeaponRecipe';
+import {
+  fireProjectileRecipe,
+  type ProjectileRecipeRuntimeAdapter,
+} from '../../recipes/weapon/ProjectileRecipeRuntime';
+import type { WeaponRuntimePlan } from '../../recipes/weapon/WeaponRuntimePlan';
 
 const nearestEnemiesScratch: Enemy[] = [];
 const nearestDistancesScratch: number[] = [];
@@ -47,10 +58,13 @@ const MOON_BLADE_ORBIT_SPEED = 4.8;
 
 export function createWeapon(
   type: WeaponType,
-  definition: WeaponData & { readonly id?: string } = WEAPON_DATA[type]
+  definition: WeaponData & {
+    readonly id?: string;
+    readonly runtimePlan?: Weapon['runtimePlan'];
+  } = WEAPON_DATA[type]
 ): Weapon {
   const d = definition;
-  return {
+  const weapon: Weapon = {
     type,
     definitionId: definition.id ?? getBuiltinWeaponContentId(type),
     behaviorId: d.behaviorId,
@@ -68,7 +82,16 @@ export function createWeapon(
     modifiers: [],
     modifierMask: 0,
     evolutions: {},
+    recipe: d.recipe,
+    recipeEvolutionAdjustments: d.recipeEvolutionAdjustments,
+    runtimePlan: definition.runtimePlan,
   };
+  if (weapon.runtimePlan) {
+    weapon.runtimePlanSourceState = captureWeaponRuntimePlanSourceState(weapon);
+  } else {
+    rebuildWeaponRuntimePlan(weapon);
+  }
+  return weapon;
 }
 
 export function upgradeWeapon(w: Weapon): boolean {
@@ -84,7 +107,89 @@ export function upgradeWeapon(w: Weapon): boolean {
   if (p.pierce) w.pierce += p.pierce;
   if (p.duration) w.duration += p.duration;
   if (p.knockback) w.knockback += p.knockback;
+  rebuildWeaponRuntimePlan(w);
   return true;
+}
+
+function getRecipeAdjustments(w: Weapon): TrustedWeaponPlanAdjustment[] {
+  const adjustments: TrustedWeaponPlanAdjustment[] = [];
+  for (const tier of [4, 8] as const) {
+    const evolutionId = w.evolutions[tier];
+    if (!evolutionId) continue;
+    const effects = w.recipeEvolutionAdjustments?.[evolutionId];
+    if (effects) adjustments.push(...effects);
+  }
+
+  if (hasModifierEffect(w, 'onFire', 'split')) {
+    adjustments.push({ operation: 'multiply', stat: 'count', value: 2 });
+  }
+  if (hasModifierEffect(w, 'onFire', 'projectileSpeed')) {
+    adjustments.push({ operation: 'multiply', stat: 'speed', value: 1.28 });
+  }
+  return adjustments;
+}
+
+function captureWeaponRuntimePlanSourceState(
+  w: Weapon
+): NonNullable<Weapon['runtimePlanSourceState']> {
+  return Object.freeze({
+    level: w.level,
+    damage: w.damage,
+    cooldown: w.cooldown,
+    speed: w.speed,
+    area: w.area,
+    count: w.count,
+    pierce: w.pierce,
+    duration: w.duration,
+    knockback: w.knockback,
+    modifierMask: w.modifierMask,
+    modifierCount: w.modifiers.length,
+    evolution4: w.evolutions[4],
+    evolution8: w.evolutions[8],
+  });
+}
+
+function isWeaponRuntimePlanCurrent(w: Weapon): boolean {
+  const state = w.runtimePlanSourceState;
+  return state !== undefined &&
+    state.level === w.level &&
+    state.damage === w.damage &&
+    state.cooldown === w.cooldown &&
+    state.speed === w.speed &&
+    state.area === w.area &&
+    state.count === w.count &&
+    state.pierce === w.pierce &&
+    state.duration === w.duration &&
+    state.knockback === w.knockback &&
+    state.modifierMask === w.modifierMask &&
+    state.modifierCount === w.modifiers.length &&
+    state.evolution4 === w.evolutions[4] &&
+    state.evolution8 === w.evolutions[8];
+}
+
+export function rebuildWeaponRuntimePlan(
+  w: Weapon,
+  registries: WeaponRecipeCompilerRegistries = getDefaultEngineRegistrySnapshot()
+): void {
+  if (!w.recipe) {
+    w.runtimePlan = undefined;
+    w.runtimePlanSourceState = undefined;
+    return;
+  }
+  w.runtimePlan = compileProjectileWeaponRecipe(w.definitionId, w.recipe, registries, {
+    stats: {
+      damage: w.damage,
+      cooldown: w.cooldown,
+      speed: w.speed,
+      radius: w.recipe.projectile.radius * w.area,
+      count: w.count,
+      pierce: w.pierce,
+      lifetime: w.duration,
+      knockback: w.knockback,
+    },
+    adjustments: getRecipeAdjustments(w),
+  });
+  w.runtimePlanSourceState = captureWeaponRuntimePlanSourceState(w);
 }
 
 export function updateWeapon(
@@ -97,12 +202,18 @@ export function updateWeapon(
 ) {
   const behavior = weaponBehaviors.require(w.behaviorId);
   if (behavior.mode === 'continuous') return;
+  if (behavior.usesRuntimePlan && !isWeaponRuntimePlanCurrent(w)) {
+    rebuildWeaponRuntimePlan(w);
+  }
 
   w.timer += dt;
-  const effectiveCooldown = w.cooldown * getEvolutionCooldownMultiplier(w) * (1 - player.cooldownReduction);
+  const runtimePlan = behavior.usesRuntimePlan ? w.runtimePlan : undefined;
+  const effectiveCooldown = (runtimePlan?.trigger.cooldown ??
+    w.cooldown * getEvolutionCooldownMultiplier(w)) * (1 - player.cooldownReduction);
   if (w.timer < effectiveCooldown) return;
 
-  const effectiveDamage = w.damage * player.might * getEvolutionDamageMultiplier(w);
+  const effectiveDamage = (runtimePlan?.projectile.damage ??
+    w.damage * getEvolutionDamageMultiplier(w)) * player.might;
   const effectiveArea = w.area * player.area;
 
   const castDamages = getCastDamages(w, effectiveDamage);
@@ -127,9 +238,16 @@ function registerCoreWeaponBehaviors(registry: Registry<WeaponBehaviorHandler>):
   const register = (
     id: string,
     mode: WeaponBehaviorHandler['mode'],
-    fire: WeaponBehaviorHandler['fire']
-  ) => registry.register(id, Object.freeze({ id, mode, fire }));
+    fire: WeaponBehaviorHandler['fire'],
+    usesRuntimePlan = false
+  ) => registry.register(id, Object.freeze({ id, mode, fire, usesRuntimePlan }));
 
+  register(
+    CoreWeaponBehaviorId.PROJECTILE_RECIPE,
+    'cast',
+    (context) => fireProjectileRecipe(context, PROJECTILE_RECIPE_RUNTIME_ADAPTER),
+    true
+  );
   register(CoreWeaponBehaviorId.WHIP, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
     fireWhip(weapon, player, projectiles, damage, area, enemyQuery));
   register(CoreWeaponBehaviorId.MAGIC_WAND, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
@@ -164,14 +282,21 @@ export function createCoreWeaponBehaviorRegistry(): ReadonlyRegistry<WeaponBehav
 }
 
 export function createCoreEngineRegistrySnapshot(): EngineRegistrySnapshot {
-  return buildEngineRegistrySnapshot([CORE_WEAPON_BEHAVIOR_PLUGIN]);
+  return buildEngineRegistrySnapshot([
+    CORE_PROJECTILE_PRIMITIVE_PLUGIN,
+    CORE_WEAPON_BEHAVIOR_PLUGIN,
+  ]);
 }
 
-let defaultWeaponBehaviorRegistry: ReadonlyRegistry<WeaponBehaviorHandler> | undefined;
+let defaultEngineRegistrySnapshot: EngineRegistrySnapshot | undefined;
+
+function getDefaultEngineRegistrySnapshot(): EngineRegistrySnapshot {
+  defaultEngineRegistrySnapshot ??= createCoreEngineRegistrySnapshot();
+  return defaultEngineRegistrySnapshot;
+}
 
 function getDefaultWeaponBehaviorRegistry(): ReadonlyRegistry<WeaponBehaviorHandler> {
-  defaultWeaponBehaviorRegistry ??= createCoreWeaponBehaviorRegistry();
-  return defaultWeaponBehaviorRegistry;
+  return getDefaultEngineRegistrySnapshot().weaponBehaviors;
 }
 
 function findNearestEnemies(
@@ -269,13 +394,13 @@ function getEvolutionDamageMultiplier(w: Weapon): number {
   return multiplier;
 }
 
-function canApplyProjectileOrbit(w: Weapon, config: ProjectileConfig): boolean {
-  const speed = Math.sqrt(config.vx * config.vx + config.vy * config.vy);
+function canApplyProjectileOrbit(w: Weapon, projectile: Projectile): boolean {
+  const speed = Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy);
   return w.family === 'projectile' &&
     speed > 0.1 &&
-    config.gravY === undefined &&
-    config.beamLength === undefined &&
-    config.arcAngle === undefined &&
+    projectile.gravY === undefined &&
+    projectile.beamLength === undefined &&
+    projectile.arcAngle === undefined &&
     hasModifierEffect(w, 'onFire', 'projectileOrbit');
 }
 
@@ -296,19 +421,19 @@ function setProjectileOrbitPosition(p: Projectile, originX: number, originY: num
   p.vy = Math.cos(angle) * radius * angularSpeed;
 }
 
-function attachProjectileOrbit(p: Projectile, config: ProjectileConfig, index: number) {
-  const speed = Math.sqrt(config.vx * config.vx + config.vy * config.vy);
-  const baseAngle = speed > 0.1 ? Math.atan2(config.vy, config.vx) : index * 2.399963;
-  const radius = clampOrbitRadius(ORBITAL_PROJECTILE_RADIUS_PADDING + config.radius * ORBITAL_PROJECTILE_RADIUS_SCALE);
+function attachProjectileOrbit(p: Projectile, index: number) {
+  const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+  const baseAngle = speed > 0.1 ? Math.atan2(p.vy, p.vx) : index * 2.399963;
+  const radius = clampOrbitRadius(ORBITAL_PROJECTILE_RADIUS_PADDING + p.radius * ORBITAL_PROJECTILE_RADIUS_SCALE);
   const direction = index % 2 === 0 ? 1 : -1;
 
   p.orbitFollowPlayer = true;
   p.orbitAngle = baseAngle + index * 0.55;
   p.orbitRadius = radius;
   p.orbitSpeed = ORBITAL_PROJECTILE_SPEED * direction;
-  p.originX = config.x;
-  p.originY = config.y;
-  setProjectileOrbitPosition(p, config.x, config.y);
+  p.originX = p.x;
+  p.originY = p.y;
+  setProjectileOrbitPosition(p, p.x, p.y);
 }
 
 function attachWeaponModifiers(p: Projectile, w: Weapon) {
@@ -365,6 +490,7 @@ type ProjectileConfig = {
   gravY?: number;
   beamLength?: number;
   arcAngle?: number;
+  runtimePlan?: Weapon['runtimePlan'];
 };
 
 type TargetedProjectileConfig = Omit<ProjectileConfig, 'x' | 'y' | 'vx' | 'vy' | 'life' | 'pierce' | 'knockback'> & {
@@ -374,32 +500,93 @@ type TargetedProjectileConfig = Omit<ProjectileConfig, 'x' | 'y' | 'vx' | 'vy' |
   knockback?: number;
 };
 
-function spawnWeaponProjectile(w: Weapon, projectiles: Projectile[], config: ProjectileConfig): Projectile | undefined {
+function spawnPooledWeaponProjectile(
+  w: Weapon,
+  projectiles: Projectile[],
+  x: number,
+  y: number,
+  vx: number,
+  vy: number,
+  damage: number,
+  radius: number,
+  life: number,
+  pierce: number,
+  type: WeaponType,
+  knockback: number,
+  runtimePlan?: WeaponRuntimePlan,
+  animTimer = 0,
+  gravY?: number,
+  beamLength?: number,
+  arcAngle?: number
+): Projectile | undefined {
   if (projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) return undefined;
   const projectileIndex = projectiles.length;
   const p = acquireProjectile();
-  p.x = config.x;
-  p.y = config.y;
-  p.vx = config.vx;
-  p.vy = config.vy;
-  p.damage = config.damage;
-  p.radius = config.radius;
-  p.life = config.life;
-  p.maxLife = config.life;
-  p.pierce = config.pierce;
+  p.x = x;
+  p.y = y;
+  p.vx = vx;
+  p.vy = vy;
+  p.damage = damage;
+  p.radius = radius;
+  p.life = life;
+  p.maxLife = life;
+  p.pierce = pierce;
   p.pierceCount = 0;
-  p.type = config.type;
-  p.knockback = config.knockback;
-  p.animTimer = config.animTimer ?? 0;
-  p.gravY = config.gravY;
-  p.beamLength = config.beamLength;
-  p.arcAngle = config.arcAngle;
+  p.type = type;
+  p.knockback = knockback;
+  p.animTimer = animTimer;
+  p.gravY = gravY;
+  p.beamLength = beamLength;
+  p.arcAngle = arcAngle;
+  p.runtimePlan = runtimePlan;
   attachWeaponModifiers(p, w);
-  if (canApplyProjectileOrbit(w, config)) {
-    attachProjectileOrbit(p, config, projectileIndex);
+  if (canApplyProjectileOrbit(w, p)) {
+    attachProjectileOrbit(p, projectileIndex);
   }
   projectiles.push(p);
   return p;
+}
+
+const PROJECTILE_RECIPE_RUNTIME_ADAPTER: ProjectileRecipeRuntimeAdapter = Object.freeze({
+  spawn(context, plan, x, y, vx, vy, damage, radius, lifetime, pierce, knockback) {
+    return spawnPooledWeaponProjectile(
+      context.weapon,
+      context.projectiles,
+      x,
+      y,
+      vx,
+      vy,
+      damage,
+      radius,
+      lifetime,
+      pierce,
+      context.weapon.type,
+      knockback,
+      plan
+    ) !== undefined;
+  },
+});
+
+function spawnWeaponProjectile(w: Weapon, projectiles: Projectile[], config: ProjectileConfig): Projectile | undefined {
+  return spawnPooledWeaponProjectile(
+    w,
+    projectiles,
+    config.x,
+    config.y,
+    config.vx,
+    config.vy,
+    config.damage,
+    config.radius,
+    config.life,
+    config.pierce,
+    config.type,
+    config.knockback,
+    config.runtimePlan,
+    config.animTimer,
+    config.gravY,
+    config.beamLength,
+    config.arcAngle
+  );
 }
 
 function fireTargetedProjectile(
@@ -846,6 +1033,11 @@ export function updateProjectile(p: Projectile, dt: number, player?: Player): bo
     p.originX = player?.x ?? p.originX ?? p.x;
     p.originY = player?.y ?? p.originY ?? p.y;
     setProjectileOrbitPosition(p, p.originX, p.originY);
+    return true;
+  }
+
+  if (p.runtimePlan) {
+    p.runtimePlan.projectile.motion.update(p, dt, player);
     return true;
   }
 

@@ -79,13 +79,19 @@ export class ProjectileCombat {
   }
 
   private shouldUseMapProjectileCollision(projectile: Projectile): boolean {
-    return projectile.orbitAngle === undefined &&
-      projectile.type !== WeaponType.FIRE_WAND &&
+    if (projectile.orbitAngle !== undefined) return false;
+    if (projectile.runtimePlan) {
+      return projectile.runtimePlan.projectile.collision.stopOnMap;
+    }
+    return projectile.type !== WeaponType.FIRE_WAND &&
       projectile.type !== WeaponType.RUNE_LANCE &&
       projectile.type !== WeaponType.AXE;
   }
 
   private getProjectileLookupRadius(projectile: Projectile): number {
+    if (projectile.runtimePlan) {
+      return projectile.runtimePlan.projectile.collision.getLookupRadius(projectile);
+    }
     if (this.isRuneBeam(projectile) || this.isAxeCleave(projectile)) {
       return projectile.beamLength! * 0.5 + projectile.radius + PROJECTILE_COLLISION_LOOKUP_PADDING;
     }
@@ -108,6 +114,9 @@ export class ProjectileCombat {
   }
 
   private projectileOverlapsEnemy(projectile: Projectile, enemy: Enemy): boolean {
+    if (projectile.runtimePlan) {
+      return projectile.runtimePlan.projectile.collision.overlaps(projectile, enemy);
+    }
     if (this.isAxeCleave(projectile)) {
       return this.arcOverlapsCircle(projectile, enemy.x, enemy.y, enemy.radius);
     }
@@ -186,8 +195,42 @@ export class ProjectileCombat {
     const dir = { x: enemy.x - knockbackSourceX, y: enemy.y - knockbackSourceY };
     const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
     const knockbackModifier = this.getProjectileModifierByEffect(projectile, 'knockback');
-    const knockback = projectile.knockback + (knockbackModifier ? 120 : 0);
-    const isDead = damageEnemy(enemy, projectile.damage, (dir.x / len) * knockback, (dir.y / len) * knockback);
+    let appliedDamage = projectile.damage;
+    let isDead: boolean;
+    if (projectile.runtimePlan) {
+      let damageScale = 0;
+      let knockbackScale = 0;
+      const effectContext = {
+        projectile,
+        enemy,
+        dealDamage(scale: number) {
+          damageScale += scale;
+          return false;
+        },
+        applyKnockback(scale: number) {
+          knockbackScale += scale;
+        },
+      };
+      for (const effect of projectile.runtimePlan.projectile.hitEffects) {
+        effect.apply(effectContext);
+      }
+      appliedDamage = projectile.damage * damageScale;
+      const knockback = projectile.knockback * knockbackScale + (knockbackModifier ? 120 : 0);
+      isDead = damageEnemy(
+        enemy,
+        appliedDamage,
+        (dir.x / len) * knockback,
+        (dir.y / len) * knockback
+      );
+    } else {
+      const knockback = projectile.knockback + (knockbackModifier ? 120 : 0);
+      isDead = damageEnemy(
+        enemy,
+        projectile.damage,
+        (dir.x / len) * knockback,
+        (dir.y / len) * knockback
+      );
+    }
     const hitColor = ENEMY_DATA[enemy.type].color;
 
     spawnHitParticles(ctx.particles, enemy.x, enemy.y, hitColor, 6, {
@@ -205,8 +248,8 @@ export class ProjectileCombat {
     }
 
     const dmgColor = this.getProjectileDamageColor(projectile);
-    const dmgSize = projectile.damage >= 30 ? 18 : projectile.damage >= 20 ? 16 : 14;
-    pushDamageNumber(ctx.damageNumbers, enemy.x, enemy.y, projectile.damage, dmgColor, dmgSize);
+    const dmgSize = appliedDamage >= 30 ? 18 : appliedDamage >= 20 ? 16 : 14;
+    pushDamageNumber(ctx.damageNumbers, enemy.x, enemy.y, appliedDamage, dmgColor, dmgSize);
     this.triggerProjectileModifiers(ctx, projectile, enemy, isDead);
     return isDead;
   }
@@ -272,6 +315,8 @@ export class ProjectileCombat {
   }
 
   private getProjectileDamageColor(projectile: Projectile): string {
+    const runtimeColor = projectile.runtimePlan?.projectile.visual.palette.accent;
+    if (runtimeColor) return runtimeColor;
     return projectile.type === WeaponType.FIRE_WAND ? '#ff8844' :
            projectile.type === WeaponType.LIGHTNING ? '#ffff88' :
            projectile.type === WeaponType.RUNE_LANCE ? '#9ff5ff' :
@@ -397,6 +442,7 @@ export class ProjectileCombat {
     projectile.lightningSeed = undefined;
     projectile.beamLength = undefined;
     projectile.arcAngle = undefined;
+    projectile.runtimePlan = undefined;
   }
 
   private copyProjectileEvolutionAssets(child: Projectile, source: Projectile) {
@@ -552,6 +598,7 @@ export class ProjectileCombat {
     child.pulseDone = false;
     child.reflectRemaining = nextRemaining;
     this.clearProjectileMotionExtras(child);
+    child.runtimePlan = projectile.runtimePlan;
     ctx.projectiles.push(child);
     return true;
   }

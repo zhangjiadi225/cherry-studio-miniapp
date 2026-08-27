@@ -66,6 +66,7 @@ function resetProjectile(p: Projectile) {
   p.beamLength = undefined;
   p.arcAngle = undefined;
   p.evolutionIds = undefined;
+  p.runtimePlan = undefined;
 }
 
 function resetEnemyProjectile(p: EnemyProjectile) {

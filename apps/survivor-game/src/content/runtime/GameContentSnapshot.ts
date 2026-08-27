@@ -11,6 +11,14 @@ import {
 import { createCoreEngineRegistrySnapshot } from '../../game/systems/weapon/Weapon';
 import type { EnemyType, WeaponMetadata, WeaponType } from '../../game/types';
 import type { WeaponBehaviorHandler } from '../../game/behaviors/weapon/WeaponBehavior';
+import {
+  compileProjectileWeaponRecipe,
+  createWeaponCapabilityCatalog,
+} from '../../game/recipes/weapon/WeaponRecipeCompiler';
+import type {
+  WeaponCapabilityCatalogV1,
+  WeaponRuntimePlan,
+} from '../../game/recipes/weapon/WeaponRuntimePlan';
 import { Registry, type ReadonlyRegistry } from '../registry/Registry';
 
 export const BUILTIN_CONTENT_PACK_ID = 'builtin.core';
@@ -19,6 +27,7 @@ export const GAME_CONTENT_SNAPSHOT_VERSION = 1;
 export interface ResolvedWeaponDefinition extends WeaponData {
   readonly id: string;
   readonly legacyType: WeaponType;
+  readonly runtimePlan?: WeaponRuntimePlan;
 }
 
 export interface ResolvedEnemyDefinition extends EnemyData {
@@ -31,6 +40,7 @@ export interface GameContentSnapshot {
   readonly packIds: readonly string[];
   readonly enginePluginIds: readonly string[];
   readonly weaponBehaviors: ReadonlyRegistry<WeaponBehaviorHandler>;
+  readonly weaponCapabilityCatalog: WeaponCapabilityCatalogV1;
   readonly weapons: ReadonlyRegistry<ResolvedWeaponDefinition>;
   readonly enemies: ReadonlyRegistry<ResolvedEnemyDefinition>;
   getWeaponByType(type: WeaponType): ResolvedWeaponDefinition;
@@ -44,7 +54,8 @@ export interface StoredContentLibraryInput {
 
 function freezeWeaponDefinition(
   type: WeaponType,
-  source: WeaponData
+  source: WeaponData,
+  runtimePlan?: WeaponRuntimePlan
 ): ResolvedWeaponDefinition {
   const metadata: WeaponMetadata = {
     ...source.metadata,
@@ -57,6 +68,7 @@ function freezeWeaponDefinition(
     ...source,
     id: getBuiltinWeaponContentId(type),
     legacyType: type,
+    runtimePlan,
     metadata,
     perLevel: Object.freeze({ ...source.perLevel }),
   };
@@ -89,12 +101,17 @@ export function createBuiltinGameContentSnapshot(
 
   const engine = createCoreEngineRegistrySnapshot();
   const weaponBehaviors = engine.weaponBehaviors;
+  const weaponCapabilityCatalog = createWeaponCapabilityCatalog(engine);
   const weapons = new Registry<ResolvedWeaponDefinition>('weapon definitions');
   const enemies = new Registry<ResolvedEnemyDefinition>('enemy definitions');
 
   for (const [type, source] of Object.entries(WEAPON_DATA) as [WeaponType, WeaponData][]) {
     weaponBehaviors.require(source.behaviorId);
-    const definition = freezeWeaponDefinition(type, source);
+    const definitionId = getBuiltinWeaponContentId(type);
+    const runtimePlan = source.recipe
+      ? compileProjectileWeaponRecipe(definitionId, source.recipe, engine)
+      : undefined;
+    const definition = freezeWeaponDefinition(type, source, runtimePlan);
     weapons.register(definition.id, definition);
   }
 
@@ -110,6 +127,7 @@ export function createBuiltinGameContentSnapshot(
     packIds: Object.freeze([BUILTIN_CONTENT_PACK_ID]),
     enginePluginIds: engine.pluginIds,
     weaponBehaviors,
+    weaponCapabilityCatalog,
     weapons: frozenWeapons,
     enemies: frozenEnemies,
     getWeaponByType: (type: WeaponType) =>

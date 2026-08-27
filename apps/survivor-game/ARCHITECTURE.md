@@ -19,7 +19,7 @@
 - Cherry 存储与 `app.visibilityChange` 的过渡接入。
 - 单文档 `AppStateStore`、冻结 Registry、内置内容快照和武器行为分派。
 
-AI Forge、ContentPack 校验/安装和 BehaviorGraph 尚未实现，不属于当前能力。当前 Registry 只注册内置武器施放行为与内置武器/怪物定义。
+AI Forge、ContentPack 校验/安装和 BehaviorGraph 尚未实现，不属于当前能力。当前 Registry 除内置武器施放行为与内置武器/怪物定义外，已经注册首批投射物原语；只有魔法法器进入原子 Recipe 迁移链路，其他武器仍使用兼容行为。
 
 ## 2. 当前目录
 
@@ -56,6 +56,7 @@ survivor-game/
         ├── constants.ts            # 全局常量与数据表 re-export
         ├── behaviors/              # 已注册的可信行为接口与稳定 ID
         ├── data/                   # 武器、怪物、难度、进化等数据
+        ├── recipes/                # WeaponRecipe 合同与非热路径编译器
         ├── effects/                # 粒子与伤害飘字
         ├── events/                 # 类型化事件总线与状态机
         ├── renderers/              # 世界、实体、特效和 UI 绘制
@@ -96,7 +97,7 @@ main.ts
 
 1. 创建 `AppHost`。
 2. 读取稳定 Key `survivor-game:app-state` 中带 `stateVersion` 的文档；首次运行时读取三个旧 Key 并迁移，但不删除旧值。
-3. 把 AppState 的内容库槽位交给装配器，通过核心 `EnginePlugin` 注册武器行为，再装配冻结的武器/怪物内容快照。当前若状态尝试启用尚不受支持的外部内容包，会阻止启动而不是静默加载。
+3. 把 AppState 的内容库槽位交给装配器，通过核心 `EnginePlugin` 注册武器行为和首批投射物原语，导出只含描述的 Capability Catalog，并在装配冻结的武器/怪物内容快照时编译内置魔法法器 Recipe。当前若状态尝试启用尚不受支持的外部内容包，会阻止启动而不是静默加载。
 4. 创建 `Game`，注入内容快照和 AppState 持久化回调。
 5. 将 Host 可见性事件转发给 `Game.setHostVisible`。
 6. 启动失败时显示可点击重试提示。
@@ -165,11 +166,11 @@ main.ts
 - 展示方式、行为标签和战斗标签。
 - 一级属性、每级成长和最大等级。
 
-每件内置武器现在声明稳定 `behaviorId`。启动时 `Weapon.ts` 把现有 `fireXxx` 注册为冻结的 `WeaponBehaviorHandler`，武器施放通过 Registry 查找处理器，不再用具体 `WeaponType` 的发射分支。弹幕更新仍按类型处理特殊移动。进化数据和视觉资产分别位于 `weaponEvolutions.ts` 与 `weaponEvolutionAssets.ts`。
+每件内置武器声明稳定 `behaviorId`。启动时 `Weapon.ts` 把现有 `fireXxx` 兼容行为与通用 Recipe 投射物行为注册为冻结的 `WeaponBehaviorHandler`。Trigger、Targeting、Cast Origin、Emission Pattern、Projectile Motion、Collision、HitEffect 与 Render 分别拥有冻结 Registry；Capability Catalog 从这些 Registry 的公开 Descriptor 派生，不包含函数实现。
 
-这仍是粗粒度迁移层：`builtin.weapon.magic-wand` 等 ID 基本对应一件完整武器，而不是瞄准、阵型、运动、碰撞、命中和生命周期等可自由组合的原语。当前新增一种真正不同的武器仍可能需要修改类型、行为注册、弹幕更新和渲染；但多个内容定义已经可以复用同一个施放行为 ID。
+魔法法器是当前第一件真实 Recipe 样板。其冷却、最近目标、法器施放点、单向阵型、直线运动、标准圆碰撞、伤害、击退和圆形视觉层在启动或升级安全点编译为只读 `WeaponRuntimePlan`。帧循环直接执行已绑定处理器；进化先转换成封闭的内置数值调整，再重新编译计划。弹体对象池会清理计划引用，反射弹体继承同一计划。原有法器 Sprite、武器音效和 UI 暂时继续用 `WeaponType` 兼容标识。
 
-目标是把颜色、大小、速度和数量保留为受限参数，把追踪、穿透、分裂、反弹等规则拆为可信原语，在非热路径编译成只读 `WeaponRuntimePlan`。Projectile Motion、Collision、HitEffect、Lifecycle、Modifier、Render Registry 与 WeaponRecipeCompiler 尚未实现，具体边界见 [`docs/specs/WEAPON_RECIPE.md`](./docs/specs/WEAPON_RECIPE.md)。
+其余九件武器仍使用粗粒度 `fireXxx` 兼容行为，特殊移动、碰撞和渲染仍有类型分支。Projectile Lifecycle、Weapon Modifier Registry、Burst 调度、完整 ContentPack Validator 与动态内容 ID 尚未实现；外部/AI Recipe 不能进入游戏。具体目标边界见 [`docs/specs/WEAPON_RECIPE.md`](./docs/specs/WEAPON_RECIPE.md)。
 
 ## 8. 怪物与攻击
 
@@ -286,7 +287,7 @@ menu ↔ playing ↔ paused
 | --- | --- |
 | 自建 `cherry.d.ts` 与 Browser fallback | `@cherry-miniapp/kit` + Cherry-only production + dev mock |
 | v1 AppStateEnvelope 已接入，旧 Key 仅用于首次迁移 | 后续逐版本迁移、恢复 UI 与 RunCheckpoint |
-| 武器施放已按粗粒度 behaviorId 分派；其余仍有类型分支 | 原子 Projectile/Modifier Registry + WeaponRecipeCompiler + 声明式 ContentPack |
+| 魔法法器已进入原子 Projectile Recipe/Compiler；其余武器与部分展示仍有类型兼容分支 | 全部投射物复用原子 RuntimePlan + Modifier/Lifecycle Registry + 声明式 ContentPack |
 | 内置武器/怪物快照已冻结；多数系统仍直接导入旧表 | 系统统一依赖已解析 Registry Snapshot |
 | AI 尚未接入 | 持久化 Job、校验、预览、玩家确认的 AI Forge |
 | 自定义 ZIP 脚本 | 共享 `cherry-miniapp` CLI |

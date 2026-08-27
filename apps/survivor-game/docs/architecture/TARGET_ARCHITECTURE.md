@@ -152,6 +152,7 @@ interface EnginePlugin {
 interface EnginePluginApi {
   weaponTriggers: Registry<WeaponTriggerHandler>
   targetingStrategies: Registry<TargetingHandler>
+  castOrigins: Registry<CastOriginHandler>
   emissionPatterns: Registry<EmissionPatternHandler>
   projectileMotions: Registry<ProjectileMotionHandler>
   collisionBehaviors: Registry<CollisionBehaviorHandler>
@@ -183,6 +184,7 @@ ContentPack 不能包含函数、模块路径、脚本、任意表达式、远�
 | --- | --- | --- | --- |
 | Weapon Trigger | `trigger.primitiveId` | 当前冷却与施放计时 | 否，只能引用 |
 | Targeting | `targeting.primitiveId` | 最近目标、朝向和随机目标逻辑 | 否，只能引用 |
+| Cast Origin | `emission.origin.primitiveId` | 玩家中心、法器挂点与受限偏移 | 否，只能引用 |
 | Emission Pattern | `emission.pattern.primitiveId` | 单发、扇形、环形和 Burst 排布 | 否，只能引用 |
 | Projectile Motion | `projectile.motion.primitiveId` | `updateProjectile` 分支 | 否，只能引用 |
 | Collision Behavior | `projectile.collision.primitiveId` | 穿透、地图阻挡和命中处理 | 否，只能引用 |
@@ -333,10 +335,11 @@ src/
 
 ### Slice 3：原子投射物配方
 
-- 注册 Trigger、Targeting、Emission、Motion、Collision、HitEffect、Lifecycle 和 Modifier 原语。
+- 注册 Trigger、Targeting、Cast Origin、Emission、Motion、Collision、HitEffect、Lifecycle 和 Modifier 原语。
 - 建立 Capability Catalog 与 WeaponRecipeCompiler。
-- 等价迁移一件现有投射物武器，再用纯配方数据创建第二件武器。
+- 等价迁移一件现有投射物武器，再把第二件现有投射物武器改为纯配方数据。
 - 打通双重发射与穿透的固定顺序装配。
+- 不创建只用于演示生成能力的固定样板武器；AI 的具体颜色、尺寸、速度、数量和受限视觉组合保留在 ContentPack 数据侧。
 
 ### Slice 4：内置 ContentPack
 

@@ -5,8 +5,17 @@ import {
   type WeaponFamily,
   type WeaponMetadata,
   type WeaponTag,
+  type WeaponEvolutionId,
 } from '../types';
 import { CoreWeaponBehaviorId } from '../behaviors/weapon/WeaponBehavior';
+import type {
+  ProjectileWeaponRecipeV1,
+  TrustedWeaponPlanAdjustment,
+} from '../recipes/weapon/WeaponRecipe';
+import {
+  MAGIC_WAND_RECIPE,
+  MAGIC_WAND_RECIPE_EVOLUTION_ADJUSTMENTS,
+} from './weaponRecipes';
 
 export interface WeaponData {
   name: string;
@@ -14,6 +23,10 @@ export interface WeaponData {
   desc: string;
   family: WeaponFamily;
   behaviorId: string;
+  recipe?: ProjectileWeaponRecipeV1;
+  recipeEvolutionAdjustments?: Partial<
+    Record<WeaponEvolutionId, readonly TrustedWeaponPlanAdjustment[]>
+  >;
   metadata: WeaponMetadata;
   baseDamage: number;
   baseCooldown: number;
@@ -99,7 +112,9 @@ export const WEAPON_DATA: Record<WeaponType, WeaponData> = {
     icon: '✦',
     desc: '角色旁的法器自动向最近敌人施放魔法弹',
     family: 'projectile',
-    behaviorId: CoreWeaponBehaviorId.MAGIC_WAND,
+    behaviorId: CoreWeaponBehaviorId.PROJECTILE_RECIPE,
+    recipe: MAGIC_WAND_RECIPE,
+    recipeEvolutionAdjustments: MAGIC_WAND_RECIPE_EVOLUTION_ADJUSTMENTS,
     metadata: { behavior: 'focus_cast', displayMode: 'relic', displayPriority: 66, tags: ['ranged'] },
     baseDamage: 10,
     baseCooldown: 1.2,

@@ -1,3 +1,6 @@
+import type { ProjectileWeaponRecipeV1, TrustedWeaponPlanAdjustment } from './recipes/weapon/WeaponRecipe';
+import type { WeaponRuntimePlan } from './recipes/weapon/WeaponRuntimePlan';
+
 export interface Vec2 {
   x: number;
   y: number;
@@ -94,6 +97,26 @@ export interface Weapon {
   modifiers: GenericModifierType[];
   modifierMask: number;
   evolutions: Partial<Record<WeaponEvolutionTier, WeaponEvolutionId>>;
+  recipe?: ProjectileWeaponRecipeV1;
+  recipeEvolutionAdjustments?: Partial<
+    Record<WeaponEvolutionId, readonly TrustedWeaponPlanAdjustment[]>
+  >;
+  runtimePlan?: WeaponRuntimePlan;
+  runtimePlanSourceState?: {
+    readonly level: number;
+    readonly damage: number;
+    readonly cooldown: number;
+    readonly speed: number;
+    readonly area: number;
+    readonly count: number;
+    readonly pierce: number;
+    readonly duration: number;
+    readonly knockback: number;
+    readonly modifierMask: number;
+    readonly modifierCount: number;
+    readonly evolution4?: WeaponEvolutionId;
+    readonly evolution8?: WeaponEvolutionId;
+  };
   purchaseValue?: number;
 }
 
@@ -167,6 +190,7 @@ export interface Projectile {
   beamLength?: number;
   arcAngle?: number;
   evolutionIds?: WeaponEvolutionId[];
+  runtimePlan?: WeaponRuntimePlan;
 }
 
 export type EnemyProjectileKind = 'cultist_bolt' | 'demon_fire' | 'wraith_orb';

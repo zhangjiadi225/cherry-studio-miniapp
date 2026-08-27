@@ -21,7 +21,7 @@ import {
   getWeaponEvolutionQuality,
   getWeaponLevelQuality,
 } from '../../data/cardQuality';
-import { createWeapon, upgradeWeapon } from './Weapon';
+import { createWeapon, rebuildWeaponRuntimePlan, upgradeWeapon } from './Weapon';
 import { applyPassive, getPassiveLevel, removePassive } from '../player/Player';
 import { shuffleArray } from '../../utils/math';
 
@@ -246,6 +246,7 @@ export function applyUpgrade(player: Player, option: UpgradeOption) {
   } else if (option.type === 'weapon_evolution' && option.weaponType && option.evolutionId) {
     const weapon = player.weapons.find(w => w.type === option.weaponType);
     if (!weapon || !applyWeaponEvolution(weapon, option.evolutionId)) return false;
+    rebuildWeaponRuntimePlan(weapon);
     weapon.purchaseValue = (weapon.purchaseValue ?? 0) + option.cost;
   } else if (option.type === 'modifier' && option.weaponType && option.modifierType) {
     const weapon = player.weapons.find(w => w.type === option.weaponType);
@@ -254,6 +255,7 @@ export function applyUpgrade(player: Player, option: UpgradeOption) {
     if (weapon && stackCount < modifier.maxStacks) {
       weapon.modifiers.push(option.modifierType);
       weapon.modifierMask |= GENERIC_MODIFIER_MASK[option.modifierType];
+      rebuildWeaponRuntimePlan(weapon);
       weapon.purchaseValue = (weapon.purchaseValue ?? 0) + option.cost;
     } else {
       return false;

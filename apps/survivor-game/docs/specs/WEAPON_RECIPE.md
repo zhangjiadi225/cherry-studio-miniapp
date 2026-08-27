@@ -2,15 +2,15 @@
 
 > 状态：Draft Spec
 >
-> 规范版本：0.1
+> 规范版本：0.2
 >
 > 更新日期：2026-08-27
 
 ## 1. 目的与当前边界
 
-WeaponRecipe（武器配方，即用项目提供的原子能力和受限参数描述一件武器的数据）定义 AI 如何组合武器与子弹，而不为每件新武器生成代码。
+WeaponRecipe（武器配方，即用项目提供的原子能力和受限参数描述一件武器的数据）定义内置内容与 AI 内容如何使用同一协议组合武器与弹体，而不为每件新武器生成代码。
 
-目标示例是：AI 可以声明“一次发射三颗红色、半径 8、速度 420 的直线子弹”，局内获得“双重发射”和“穿透弹”后，由本地规则把它装配为六颗、具有两层穿透的子弹。
+AI 可以提供颜色、尺寸、速度、数量、阵型参数和受限视觉层等具体内容。应用不内置某个用于演示生成能力的固定武器，也不为某种颜色或数量编写专属实现；应用只提供可复用规则原语、封闭参数 Schema、预算和运行时处理器。首批真实样板来自已经存在的内置武器。
 
 当前代码中的 `builtin.weapon.magic-wand`、`builtin.weapon.fire-wand` 等 `behaviorId` 是迁移期兼容适配器。它们完成了从 `WeaponType switch` 到 Registry 分发的第一步，但仍然是一件武器对应一个较粗行为，不是最终原子层。
 
@@ -25,12 +25,13 @@ WeaponRecipe（武器配方，即用项目提供的原子能力和受限参数�
 5. **Modifier 由本地代码变换计划。** AI 可以引用 Modifier，不能描述 Modifier 如何改写运行时对象。
 6. **组合顺序固定。** 同一引擎版本、配方、Modifier 栈和随机种子必须产生相同结果。
 7. **预算双重防线。** 安装/升级前做静态预算；运行时仍保留确定性的实体与弹幕硬上限。
+8. **样板必须是真实内容。** AI Prompt、预览和文档示例应从实际内置 Recipe 与冻结 Capability Catalog 派生，不能维护一套只用于演示、运行时不消费的影子武器定义。
 
 ## 3. 三种基本概念
 
 | 概念 | 所有者 | 示例 | 是否由 AI 新增 |
 | --- | --- | --- | --- |
-| Parameter | ContentPack | `color: "#ff3b30"`、`speed: 420`、`count: 3` | 是，在边界内赋值 |
+| Parameter | ContentPack | 颜色、速度、半径、数量、透明度 | 是，在边界内赋值 |
 | Primitive | EnginePlugin | 最近目标、扇形阵型、直线运动、标准碰撞 | 否，只能引用 |
 | Modifier | EnginePlugin + 局内构筑 | 双重发射、增加穿透、命中分裂 | 否，只能引用和叠层 |
 
@@ -48,12 +49,13 @@ Modifier（修饰器，即在固定阶段变换已解析武器计划的可信局
 | --- | --- | --- | --- |
 | Weapon Trigger | `trigger.primitiveId` | 何时触发一次施放 | `builtin.trigger.cooldown` |
 | Targeting | `targeting.primitiveId` | 选择目标或方向 | `builtin.target.nearest`、`builtin.target.facing` |
+| Cast Origin | `emission.origin.primitiveId` | 从玩家、法器挂点或其他可信来源计算施放点 | `builtin.origin.player`、`builtin.origin.focus-relic` |
 | Emission Pattern | `emission.pattern.primitiveId` | 把数量映射为生成方向和偏移 | `builtin.pattern.single`、`builtin.pattern.fan`、`builtin.pattern.ring` |
 | Projectile Motion | `projectile.motion.primitiveId` | 每帧更新运动 | `builtin.motion.straight`、`builtin.motion.homing`、`builtin.motion.orbit` |
 | Collision Behavior | `projectile.collision.primitiveId` | 地图、敌人与穿透处理 | `builtin.collision.standard` |
 | Hit Effect | `projectile.hitEffects[]` | 命中后的规则效果 | `builtin.effect.damage`、`builtin.effect.knockback` |
 | Projectile Lifecycle | `projectile.lifecycle[]` | 生成、命中、到期或死亡时派生行为 | `builtin.lifecycle.split-on-hit`、`builtin.lifecycle.return` |
-| Render Primitive | `projectile.visual.*Id` | 形状、轨迹、光晕和粒子 | `builtin.shape.orb`、`builtin.trail.comet` |
+| Render Primitive | `projectile.visual.*.primitiveId` | 形状、轨迹、光晕和粒子 | `builtin.render.circle` |
 | Weapon Modifier | 局内 Modifier 栈 | 在固定阶段变换运行计划 | `builtin.modifier.double-shot`、`builtin.modifier.piercing` |
 
 原语 ID 使用稳定命名空间。AI 内容可以引用 `builtin.*`，但不能覆盖、别名化或在自己的 Pack 中声明新的处理器 ID。
@@ -71,6 +73,7 @@ interface PrimitiveDescriptorV1 {
   kind:
     | 'trigger'
     | 'targeting'
+    | 'cast-origin'
     | 'emission-pattern'
     | 'projectile-motion'
     | 'collision'
@@ -121,6 +124,7 @@ interface ProjectileWeaponRecipeV1 {
   targeting: PrimitiveRefV1
   emission: {
     emitterId: 'builtin.emitter.projectile'
+    origin: PrimitiveRefV1
     count: number
     burstCount: number
     burstInterval: number
@@ -146,14 +150,18 @@ interface ProjectileWeaponRecipeV1 {
 }
 
 interface ProjectileVisualRecipeV1 {
-  shapeId: string
-  primaryColor: string
-  secondaryColor?: string
+  body: PrimitiveRefV1
+  palette: {
+    primary: string
+    secondary?: string
+    accent?: string
+  }
   scale: number
   opacity: number
-  glow?: { color: string; radius: number; intensity: number }
-  trailId?: string
-  particleRecipeId?: string
+  glow?: { color: string; radiusScale: number; intensity: number }
+  layers: PrimitiveRefV1[]
+  trail?: PrimitiveRefV1
+  particles?: PrimitiveRefV1
 }
 ```
 
@@ -163,77 +171,27 @@ interface ProjectileVisualRecipeV1 {
 - 第一版只接受 `delivery: "projectile"`；其他值必须拒绝，不能推测降级。
 - `PrimitiveRefV1.params` 必须通过所引用原语的封闭 Schema；禁止未知字段。
 - `count * burstCount` 是一次施放的直接生成数，必须以整数预算校验。
+- `emission.origin` 只计算施放点，不得读取内容 ID 或直接生成弹体。
 - `radius` 是规则碰撞半径；`visual.scale` 只控制展示，二者不能互相覆盖。
 - `hitEffects` 与 `lifecycle` 有数量上限，按数组顺序确定执行顺序。
+- `visual.body`、`layers`、`trail` 和 `particles` 只引用可信渲染原语；颜色与几何参数由内容提供，但不能包含 SVG/XML、CSS、Shader 或模块路径。
+- 渲染原语不得读取或修改伤害、碰撞、掉落和随机数等规则状态。
 - `allowedIds` 不能授予 Registry 中不存在或与配方不兼容的 Modifier。
 - `deniedIds` 用于表达明确冲突；本地 Modifier Registry 的冲突声明仍拥有最终决定权。
 
-## 7. 示例：三颗红色子弹
+## 7. 真实样板与 AI 参数所有权
 
-```json
-{
-  "recipeVersion": 1,
-  "delivery": "projectile",
-  "trigger": {
-    "primitiveId": "builtin.trigger.cooldown",
-    "params": { "cooldown": 1.2 }
-  },
-  "targeting": {
-    "primitiveId": "builtin.target.nearest",
-    "params": { "range": 720 }
-  },
-  "emission": {
-    "emitterId": "builtin.emitter.projectile",
-    "count": 3,
-    "burstCount": 1,
-    "burstInterval": 0,
-    "pattern": {
-      "primitiveId": "builtin.pattern.fan",
-      "params": { "spreadRadians": 0.28 }
-    }
-  },
-  "projectile": {
-    "damage": 12,
-    "radius": 8,
-    "speed": 420,
-    "lifetime": 2,
-    "pierce": 0,
-    "knockback": 24,
-    "motion": {
-      "primitiveId": "builtin.motion.straight",
-      "params": {}
-    },
-    "collision": {
-      "primitiveId": "builtin.collision.standard",
-      "params": { "stopOnMap": true }
-    },
-    "hitEffects": [
-      {
-        "primitiveId": "builtin.effect.damage",
-        "params": { "damageScale": 1 }
-      }
-    ],
-    "lifecycle": [],
-    "visual": {
-      "shapeId": "builtin.shape.orb",
-      "primaryColor": "#ff3b30",
-      "scale": 1,
-      "opacity": 1,
-      "glow": { "color": "#ff6b5f", "radius": 10, "intensity": 0.7 },
-      "trailId": "builtin.trail.comet"
-    }
-  },
-  "modifierPolicy": {
-    "allowedIds": [
-      "builtin.modifier.double-shot",
-      "builtin.modifier.piercing"
-    ],
-    "deniedIds": []
-  }
-}
-```
+首个样板使用现有“魔法法器”的真实内置 Recipe。该 Recipe 必须由当前游戏直接编译和执行，并保持现有数值、升级、碰撞与视觉结果；Prompt 所需示例从这份 Recipe 投影，不能复制成另一份手写 JSON。
 
-该 JSON 是数据，不包含发射循环、碰撞代码或 Modifier 变换规则。
+在这个合同中：
+
+- 应用提供冷却触发、最近目标、发射阵型、直线运动、标准碰撞、伤害和通用渲染等原语实现。
+- 内置 Recipe 提供魔法法器当前的数值、资源引用与展示参数。
+- AI Recipe 可以在 Schema 与预算内提供自己的颜色、尺寸、速度、数量、阵型参数和视觉层组合。
+- 应用不得因为 AI 选择了某个颜色、数量或外观而新增武器 ID、`fireXxx`、碰撞分支或 Renderer 分支。
+- AI 不得提供原语实现；如果现有原语无法表达某种规则，该候选必须被拒绝，而不是降级为动态代码。
+
+内置样板和 AI 候选都是数据，不包含发射循环、碰撞代码或 Modifier 变换规则。
 
 ## 8. Modifier 合同
 
@@ -274,12 +232,12 @@ interface TrustedModifierHandler {
 - 每个 Modifier 声明最大层数、冲突和成本；商店不得提供当前计划无法安全应用的选项。
 - 应用后重新计算平衡与性能预算。超过设计上限时不静默截断数值，应阻止获得并向 UI 返回稳定原因。
 
-示例装配结果：
+概念装配结果：
 
 ```text
-基础：count=3, burstCount=1, pierce=0
-  → double-shot ×1：count=6
-  → piercing ×2：pierce=2
+基础计划
+  → double-shot：按本地规则变换发射数量
+  → piercing：按本地规则增加标准碰撞的穿透层数
   → 预算检查
   → 冻结运行计划
 ```
@@ -375,6 +333,8 @@ interface WeaponRuntimePlan {
 ```text
 UNKNOWN_PRIMITIVE
 UNKNOWN_PRIMITIVE_PARAM
+MISSING_PRIMITIVE_PARAM
+INVALID_PRIMITIVE_PARAM
 INCOMPATIBLE_PRIMITIVES
 UNKNOWN_MODIFIER
 MODIFIER_CONFLICT
@@ -420,19 +380,20 @@ Storage 不保存：
 
 ## 14. 第一阶段迁移顺序
 
-1. 为 Trigger、Targeting、Emission Pattern、Motion、Collision、HitEffect 和 Render Primitive 建立 Descriptor 与 Registry。
+1. 为 Trigger、Targeting、Cast Origin、Emission Pattern、Motion、Collision、HitEffect 和 Render Primitive 建立 Descriptor 与 Registry。
 2. 实现通用 `builtin.emitter.projectile` 和 `WeaponRecipeCompiler`。
-3. 注册 `cooldown`、`nearest`、`single/fan`、`straight`、`standard collision`、`damage`、`orb` 首批原语。
+3. 注册 `cooldown`、`nearest`、`player/focus-relic origin`、`single/fan`、`straight`、`standard collision`、`damage/knockback`、`circle render` 首批原语。
 4. 把魔法法器等价迁移为投射物 Recipe，保留旧实现用于对照，不改变数值和视觉。
 5. 实现 `double-shot` 与 `piercing` 两个本地 Modifier Handler。
-6. 用第二件只增加 Recipe 数据、不增加 `WeaponType`、`fireXxx` 或 Renderer 分支的武器验证组合能力。
-7. 接入 AI 生成“三颗红色子弹”类候选，完成校验、预览、接受、Storage 和下一局装配闭环。
+6. 把第二件现有投射物武器迁移为只增加 Recipe 数据、不增加 `WeaponType`、`fireXxx` 或 Renderer 分支的内容，验证组合能力。
+7. 接入不预设具体颜色、数量或外观的 AI 武器候选，完成校验、预览、接受、Storage 和下一局装配闭环。
 
 ## 15. 第一阶段验收条件
 
 - 至少一件现有投射物武器能无规则变化地编译为 `WeaponRuntimePlan`。
-- 第二件测试武器只增加 ContentPack 数据，不增加内容专属执行分支。
+- 第二件现有投射物武器迁移后只保留 ContentPack/Recipe 数据，不增加内容专属执行分支。
 - 颜色、半径、速度、数量和阵型能独立调整并正确进入预览与预算。
+- AI 改变受限视觉参数与层组合时不需要新增内置武器、资产文件或内容专属 Renderer 分支。
 - `double-shot` 和 `piercing` 可以组合，结果不受获得顺序影响。
 - 未知参数、未知原语、冲突 Modifier 和超预算组合得到稳定错误。
 - 同一 Recipe、Modifier 栈、引擎版本和随机种子产生相同战斗规则结果。

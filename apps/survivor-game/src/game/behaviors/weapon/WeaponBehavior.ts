@@ -2,6 +2,7 @@ import type { Player, Projectile, Weapon } from '../../types';
 import type { EnemyQuery } from '../../systems/enemy/EnemyQuery';
 
 export const CoreWeaponBehaviorId = {
+  PROJECTILE_RECIPE: 'builtin.weapon.recipe-projectile',
   WHIP: 'builtin.weapon.whip',
   MAGIC_WAND: 'builtin.weapon.magic-wand',
   BIBLE: 'builtin.weapon.bible',
@@ -26,5 +27,6 @@ export interface WeaponFireContext {
 export interface WeaponBehaviorHandler {
   readonly id: string;
   readonly mode: 'cast' | 'continuous';
+  readonly usesRuntimePlan?: boolean;
   fire(context: WeaponFireContext): boolean;
 }
