@@ -131,8 +131,9 @@ Presentation 只读取状态并发送用户意图：
 
 EnginePlugin（引擎插件，即随应用编译、由开发者维护的可信 TypeScript 模块）注册可复用原语：
 
-- 武器施放行为。
-- 弹幕移动与碰撞行为。
+- 武器触发、瞄准与发射器。
+- 弹幕阵型、移动、碰撞、命中和生命周期行为。
+- 局内 Modifier 的兼容检查、计划变换与成本估算。
 - 怪物移动动作与攻击 Pattern。
 - 条件节点与动作节点。
 - 渲染配方处理器。
@@ -149,8 +150,14 @@ interface EnginePlugin {
 }
 
 interface EnginePluginApi {
-  weaponBehaviors: Registry<WeaponBehaviorHandler>
+  weaponTriggers: Registry<WeaponTriggerHandler>
+  targetingStrategies: Registry<TargetingHandler>
+  emissionPatterns: Registry<EmissionPatternHandler>
   projectileMotions: Registry<ProjectileMotionHandler>
+  collisionBehaviors: Registry<CollisionBehaviorHandler>
+  hitEffects: Registry<HitEffectHandler>
+  projectileLifecycles: Registry<ProjectileLifecycleHandler>
+  weaponModifiers: Registry<WeaponModifierHandler>
   enemyActions: Registry<EnemyActionHandler>
   attackPatterns: Registry<AttackPatternHandler>
   renderRecipes: Registry<RenderRecipeHandler>
@@ -163,25 +170,49 @@ interface EnginePluginApi {
 
 ContentPack（内容包，即内置或 AI 生成的声明式玩法数据）只能引用 Registry 中已有的原语：
 
-- 武器、进化和 Modifier 定义。
+- 武器配方、成长数据和允许引用的 Modifier。
 - 怪物、攻击 Profile 和行为图。
 - 程序化视觉配方。
 - 文案、标签和来源信息。
 
-ContentPack 不能包含函数、模块路径、脚本、任意表达式、远程 URL 或可执行 Shader。完整协议见 `../specs/CONTENT_PACK.md`。
+ContentPack 不能包含函数、模块路径、脚本、任意表达式、远程 URL 或可执行 Shader。完整协议见 `../specs/CONTENT_PACK.md`；武器和弹幕组合合同见 `../specs/WEAPON_RECIPE.md`。
 
 ## 5. 关键 Registry
 
 | Registry | Key | 当前实现迁移来源 | AI 是否可新增实现 |
 | --- | --- | --- | --- |
-| Weapon Behavior | `behaviorId` | `Weapon.ts` 的 `fireXxx` | 否，只能引用 |
-| Projectile Motion | `motionId` | `updateProjectile` 分支 | 否，只能引用 |
+| Weapon Trigger | `trigger.primitiveId` | 当前冷却与施放计时 | 否，只能引用 |
+| Targeting | `targeting.primitiveId` | 最近目标、朝向和随机目标逻辑 | 否，只能引用 |
+| Emission Pattern | `emission.pattern.primitiveId` | 单发、扇形、环形和 Burst 排布 | 否，只能引用 |
+| Projectile Motion | `projectile.motion.primitiveId` | `updateProjectile` 分支 | 否，只能引用 |
+| Collision Behavior | `projectile.collision.primitiveId` | 穿透、地图阻挡和命中处理 | 否，只能引用 |
+| Hit Effect | `projectile.hitEffects[].primitiveId` | 伤害、击退和状态效果 | 否，只能引用 |
+| Projectile Lifecycle | `projectile.lifecycle[].primitiveId` | 分裂、返回、到期和派生规则 | 否，只能引用 |
+| Weapon Modifier | Modifier ID | 双重发射、穿透和局内构筑变换 | 否，只能引用和叠层 |
 | Enemy Action | `actionId` | 追击、横移、撤退、Dash、Phase | 否，只能引用 |
 | Attack Pattern | `patternId` | single、fan、ring、spiral 等 | 否，只能引用 |
 | Render Recipe | `recipeId` | Sprite、形状、光晕、粒子组合 | 否，只能引用 |
 | Content Definition | namespaced content ID | `WEAPON_DATA`、`ENEMY_DATA` 等 | 是，经校验后注册数据 |
 
-新内容应按行为 ID 分发，而不是按具体武器或怪物 ID 增加新的 `switch`。
+新内容应组合细粒度原语，而不是按具体武器或怪物 ID 增加新的 `switch`。当前按 `builtin.weapon.<name>` 注册的完整 `fireXxx` 是迁移期适配器；目标不是持续为每件武器增加一个粗粒度行为。
+
+### 5.1 武器配方编译
+
+AI 生成的是 WeaponRecipe，不是可执行武器对象。WeaponRecipeCompiler 在安装、开局或局内明确升级检查点执行：
+
+```text
+WeaponRecipe
+  → 解析原语引用
+  → 绑定可信 Handler
+  → 应用等级成长
+  → 按固定阶段应用 Modifier 栈
+  → 平衡与性能预算
+  → 冻结 WeaponRuntimePlan
+```
+
+WeaponRuntimePlan 是一局内部的执行真值，不写入 Storage。帧循环只执行已绑定 Handler 和不可变参数，不解析 ContentPack、不做字符串 Registry 查询，也不为每颗弹幕临时构建配置对象。
+
+颜色、大小、速度、数量、持续时间等是 Parameter；瞄准、阵型、运动、碰撞、命中、分裂等才是 Primitive。该边界、Modifier 顺序和首版 Schema 以 [`WEAPON_RECIPE.md`](../specs/WEAPON_RECIPE.md) 为准。
 
 ## 6. 两条关键数据流
 
@@ -208,7 +239,8 @@ ContentPack 不能包含函数、模块路径、脚本、任意表达式、远�
 ```text
 读取已接受内容包
   → 迁移与验证
-  → 构建不可变 Registry Snapshot
+  → 构建不可变 Primitive Registry Snapshot
+  → 将启用的 WeaponRecipe 编译为 Runtime Plan
   → 选择内容与随机种子
   → 启动 Game Kernel
   → 运行时只读取已解析定义
@@ -260,6 +292,7 @@ src/
 │   └── library/             # 接受、启用、禁用、归档
 └── game/
     ├── kernel/              # 时钟、世界、RNG、预算
+    ├── recipes/             # Recipe 到只读 Runtime Plan
     ├── systems/             # 当前确定性游戏系统
     ├── behaviors/           # 可信 EnginePlugin 原语
     ├── renderers/
@@ -298,19 +331,26 @@ src/
 - Renderer 按视觉配方分发。
 - 删除与具体内容 ID 绑定的新扩展路径。
 
-### Slice 3：内置 ContentPack
+### Slice 3：原子投射物配方
+
+- 注册 Trigger、Targeting、Emission、Motion、Collision、HitEffect、Lifecycle 和 Modifier 原语。
+- 建立 Capability Catalog 与 WeaponRecipeCompiler。
+- 等价迁移一件现有投射物武器，再用纯配方数据创建第二件武器。
+- 打通双重发射与穿透的固定顺序装配。
+
+### Slice 4：内置 ContentPack
 
 - 将现有内容表达为内置 ContentPack。
 - 完成 schema、迁移、引用和预算验证。
 - 内置包与旧数据表得到等价结果。
 
-### Slice 4：AI 武器锻造
+### Slice 5：AI 武器锻造
 
 - 接入生成状态机、预览和玩家确认。
 - AI 只能生成 ContentPack 数据。
 - 支持取消、中断恢复、拒绝和删除。
 
-### Slice 5：怪物行为图
+### Slice 6：怪物行为图
 
 - 引入有界 BehaviorGraph 执行器。
 - 先迁移内置怪物，再允许 AI 组合。
@@ -320,6 +360,8 @@ src/
 ## 12. 架构完成标准
 
 - 新武器实例可以只增加 ContentPack 数据，不修改武器 ID `switch`。
+- 新投射物武器可以组合原语和参数，不新增内容专属 `fireXxx`、Motion 或 Renderer 分支。
+- 局内 Modifier 按稳定阶段组合，结果不依赖获得顺序。
 - 新怪物可以组合现有移动、攻击和视觉原语，不修改核心追击代码。
 - 无 AI 权限时，内置和已接受内容正常运行。
 - AI 输出无法绕过 Validator，也无法进入可执行路径。

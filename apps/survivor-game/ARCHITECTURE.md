@@ -167,7 +167,9 @@ main.ts
 
 每件内置武器现在声明稳定 `behaviorId`。启动时 `Weapon.ts` 把现有 `fireXxx` 注册为冻结的 `WeaponBehaviorHandler`，武器施放通过 Registry 查找处理器，不再用具体 `WeaponType` 的发射分支。弹幕更新仍按类型处理特殊移动。进化数据和视觉资产分别位于 `weaponEvolutions.ts` 与 `weaponEvolutionAssets.ts`。
 
-当前新增一种真正不同的武器仍可能需要修改类型、行为注册、弹幕更新和渲染；但多个内容定义已经可以复用同一个施放行为 ID。Projectile Motion 与 Render Recipe Registry 尚未实现。
+这仍是粗粒度迁移层：`builtin.weapon.magic-wand` 等 ID 基本对应一件完整武器，而不是瞄准、阵型、运动、碰撞、命中和生命周期等可自由组合的原语。当前新增一种真正不同的武器仍可能需要修改类型、行为注册、弹幕更新和渲染；但多个内容定义已经可以复用同一个施放行为 ID。
+
+目标是把颜色、大小、速度和数量保留为受限参数，把追踪、穿透、分裂、反弹等规则拆为可信原语，在非热路径编译成只读 `WeaponRuntimePlan`。Projectile Motion、Collision、HitEffect、Lifecycle、Modifier、Render Registry 与 WeaponRecipeCompiler 尚未实现，具体边界见 [`docs/specs/WEAPON_RECIPE.md`](./docs/specs/WEAPON_RECIPE.md)。
 
 ## 8. 怪物与攻击
 
@@ -270,7 +272,8 @@ menu ↔ playing ↔ paused
 
 在 Registry 迁移完成前，现有扩展仍遵循当前源码模式：
 
-- 新武器行为：稳定 `behaviorId` → Registry 注册 → 内容定义引用 → Renderer/升级/平衡测试。
+- 当前新武器行为：稳定 `behaviorId` → Registry 注册 → 内容定义引用 → Renderer/升级/平衡测试。
+- 目标新投射物武器：只增加 WeaponRecipe 数据，复用 Trigger、Targeting、Emission、Motion、Collision、Effect、Lifecycle、Modifier 和 Render 原语。
 - 新怪物：类型 → `ENEMY_DATA` → 必要的 Attack/Trait → Renderer → Spawner/测试。
 - 新被动：类型 → `PASSIVE_DATA` → Player 属性重算 → 商店/测试。
 - 新 Modifier：类型与 bit mask → 数据 → Weapon/Combat 效果 → 视觉/事件。
@@ -283,7 +286,7 @@ menu ↔ playing ↔ paused
 | --- | --- |
 | 自建 `cherry.d.ts` 与 Browser fallback | `@cherry-miniapp/kit` + Cherry-only production + dev mock |
 | v1 AppStateEnvelope 已接入，旧 Key 仅用于首次迁移 | 后续逐版本迁移、恢复 UI 与 RunCheckpoint |
-| 武器施放已按 behaviorId 分派；其余仍有类型分支 | Projectile/Enemy/Render Registry + 声明式 ContentPack |
+| 武器施放已按粗粒度 behaviorId 分派；其余仍有类型分支 | 原子 Projectile/Modifier Registry + WeaponRecipeCompiler + 声明式 ContentPack |
 | 内置武器/怪物快照已冻结；多数系统仍直接导入旧表 | 系统统一依赖已解析 Registry Snapshot |
 | AI 尚未接入 | 持久化 Job、校验、预览、玩家确认的 AI Forge |
 | 自定义 ZIP 脚本 | 共享 `cherry-miniapp` CLI |

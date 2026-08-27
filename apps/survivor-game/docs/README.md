@@ -19,6 +19,7 @@
 | [`product/DIRECTION.md`](./product/DIRECTION.md) | Target | 产品为什么做 AI + 插件化、优先做什么 |
 | [`architecture/TARGET_ARCHITECTURE.md`](./architecture/TARGET_ARCHITECTURE.md) | Target | 目标分层、模块所有权和迁移顺序 |
 | [`specs/CONTENT_PACK.md`](./specs/CONTENT_PACK.md) | Draft Spec | AI/内置内容如何安全进入游戏 |
+| [`specs/WEAPON_RECIPE.md`](./specs/WEAPON_RECIPE.md) | Draft Spec | 武器、子弹原语和肉鸽 Modifier 如何组合与编译 |
 | [`specs/AI_GENERATION.md`](./specs/AI_GENERATION.md) | Draft Spec | AI 请求、校验、确认、失败恢复如何工作 |
 | [`specs/CHERRY_RUNTIME.md`](./specs/CHERRY_RUNTIME.md) | Draft Spec | Cherry 权限、生命周期、存档和打包规则 |
 
@@ -35,6 +36,7 @@
 
 - 新增或改变 AI 工作流时，更新 `AI_GENERATION.md`。
 - 改变内容包字段、行为原语、ID 或迁移规则时，更新 `CONTENT_PACK.md`。
+- 改变武器/子弹原语、配方编译或 Modifier 装配顺序时，更新 `WEAPON_RECIPE.md`。
 - 改变权限、宿主 API、存档、生命周期或打包流程时，更新 `CHERRY_RUNTIME.md`。
 - 改变模块所有权或依赖方向时，更新 `TARGET_ARCHITECTURE.md`。
 - 当前代码完成迁移后，同步更新根目录 `ARCHITECTURE.md`，不要让它提前描述未实现模块。

@@ -8,7 +8,7 @@
 
 ## 1. 目的
 
-当前实现进度：稳定 ID Registry、启动期 `EnginePlugin` 合同、内置武器/怪物只读快照和武器 `behaviorId` 分派已落地。ContentPack 类型、Validator、迁移、内容库安装和 AI 内容装配尚未实现，因此当前运行时只接受内置内容。
+当前实现进度：稳定 ID Registry、启动期 `EnginePlugin` 合同、内置武器/怪物只读快照和粗粒度武器 `behaviorId` 分派已落地。WeaponRecipe 原子 Registry、Compiler、ContentPack 类型、Validator、迁移、内容库安装和 AI 内容装配尚未实现，因此当前运行时只接受内置内容。
 
 ContentPack（内容包，即可以被验证、保存和安装的声明式玩法数据）是内置内容与 AI 生成内容进入游戏的唯一运行时协议。
 
@@ -109,32 +109,21 @@ interface WeaponBlueprintV1 {
   id: string
   name: string
   description: string
-  family: 'projectile' | 'strike' | 'aura' | 'orbit' | 'zone' | 'swing'
-  behaviorId: string
-  motionId?: string
-  stats: {
-    damage: number
-    cooldown: number
-    speed: number
-    area: number
-    count: number
-    pierce: number
-    duration: number
-    knockback: number
+  family: 'projectile'
+  recipe: ProjectileWeaponRecipeV1
+  progression: {
     maxLevel: number
+    perLevel: {
+      damage?: number
+      cooldown?: number
+      projectileSpeed?: number
+      projectileRadius?: number
+      count?: number
+      pierce?: number
+      lifetime?: number
+      knockback?: number
+    }
   }
-  growth: {
-    damage?: number
-    cooldown?: number
-    speed?: number
-    area?: number
-    count?: number
-    pierce?: number
-    duration?: number
-    knockback?: number
-  }
-  modifiers: string[]
-  visual: VisualRecipeV1
   balance: {
     budgetTier: 1 | 2 | 3 | 4 | 5
     intendedRole: 'single-target' | 'area' | 'control' | 'defense' | 'hybrid'
@@ -144,12 +133,13 @@ interface WeaponBlueprintV1 {
 
 要求：
 
-- `behaviorId`、`motionId` 和 Modifier 必须存在于冻结的 Engine Registry。
-- `family` 必须与行为和 Modifier 的兼容声明一致。
+- `recipe` 的 Trigger、Targeting、Emission、Motion、Collision、HitEffect、Lifecycle、Render 和 Modifier 引用必须存在于冻结的 Engine Registry。
+- 第一阶段只允许 `family: "projectile"`；Aura、Orbit、Strike、Zone 和 Swing 继续通过内置兼容适配器运行，不作为 AI 可安装配方。
 - 所有数值必须是有限数，禁止 `NaN`、`Infinity` 和隐式字符串转换。
-- 冷却、数量、持续时间、穿透和范围必须通过当前 Balance Policy 的硬边界。
-- `growth` 只能修改白名单属性，满级预算必须单独检查，不能只检查一级。
-- AI 不得声明任意 on-hit 表达式；效果只能引用注册的 Modifier。
+- 冷却、数量、持续时间、穿透、范围和 Lifecycle 派生数量必须通过当前 Balance Policy 的硬边界。
+- `progression.perLevel` 只能修改列出的白名单属性；一级、满级和兼容 Modifier 满层必须分别检查。
+- AI 不得声明任意 on-hit 表达式、字段 Patch 或 Modifier 公式；效果只能引用注册的原语。
+- 配方 Schema、原语目录、Modifier 装配顺序、运行时编译和示例见 [`WEAPON_RECIPE.md`](./WEAPON_RECIPE.md)。
 
 ## 6. 怪物蓝图
 
@@ -296,12 +286,13 @@ interface VisualRecipeV1 {
 2. **Schema**：字段、类型、长度、枚举和未知字段策略正确。
 3. **Identity**：Pack 和内容 ID 合法、唯一且属于正确命名空间。
 4. **Compatibility**：schema 和引擎版本兼容。
-5. **References**：所有行为、Pattern、资产和内部引用存在且兼容。
-6. **Graph**：状态图有界、可达且不会在单帧无限转移。
-7. **Numbers**：所有数字有限并处于硬边界。
-8. **Balance**：一级、满级、组合威胁和奖励预算通过。
-9. **Performance**：弹幕、召唤、范围查询、粒子和同时在场预算通过。
-10. **Policy**：文本长度、保留名称和内容安全策略通过。
+5. **References**：所有 Primitive、Modifier、Pattern、资产和内部引用存在且兼容。
+6. **Recipe**：武器配方可以解析并编译为无悬空引用的只读运行计划。
+7. **Graph**：状态图有界、可达且不会在单帧无限转移。
+8. **Numbers**：所有数字有限并处于硬边界。
+9. **Balance**：一级、满级、Modifier 满层、组合威胁和奖励预算通过。
+10. **Performance**：弹幕、派生深度、召唤、范围查询、粒子和同时在场预算通过。
+11. **Policy**：文本长度、保留名称和内容安全策略通过。
 
 任何错误都拒绝整个包。Validator 返回稳定错误码、字段路径和面向用户的简短原因；不得只返回模型生成的解释。
 
@@ -332,8 +323,9 @@ draft
 
 ## 13. 首版验收条件
 
-- 现有一件内置武器可以无行为变化地表示为 ContentPack。
-- 未知 `behaviorId`、越界数值、重复 ID 和图循环能被稳定拒绝。
+- 现有一件内置投射物武器可以无行为变化地表示为 ContentPack + WeaponRecipe。
+- 第二件投射物武器只增加配方数据，不增加内容专属执行分支。
+- 未知 Primitive、冲突 Modifier、越界数值、重复 ID 和图循环能被稳定拒绝。
 - AI Draft 无法绕过玩家确认进入 Registry。
 - Registry Snapshot 创建后不可被 Content Library 原地修改。
 - 保存并重新加载后，已接受内容保持完全相同的规则字段。

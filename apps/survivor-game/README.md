@@ -17,6 +17,7 @@
 - [产品方向](./docs/product/DIRECTION.md)
 - [目标架构](./docs/architecture/TARGET_ARCHITECTURE.md)
 - [ContentPack 规范](./docs/specs/CONTENT_PACK.md)
+- [WeaponRecipe 与弹幕原语规范](./docs/specs/WEAPON_RECIPE.md)
 - [AI 生成规范](./docs/specs/AI_GENERATION.md)
 - [Cherry MiniApp 运行规范](./docs/specs/CHERRY_RUNTIME.md)
 

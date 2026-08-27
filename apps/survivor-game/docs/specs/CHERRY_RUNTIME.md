@@ -134,6 +134,7 @@ interface AppStateEnvelopeV1 {
 - 解析或迁移失败时保留原始值，不写回默认状态覆盖用户数据。
 - 不用多个 Storage Key 模拟事务。
 - 大型、可重建的临时流式文本不进入主状态文档。
+- `contentLibrary` 保存玩家接受的 ContentPack 与 WeaponRecipe 原文，不保存已绑定 Handler、Registry 对象或 `WeaponRuntimePlan`；运行计划按 [`WEAPON_RECIPE.md`](./WEAPON_RECIPE.md) 在启动或安全检查点重建。
 
 ## 7. 保存时机
 

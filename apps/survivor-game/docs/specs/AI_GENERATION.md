@@ -16,13 +16,14 @@ AI 输出始终是候选 Draft。游戏规则只接受经过本地校验且被�
 
 第一阶段支持：
 
-- `weapon`：生成一件武器蓝图、文案和视觉配方。
+- `weapon`：生成一件武器蓝图、WeaponRecipe、文案和视觉配方。
 - `enemy`：生成一个怪物蓝图、攻击 Profile、行为图和视觉配方。
 - `behavior-mutation`：基于已有怪物生成一个有界行为变体。
 
 不支持：
 
 - 直接生成或执行代码。
+- 定义新的 Primitive、Modifier Handler 或任意字段变换公式。
 - 在单局帧循环中持续调用模型。
 - 让模型结算伤害、掉落、货币或胜负。
 - 让模型直接修改已经接受的 ContentPack。
@@ -106,6 +107,7 @@ interface GenerationJobV1 {
 - 任务目标和玩家意图。
 - 当前 ContentPack schema 的任务相关子集。
 - 可引用的行为、Pattern、Modifier 和视觉原语 ID。
+- 每个武器/弹幕原语的参数 Schema、兼容关系和成本摘要；格式遵循 [`WEAPON_RECIPE.md`](./WEAPON_RECIPE.md)。
 - 数值预算和硬限制摘要。
 - 一个最小有效示例。
 - 输出要求：只返回一个 JSON 对象，不返回 Markdown 解释。
@@ -159,6 +161,7 @@ AI 可以提出数值，本地 Balance Policy（平衡策略，即根据引擎�
 - 控制能力与伤害能力的叠加。
 - 怪物有效生命、接近时间、攻击覆盖率和奖励比。
 - 单次与持续弹幕数量。
+- WeaponRecipe 在一级、满级和兼容 Modifier 满层时的最坏弹幕与派生深度。
 - 召唤、范围查询和粒子开销。
 - Boss 招式前摇与安全窗口。
 

@@ -17,12 +17,14 @@
 - AI may propose content, narrative, visual recipes, and bounded behavior graphs. AI output is untrusted until it passes structural, reference, balance, and performance validation and the player accepts it.
 - Never execute generated JavaScript, use `eval`/`Function`, or dynamically import AI- or user-provided code.
 - Runtime-generated content must be declarative `ContentPack` data that composes registered engine primitives.
+- Weapon and projectile generation must use declarative `WeaponRecipe` data. Treat colors, sizes, speeds, and counts as bounded parameters; register targeting, emission, motion, collision, hit, lifecycle, modifier, and render rules as trusted primitives.
 - Do not call AI from the frame update loop. Generate only at an explicit forge, checkpoint, pause, or between-run boundary.
 
 ## Architecture rules
 
 - Preserve functional entity modules and data-driven balance.
 - New reusable behaviors register against stable behavior IDs. Avoid adding new dispatch branches keyed directly to individual content IDs when a behavior registry can own the variation.
+- Resolve recipes and modifier stacks into immutable runtime plans outside the frame loop; hot paths must not parse ContentPack JSON or perform string registry lookups.
 - Cross-system notifications use the typed event bus. State mutation remains owned by the relevant system or deterministic game kernel.
 - Keep hot-path entities pooled, use spatial queries for neighborhood searches, and enforce projectile/enemy/spawn caps for generated content.
 - Migrate incrementally. Registry adoption must preserve existing gameplay before AI-generated content is enabled.
@@ -38,6 +40,7 @@
 ## Specifications
 
 - Content schema and trust model: `docs/specs/CONTENT_PACK.md`
+- Weapon/projectile composition and modifier compilation: `docs/specs/WEAPON_RECIPE.md`
 - AI generation lifecycle: `docs/specs/AI_GENERATION.md`
 - Cherry runtime, permissions, persistence, and packaging: `docs/specs/CHERRY_RUNTIME.md`
 
