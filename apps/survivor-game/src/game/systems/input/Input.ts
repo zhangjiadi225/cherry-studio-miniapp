@@ -18,10 +18,7 @@ export class Input {
     }
   };
   private readonly handleKeyUp = (e: KeyboardEvent) => this.keys.delete(e.code);
-  private readonly handleBlur = () => {
-    this.keys.clear();
-    this.resetTouch();
-  };
+  private readonly handleBlur = () => this.reset();
   private readonly handleTouchStart = (e: TouchEvent) => {
     e.preventDefault();
     const t = e.touches[0];
@@ -62,6 +59,12 @@ export class Input {
     this.canvas.removeEventListener('touchstart', this.handleTouchStart);
     this.canvas.removeEventListener('touchmove', this.handleTouchMove);
     this.canvas.removeEventListener('touchend', this.handleTouchEnd);
+    this.reset();
+  }
+
+  reset() {
+    this.keys.clear();
+    this.resetTouch();
   }
 
   private resetTouch() {

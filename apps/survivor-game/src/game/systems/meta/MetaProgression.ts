@@ -80,7 +80,7 @@ export interface MetaState {
   lastRun?: RunSummary;
 }
 
-const META_STORAGE_KEY = 'survivor-game:meta:v1';
+export const META_STORAGE_KEY = 'survivor-game:meta:v1';
 
 export const META_UPGRADES: MetaUpgradeNode[] = [
   {
@@ -399,9 +399,8 @@ export function createDefaultMetaState(): MetaState {
   };
 }
 
-export function loadMetaState(): MetaState {
+export function loadMetaState(raw: string | null = null): MetaState {
   try {
-    const raw = localStorage.getItem(META_STORAGE_KEY);
     if (!raw) return createDefaultMetaState();
     const parsed = JSON.parse(raw) as Partial<MetaState>;
     const base = createDefaultMetaState();
@@ -422,8 +421,8 @@ export function loadMetaState(): MetaState {
   }
 }
 
-export function saveMetaState(meta: MetaState) {
-  localStorage.setItem(META_STORAGE_KEY, JSON.stringify(meta));
+export function serializeMetaState(meta: MetaState): string {
+  return JSON.stringify(meta);
 }
 
 export function hasMetaUpgrade(meta: MetaState, id: MetaUpgradeId): boolean {
@@ -454,7 +453,6 @@ export function buyMetaUpgrade(meta: MetaState, id: MetaUpgradeId): MetaState {
     soulFire: meta.soulFire - node.cost,
     unlockedUpgrades: [...meta.unlockedUpgrades, id],
   };
-  saveMetaState(next);
   return next;
 }
 
@@ -464,15 +462,11 @@ export function getSkinById(id?: string): CharacterSkin | undefined {
 
 export function selectSkin(meta: MetaState, id: SkinId): MetaState {
   if (!getSkinById(id)) return meta;
-  const next = { ...meta, selectedSkin: id };
-  saveMetaState(next);
-  return next;
+  return { ...meta, selectedSkin: id };
 }
 
 export function selectRunDifficulty(meta: MetaState, id: RunDifficultyId): MetaState {
-  const next = { ...meta, selectedDifficulty: getRunDifficultyPreset(id).id };
-  saveMetaState(next);
-  return next;
+  return { ...meta, selectedDifficulty: getRunDifficultyPreset(id).id };
 }
 
 export function getInitialShards(meta: MetaState): number {
@@ -550,7 +544,6 @@ export function applyRunReward(
       difficultyId: runDifficulty.id,
     },
   };
-  saveMetaState(next);
   return next;
 }
 

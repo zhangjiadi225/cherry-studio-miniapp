@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "package:miniapp:dev": "sh scripts/package-miniapp-dev.sh",
     "preview": "vite preview",
     "test": "vitest"
   },

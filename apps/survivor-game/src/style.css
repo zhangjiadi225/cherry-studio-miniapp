@@ -38,6 +38,18 @@ html, body {
   z-index: 100;
 }
 
+#loading.loading-error {
+  padding: 32px;
+  color: #ff8a8a;
+  font-size: 16px;
+  text-align: center;
+  cursor: pointer;
+}
+
+#loading.loading-error::after {
+  display: none;
+}
+
 #loading::after {
   content: '';
   width: 40px;

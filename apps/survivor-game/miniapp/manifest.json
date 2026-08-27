@@ -1,0 +1,18 @@
+{
+  "id": "io.github.zhangjiadi225.survivor-game",
+  "name": {
+    "zh": "暗夜幸存者",
+    "en": "Night Survivor"
+  },
+  "description": {
+    "zh": "一款暗黑幻想风格的生存 Roguelike 游戏。击败夜潮、构筑武器并点亮永久成长星图。",
+    "en": "A dark-fantasy survival roguelike about defeating the night tide, building weapons, and unlocking permanent progression."
+  },
+  "version": "0.1.0-dev.1",
+  "entry": "index.html",
+  "icon": {
+    "path": "sprites/units/player_wanderer.png",
+    "sha256": "e68985ba44d8c57c2fa0a2df6376fa97a37ff04b9e0e41810b84e77c944ee0d8"
+  },
+  "permissions": ["storage.get", "storage.set"]
+}

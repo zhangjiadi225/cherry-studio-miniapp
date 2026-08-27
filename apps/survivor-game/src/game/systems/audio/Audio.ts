@@ -4,16 +4,17 @@ import { GENERIC_MODIFIER_DATA } from '../../constants';
 
 type OscillatorKind = OscillatorType;
 
-const MUTE_STORAGE_KEY = 'survivor_audio_muted';
+export const MUTE_STORAGE_KEY = 'survivor_audio_muted';
 
 export class AudioSystem {
   private context?: AudioContext;
   private master?: GainNode;
-  private muted = localStorage.getItem(MUTE_STORAGE_KEY) === '1';
+  private muted: boolean;
   private readonly unsubs: Array<() => void> = [];
   private readonly modifierSoundTimes = new Map<GenericModifierType, number>();
 
-  constructor() {
+  constructor(muted = false) {
+    this.muted = muted;
     this.unsubs.push(
       eventBus.on(GameEvent.PLAYER_HIT, () => this.playHit()),
       eventBus.on(GameEvent.ENEMY_DEATH, () => this.playDeath()),
@@ -44,8 +45,11 @@ export class AudioSystem {
 
   setMuted(muted: boolean) {
     this.muted = muted;
-    localStorage.setItem(MUTE_STORAGE_KEY, muted ? '1' : '0');
     if (!muted) void this.ensureContext()?.resume();
+  }
+
+  suspend() {
+    void this.context?.suspend();
   }
 
   private ensureContext() {

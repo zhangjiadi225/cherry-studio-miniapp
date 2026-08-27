@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { GenericModifierType } from '../../types';
 import { RUN_DIFFICULTY_PRESETS } from '../../data/runDifficulties';
 import {
@@ -14,10 +14,6 @@ import {
   META_UPGRADES,
   type MetaUpgradeId,
 } from './MetaProgression';
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe('calculateSoulFireReward', () => {
   it('grants a small guaranteed settlement reward for short failed runs', () => {
@@ -44,11 +40,6 @@ describe('calculateSoulFireReward', () => {
 
 describe('applyRunReward', () => {
   it('can settle only endless reward delta without counting a second run', () => {
-    const store = new Map<string, string>();
-    vi.stubGlobal('localStorage', {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => store.set(key, value),
-    });
     const meta = createDefaultMetaState();
     const firstReward = calculateSoulFireReward(
       { time: 720, kills: 800, level: 20 },
@@ -136,15 +127,7 @@ describe('meta star chart', () => {
   });
 
   it('does not migrate removed legacy upgrade ids into the star chart', () => {
-    const store = new Map<string, string>([
-      ['survivor_meta_v1', JSON.stringify({ soulFire: 20, unlockedUpgrades: ['module_cards'] })],
-    ]);
-    vi.stubGlobal('localStorage', {
-      getItem: (key: string) => store.get(key) ?? null,
-      setItem: (key: string, value: string) => store.set(key, value),
-    });
-
-    const meta = loadMetaState();
+    const meta = loadMetaState(JSON.stringify({ soulFire: 20, unlockedUpgrades: ['module_cards'] }));
 
     expect(meta.unlockedUpgrades).toEqual([]);
     expect(meta.selectedDifficulty).toBe('hard');

@@ -34,7 +34,7 @@ import {
 import { pushDamageNumber, updateDamageNumber } from './effects/DamageNumber';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
-  loadMetaState, applyRunReward, getInitialShards,
+  applyRunReward, getInitialShards,
   hasOpeningCardDraft, buyMetaUpgrade, selectSkin, selectRunDifficulty, CHARACTER_SKINS,
 } from './systems/meta/MetaProgression';
 import { getRunDifficultyPreset, type RunDifficultyPreset } from './data/runDifficulties';
@@ -51,6 +51,14 @@ type ObjectiveBeat = {
   message: string;
   eliteAmbush?: number;
 };
+
+export interface GameOptions {
+  meta: MetaState;
+  muted: boolean;
+  perfEnabled: boolean;
+  persistMeta(meta: MetaState): Promise<void>;
+  persistMuted(muted: boolean): Promise<void>;
+}
 
 function formatClock(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
@@ -79,16 +87,18 @@ export class Game {
   private input: Input;
   private renderer: Renderer;
   private spawner = new Spawner();
-  private audio = new AudioSystem();
+  private audio: AudioSystem;
   private projectileCombat = new ProjectileCombat();
   private shop = new ShopSystem();
   private mapSystem = new MapSystem();
   private enemyGrid = new SpatialGrid<Enemy>(240);
   private enemyQuery = new SpatialEnemyQuery(this.enemyGrid);
   private camera: Camera;
-  private meta: MetaState = loadMetaState();
-  private runDifficulty: RunDifficultyPreset = getRunDifficultyPreset(this.meta.selectedDifficulty);
-  private objectiveBeats: ObjectiveBeat[] = getObjectiveBeats(this.runDifficulty);
+  private meta: MetaState;
+  private runDifficulty: RunDifficultyPreset;
+  private objectiveBeats: ObjectiveBeat[];
+  private readonly persistMeta: GameOptions['persistMeta'];
+  private readonly persistMuted: GameOptions['persistMuted'];
   private desktopTab: DesktopTab = 'start';
   private codexTab: CodexTab = 'weapons';
   private selectedStartingWeapon: WeaponType = WeaponType.MAGIC_WAND;
@@ -110,6 +120,7 @@ export class Game {
   private lastTime = 0;
   private animationFrameId = 0;
   private destroyed = false;
+  private hostVisible = true;
   private levelUpQueue = 0;
   private bossWarningTimer = 0;
   private bossWarningName = '';
@@ -155,25 +166,25 @@ export class Game {
   private readonly handleCanvasClick = (e: MouseEvent) => this.onClick(e);
   private readonly handleCanvasMouseMove = (e: MouseEvent) => this.onMouseMove(e);
   private readonly handleCanvasTouchStart = (e: TouchEvent) => this.onTouchStart(e);
-  private readonly handleVisibilityChange = () => {
-    if (document.hidden && gameState.is('playing')) {
-      gameState.transition('pause');
-    }
-  };
   private readonly handleAnimationFrame = (time: number) => this.loop(time);
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, options: GameOptions) {
     this.canvas = canvas;
+    this.meta = options.meta;
+    this.runDifficulty = getRunDifficultyPreset(this.meta.selectedDifficulty);
+    this.objectiveBeats = getObjectiveBeats(this.runDifficulty);
+    this.persistMeta = options.persistMeta;
+    this.persistMuted = options.persistMuted;
     this.input = new Input(canvas);
     this.renderer = new Renderer(canvas);
+    this.audio = new AudioSystem(options.muted);
     this.camera = createCamera();
-    this.perfEnabled = this.shouldShowPerfOverlay();
+    this.perfEnabled = options.perfEnabled;
 
     window.addEventListener('keydown', this.handleKeyDown);
     canvas.addEventListener('click', this.handleCanvasClick);
     canvas.addEventListener('mousemove', this.handleCanvasMouseMove);
     canvas.addEventListener('touchstart', this.handleCanvasTouchStart, { passive: true });
-    document.addEventListener('visibilitychange', this.handleVisibilityChange);
 
     this.lastTime = performance.now();
     this.animationFrameId = requestAnimationFrame(this.handleAnimationFrame);
@@ -186,11 +197,29 @@ export class Game {
     this.canvas.removeEventListener('click', this.handleCanvasClick);
     this.canvas.removeEventListener('mousemove', this.handleCanvasMouseMove);
     this.canvas.removeEventListener('touchstart', this.handleCanvasTouchStart);
-    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
-    cancelAnimationFrame(this.animationFrameId);
+    if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+    this.animationFrameId = 0;
     this.input.destroy();
     this.audio.destroy();
     this.renderer.destroy();
+  }
+
+  setHostVisible(visible: boolean) {
+    if (this.destroyed || this.hostVisible === visible) return;
+    this.hostVisible = visible;
+
+    if (!visible) {
+      if (gameState.is('playing')) gameState.transition('pause');
+      this.input.reset();
+      this.audio.suspend();
+      if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = 0;
+      this.commitMetaState();
+      return;
+    }
+
+    this.lastTime = performance.now();
+    this.animationFrameId = requestAnimationFrame(this.handleAnimationFrame);
   }
 
   // ──────────────────────────── Input Routing ────────────────────────────
@@ -279,7 +308,8 @@ export class Game {
   private handlePlayingHudCanvasPoint(x: number, y: number): boolean {
     const audioBtn = this.renderer.getAudioButtonRect();
     if (x >= audioBtn.x && x <= audioBtn.x + audioBtn.w && y >= audioBtn.y && y <= audioBtn.y + audioBtn.h) {
-      this.audio.toggleMuted();
+      const muted = this.audio.toggleMuted();
+      void this.persistMuted(muted).catch((error) => console.error('Failed to persist audio setting', error));
       return true;
     }
 
@@ -370,6 +400,7 @@ export class Game {
       for (const card of difficultyCards) {
         if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
           this.meta = selectRunDifficulty(this.meta, card.id);
+          this.commitMetaState();
           this.runDifficulty = getRunDifficultyPreset(this.meta.selectedDifficulty);
           this.objectiveBeats = getObjectiveBeats(this.runDifficulty);
           return;
@@ -393,7 +424,11 @@ export class Game {
       const nodeId = this.getMetaStarIdAtPoint(x, y);
       if (nodeId) {
         this.hoveredStarId = nodeId;
-        this.meta = buyMetaUpgrade(this.meta, nodeId);
+        const nextMeta = buyMetaUpgrade(this.meta, nodeId);
+        if (nextMeta !== this.meta) {
+          this.meta = nextMeta;
+          this.commitMetaState();
+        }
       }
       return;
     }
@@ -403,6 +438,7 @@ export class Game {
       for (const card of cards) {
         if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
           this.meta = selectSkin(this.meta, CHARACTER_SKINS[card.index].id);
+          this.commitMetaState();
           return;
         }
       }
@@ -496,7 +532,8 @@ export class Game {
   // ──────────────────────────── Game Loop ────────────────────────────
 
   private loop(time: number) {
-    if (this.destroyed) return;
+    this.animationFrameId = 0;
+    if (this.destroyed || !this.hostVisible) return;
     const rawDt = (time - this.lastTime) / 1000;
     this.lastTime = time;
     if (rawDt <= 1.0) {
@@ -513,9 +550,8 @@ export class Game {
     this.animationFrameId = requestAnimationFrame(this.handleAnimationFrame);
   }
 
-  private shouldShowPerfOverlay(): boolean {
-    const params = new URLSearchParams(window.location.search);
-    return params.has('perf') || window.localStorage.getItem('survivor_perf') === '1';
+  private commitMetaState() {
+    void this.persistMeta(this.meta).catch((error) => console.error('Failed to persist meta progression', error));
   }
 
   private recordPerformanceStats(rawDt: number, updateMs: number, renderMs: number, frameMs: number) {
@@ -916,6 +952,7 @@ export class Game {
       previousSoulFireReward: this.paidSoulFireReward,
       countRun: !this.endlessModeActive,
     });
+    this.commitMetaState();
     this.paidSoulFireReward += this.meta.soulFire - previousSoulFire;
     this.gameOverStats = {
       time: this.elapsed,
