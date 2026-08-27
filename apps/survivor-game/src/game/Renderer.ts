@@ -16,7 +16,6 @@ import type {
   WeaponType,
 } from './types';
 import type { CodexTab, DesktopTab, MetaState, MetaUpgradeNode } from './systems/meta/MetaProgression';
-import type { RunDifficultyId } from './data/runDifficulties';
 import { COLORS } from './constants';
 import { WorldRenderer, type RenderContext } from './renderers/WorldRenderer';
 import {
@@ -30,14 +29,9 @@ import {
   drawUI, drawMinimap, drawBossBar, drawVirtualJoystick,
   drawAudioButton as drawAudioBtn, drawPauseButton as drawPauseBtn,
   getAudioButtonRect as getAudioRect,
-  getDesktopStartButtonRect as getStartButtonRect,
-  getBattleSetupBackButtonRect as getBattleSetupBackRect,
-  getStartingWeaponCardRects as getStartingWeaponRects,
-  type StartingWeaponView,
   getMetaStarNodeRects as getStarNodeRects,
   getSkinCardRects as getSkinRects,
   getCodexTabRects as getCodexRects,
-  getRunDifficultyCardRects as getDifficultyRects,
   getGameOverButtonRects as getGameOverRects,
   getDesktopTabRects as getTabRects,
   getPauseButtonRect as getPauseRect,
@@ -117,20 +111,10 @@ export class Renderer {
 
   getPauseButtonRect() { return getPauseRect(this.w); }
   getAudioButtonRect() { return getAudioRect(this.w); }
-  getDesktopStartButtonRect() { return getStartButtonRect(this.w, this.h); }
-  getBattleSetupBackButtonRect() { return getBattleSetupBackRect(this.w, this.h); }
-  getStartingWeaponCardRects(
-    weapons: readonly StartingWeaponView[]
-  ): Array<{ x: number; y: number; w: number; h: number; definitionId: string }> {
-    return getStartingWeaponRects(this.w, this.h, weapons);
-  }
   getDesktopTabRects() { return getTabRects(this.w, this.h); }
   getMetaStarNodeRects() { return getStarNodeRects(this.w, this.h); }
   getSkinCardRects() { return getSkinRects(this.w, this.h); }
   getCodexTabRects() { return getCodexRects(this.w, this.h); }
-  getRunDifficultyCardRects(): Array<{ x: number; y: number; w: number; h: number; id: RunDifficultyId }> {
-    return getDifficultyRects(this.w, this.h);
-  }
   getGameOverButtonRects(showEndless = false) { return getGameOverRects(this.w, this.h, showEndless); }
 
   // ─── World ───
@@ -169,11 +153,9 @@ export class Renderer {
     meta: MetaState,
     tab: DesktopTab,
     codexTab: CodexTab,
-    selectedStartingWeaponId: string,
-    startingWeapons: readonly StartingWeaponView[],
     hoveredStarId?: MetaUpgradeNode['id']
   ) {
-    drawDesktop(this.rc, meta, tab, codexTab, selectedStartingWeaponId, startingWeapons, hoveredStarId);
+    drawDesktop(this.rc, meta, tab, codexTab, hoveredStarId);
   }
   drawPaused(player: Player, elapsed: number, killCount: number, difficultyName: string) {
     drawPaused(this.rc, player, elapsed, killCount, difficultyName);

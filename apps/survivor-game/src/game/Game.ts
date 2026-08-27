@@ -36,7 +36,11 @@ import {
   applyRunReward, getInitialShards,
   hasOpeningCardDraft, buyMetaUpgrade, selectSkin, selectRunDifficulty, CHARACTER_SKINS,
 } from './systems/meta/MetaProgression';
-import { getRunDifficultyPreset, type RunDifficultyPreset } from './data/runDifficulties';
+import {
+  getRunDifficultyPreset,
+  type RunDifficultyId,
+  type RunDifficultyPreset,
+} from './data/runDifficulties';
 import { getDifficultyParams } from './data/difficulty';
 import { MapSystem } from './systems/map/MapSystem';
 import { SpatialEnemyQuery } from './systems/enemy/EnemyQuery';
@@ -254,18 +258,36 @@ export class Game {
   }
 
   getBattleSetupSummary(): {
+    difficultyId: RunDifficultyId;
     difficultyName: string;
     difficultyDetail: string;
+    weaponId: string;
     weaponName: string;
     weaponIcon: string;
   } {
     const weapon = this.content.weapons.get(this.selectedStartingWeaponId) ?? this.content.startingWeapons[0];
     return {
+      difficultyId: this.runDifficulty.id,
       difficultyName: this.runDifficulty.name,
       difficultyDetail: this.runDifficulty.shortName,
+      weaponId: weapon?.id ?? 'builtin.weapon.magic-wand',
       weaponName: weapon?.name ?? '魔法法器',
       weaponIcon: weapon?.icon ?? '✦',
     };
+  }
+
+  setRunDifficulty(id: RunDifficultyId): void {
+    if (!gameState.is('menu')) return;
+    this.meta = selectRunDifficulty(this.meta, id);
+    this.runDifficulty = getRunDifficultyPreset(this.meta.selectedDifficulty);
+    this.objectiveBeats = getObjectiveBeats(this.runDifficulty);
+    this.commitMetaState();
+  }
+
+  setStartingWeapon(id: string): void {
+    if (!gameState.is('menu')) return;
+    if (!this.content.startingWeapons.some((weapon) => weapon.id === id)) return;
+    this.selectedStartingWeaponId = id;
   }
 
   startConfiguredRun(): void {
@@ -399,14 +421,6 @@ export class Game {
   }
 
   private handleDesktopKey(e: KeyboardEvent) {
-    if (this.desktopTab === 'start') {
-      if (e.code === 'Escape') this.setDesktopTab('home');
-      else if (e.code === 'KeyQ') this.shiftStartingWeapon(-1);
-      else if (e.code === 'KeyE') this.shiftStartingWeapon(1);
-      else if (e.code === 'Enter' || e.code === 'Space') this.startGame();
-      return;
-    }
-
     if (e.code === 'Digit1') this.setDesktopTab('home');
     else if (e.code === 'Digit2') this.setDesktopTab('skins');
     else if (e.code === 'Digit3') this.setDesktopTab('growth');
@@ -441,49 +455,12 @@ export class Game {
     this.codexTab = tabs[(index + dir + tabs.length) % tabs.length];
   }
 
-  private shiftStartingWeapon(dir: number) {
-    const weapons = this.content.startingWeapons;
-    if (weapons.length === 0) return;
-    const index = Math.max(0, weapons.findIndex((weapon) => weapon.id === this.selectedStartingWeaponId));
-    const next = weapons[(index + dir + weapons.length) % weapons.length];
-    this.selectedStartingWeaponId = next?.id ?? 'builtin.weapon.magic-wand';
-  }
-
   private handleDesktopClick(e: MouseEvent | TouchEvent) {
     const rect = this.canvas.getBoundingClientRect();
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const x = clientX - rect.left;
     const y = clientY - rect.top;
-
-    if (this.desktopTab === 'start') {
-      if (this.isPointInRect(x, y, this.renderer.getBattleSetupBackButtonRect())) {
-        this.setDesktopTab('home');
-        return;
-      }
-      const difficultyCards = this.renderer.getRunDifficultyCardRects();
-      for (const card of difficultyCards) {
-        if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
-          this.meta = selectRunDifficulty(this.meta, card.id);
-          this.commitMetaState();
-          this.runDifficulty = getRunDifficultyPreset(this.meta.selectedDifficulty);
-          this.objectiveBeats = getObjectiveBeats(this.runDifficulty);
-          return;
-        }
-      }
-      const weaponCards = this.renderer.getStartingWeaponCardRects(this.content.startingWeapons);
-      for (const card of weaponCards) {
-        if (x >= card.x && x <= card.x + card.w && y >= card.y && y <= card.y + card.h) {
-          this.selectedStartingWeaponId = card.definitionId;
-          return;
-        }
-      }
-      const button = this.renderer.getDesktopStartButtonRect();
-      if (x >= button.x && x <= button.x + button.w && y >= button.y && y <= button.y + button.h) {
-        this.startGame();
-      }
-      return;
-    }
 
     const tabs = this.renderer.getDesktopTabRects();
     for (const tab of tabs) {
@@ -1158,8 +1135,6 @@ export class Game {
         this.meta,
         this.desktopTab,
         this.codexTab,
-        this.selectedStartingWeaponId,
-        this.content.startingWeapons,
         this.hoveredStarId
       );
       return;

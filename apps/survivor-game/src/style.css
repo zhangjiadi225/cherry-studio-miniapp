@@ -766,6 +766,329 @@ html, body {
   }
 }
 
+/* 首页直接完成生成、难度与武器配置；保留紧凑的单一主操作。 */
+.engine-home-shell {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  width: min(1460px, 100%);
+}
+
+.engine-home-workspace {
+  min-height: 620px;
+  padding: clamp(28px, 3.6vw, 52px);
+}
+
+.engine-home-intro {
+  max-width: min(780px, 72%);
+}
+
+.engine-home-workspace h1 {
+  font-size: clamp(29px, 3.2vw, 44px);
+}
+
+.engine-home-description {
+  margin-top: 10px;
+  font-size: clamp(12px, 1vw, 14px);
+}
+
+.engine-home-ai-connection {
+  position: absolute;
+  top: clamp(30px, 3.8vw, 54px);
+  right: clamp(30px, 3.8vw, 54px);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  border: 1px solid rgba(85, 230, 255, 0.2);
+  border-radius: 999px;
+  padding: 7px 12px;
+  color: rgba(211, 236, 247, 0.76);
+  background: rgba(8, 24, 43, 0.66);
+  font-size: 11px;
+}
+
+.engine-home-ai-mark {
+  color: var(--engine-cyan);
+}
+
+.engine-home-ai-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4de5ab;
+  box-shadow: 0 0 9px rgba(77, 229, 171, 0.72);
+}
+
+.engine-home-ai-connection[data-status='checking'] .engine-home-ai-dot {
+  background: #ffd166;
+  box-shadow: 0 0 9px rgba(255, 209, 102, 0.68);
+}
+
+.engine-home-ai-connection[data-status='denied'] .engine-home-ai-dot,
+.engine-home-ai-connection[data-status='unavailable'] .engine-home-ai-dot {
+  background: #ff8790;
+  box-shadow: 0 0 9px rgba(255, 97, 110, 0.62);
+}
+
+.engine-home-composer-block {
+  margin-top: clamp(20px, 3vh, 30px);
+}
+
+.engine-home-composer {
+  margin-top: 0;
+  border-radius: 13px;
+  padding: 13px 15px 12px;
+}
+
+.engine-home-composer textarea {
+  min-height: 50px;
+  padding: 8px 0 4px;
+  font-size: 13px;
+}
+
+.engine-home-generate {
+  min-width: 146px;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 12px;
+}
+
+.engine-home-feedback {
+  min-height: 16px;
+  margin: 7px 2px 0;
+  font-size: 9px;
+}
+
+.engine-home-configurator {
+  overflow: hidden;
+  margin-top: clamp(16px, 2.4vh, 24px);
+  border: 1px solid rgba(104, 145, 197, 0.22);
+  border-radius: 13px;
+  background: rgba(5, 14, 31, 0.62);
+}
+
+.engine-home-config-row {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: center;
+  min-height: 84px;
+  gap: 18px;
+  border-bottom: 1px solid rgba(104, 145, 197, 0.15);
+  padding: 11px 16px;
+}
+
+.engine-home-config-row h2 {
+  color: rgba(210, 228, 246, 0.72);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.engine-home-config-row[data-kind='generated'] h2 {
+  color: rgba(190, 174, 255, 0.84);
+}
+
+.engine-home-difficulty-options,
+.engine-home-weapon-options {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.engine-home-difficulty-option {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-content: center;
+  justify-content: start;
+  flex: 0 0 154px;
+  min-height: 58px;
+  column-gap: 8px;
+  border: 1px solid rgba(108, 149, 197, 0.24);
+  border-radius: 9px;
+  padding: 9px 11px;
+  text-align: left;
+  color: #dce9f6;
+  background: rgba(12, 27, 50, 0.72);
+  font: inherit;
+  cursor: pointer;
+}
+
+.engine-home-difficulty-option > span:first-child {
+  grid-row: 1 / -1;
+  align-self: center;
+  color: rgba(121, 207, 235, 0.76);
+  font-size: 18px;
+}
+
+.engine-home-difficulty-option strong {
+  font-size: 12px;
+}
+
+.engine-home-difficulty-option > span:last-child {
+  color: rgba(147, 176, 207, 0.58);
+  font-size: 9px;
+}
+
+.engine-home-difficulty-option:hover,
+.engine-home-difficulty-option:focus-visible,
+.engine-home-weapon-option:hover,
+.engine-home-weapon-option:focus-visible {
+  border-color: rgba(85, 230, 255, 0.5);
+  outline: none;
+  background: rgba(18, 46, 76, 0.76);
+}
+
+.engine-home-difficulty-option[data-selected='true'] {
+  border-color: rgba(85, 230, 255, 0.8);
+  color: #f4fdff;
+  background: linear-gradient(135deg, rgba(31, 103, 137, 0.54), rgba(15, 43, 72, 0.86));
+  box-shadow: inset 0 0 18px rgba(85, 230, 255, 0.08);
+}
+
+.engine-home-weapon-option {
+  display: flex;
+  align-items: center;
+  flex: 0 0 124px;
+  min-height: 58px;
+  gap: 9px;
+  border: 1px solid rgba(108, 149, 197, 0.24);
+  border-radius: 9px;
+  padding: 8px 10px;
+  text-align: left;
+  color: rgba(220, 234, 247, 0.78);
+  background: rgba(12, 27, 50, 0.7);
+  font: inherit;
+  cursor: pointer;
+}
+
+.engine-home-weapon-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--engine-cyan);
+  background: rgba(63, 163, 202, 0.13);
+  font-size: 18px;
+}
+
+.engine-home-weapon-option strong {
+  overflow: hidden;
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.engine-home-weapon-option[data-generated='true'] .engine-home-weapon-icon {
+  color: #b7a7ff;
+  background: rgba(122, 91, 227, 0.16);
+}
+
+.engine-home-weapon-option[data-generated='true']:hover,
+.engine-home-weapon-option[data-generated='true']:focus-visible,
+.engine-home-weapon-option[data-generated='true'][data-selected='true'] {
+  border-color: rgba(155, 134, 255, 0.68);
+}
+
+.engine-home-weapon-option[data-selected='true'] {
+  border-color: rgba(85, 230, 255, 0.78);
+  color: #f4fdff;
+  background: linear-gradient(135deg, rgba(27, 88, 119, 0.5), rgba(15, 39, 67, 0.86));
+}
+
+.engine-home-weapon-option[data-generated='true'][data-selected='true'] {
+  background: linear-gradient(135deg, rgba(80, 57, 153, 0.5), rgba(29, 31, 70, 0.86));
+}
+
+.engine-home-weapon-empty {
+  align-self: center;
+  margin: 0;
+  color: rgba(159, 180, 205, 0.5);
+  font-size: 10px;
+}
+
+.engine-home-configurator-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 64px;
+  gap: 18px;
+  padding: 10px 16px;
+  background: rgba(8, 20, 40, 0.44);
+}
+
+.engine-home-selection-summary {
+  color: rgba(170, 198, 222, 0.62);
+  font-size: 10px;
+}
+
+.engine-home-start {
+  min-width: 154px;
+  border: 1px solid rgba(255, 224, 134, 0.72);
+  border-radius: 8px;
+  padding: 10px 17px;
+  color: #271704;
+  background: linear-gradient(135deg, #ffd96f, #f1ad47);
+  box-shadow: 0 8px 22px rgba(226, 157, 59, 0.16), inset 0 1px rgba(255, 255, 255, 0.55);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.engine-home-start:hover,
+.engine-home-start:focus-visible {
+  outline: none;
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 800px) {
+  .engine-home-workspace {
+    padding: 28px 20px 24px;
+  }
+
+  .engine-home-intro {
+    max-width: 100%;
+  }
+
+  .engine-home-ai-connection {
+    position: static;
+    width: fit-content;
+    margin-top: 14px;
+  }
+
+  .engine-home-config-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 560px) {
+  .engine-home-brand > span:last-child > span {
+    display: none;
+  }
+
+  .engine-home-configurator-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .engine-home-selection-summary {
+    text-align: right;
+  }
+
+  .engine-home-start {
+    width: 100%;
+  }
+}
+
 .weapon-forge-launch {
   position: fixed;
   right: max(18px, env(safe-area-inset-right));

@@ -7,8 +7,8 @@ import { createBuiltinGameContentSnapshot } from './content/runtime/GameContentS
 import { createAppHost } from './platform/AppHost';
 import { AppStateStore } from './platform/AppStateStore';
 import { installDevelopmentCherryMock } from './platform/DevelopmentCherryMock';
-import { APP_VERSION } from './application/AppVersion';
 import { EngineHomeScreen } from './ui/EngineHomeScreen';
+import { RUN_DIFFICULTY_ORDER, RUN_DIFFICULTY_PRESETS } from './game/data/runDifficulties';
 
 installDevelopmentCherryMock();
 
@@ -52,25 +52,27 @@ async function bootstrap() {
     onOpenChange: (open) => game.setExternalUiOpen(open),
     onAccepted: () => window.location.reload(),
   });
-  const recentGeneratedWeapon = [...content.startingWeapons]
-    .reverse()
-    .find((weapon) => weapon.generated);
   const homeScreen = new EngineHomeScreen({
-    appVersion: APP_VERSION,
-    primitiveCount: content.weaponCapabilityCatalog.primitives.length,
-    modifierCount: content.weaponCapabilityCatalog.modifiers.length,
-    enabledPackCount: Math.max(0, content.packIds.length - 1),
+    difficulties: RUN_DIFFICULTY_ORDER.map((id) => {
+      const preset = RUN_DIFFICULTY_PRESETS[id];
+      return {
+        id,
+        name: preset.name,
+        detail: preset.shortName,
+        icon: preset.icon,
+      };
+    }),
+    weapons: content.startingWeapons.map((weapon) => ({
+      id: weapon.id,
+      name: weapon.name,
+      icon: weapon.icon,
+      generated: weapon.generated,
+    })),
     battleSetup: game.getBattleSetupSummary(),
-    recentWeapon: recentGeneratedWeapon
-      ? {
-          name: recentGeneratedWeapon.name,
-          icon: recentGeneratedWeapon.icon,
-          description: recentGeneratedWeapon.desc,
-        }
-      : undefined,
     onGenerate: (intent) => forgePanel.openWithIntent(intent, true),
+    onSelectDifficulty: (id) => game.setRunDifficulty(id),
+    onSelectWeapon: (id) => game.setStartingWeapon(id),
     onStartBattle: () => game.startConfiguredRun(),
-    onOpenBattleSetup: () => game.openDesktopTab('start'),
     onOpenContentLibrary: () => game.openContentLibrary(),
     onOpenSkins: () => game.openDesktopTab('skins'),
     onOpenGrowth: () => game.openDesktopTab('growth'),

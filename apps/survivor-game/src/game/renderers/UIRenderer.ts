@@ -13,17 +13,11 @@ import type {
 import {
   COLORS, GAME_DURATION, WEAPON_DATA, PASSIVE_DATA, ENEMY_DATA,
   GENERIC_MODIFIER_DATA, UPGRADE_RARITY_DATA, getWeaponMetadataLabel,
-  PLAYER_WEAPON_SLOT_LIMIT,
 } from '../constants';
 import {
   type CodexTab, type DesktopTab, type MetaState, type MetaUpgradeNode,
   META_UPGRADES, CHARACTER_SKINS, hasMetaUpgrade, canBuyMetaUpgrade,
 } from '../systems/meta/MetaProgression';
-import {
-  RUN_DIFFICULTY_ORDER,
-  RUN_DIFFICULTY_PRESETS,
-  type RunDifficultyId,
-} from '../data/runDifficulties';
 import { getWeaponEvolutionIds, getWeaponEvolutionSummary } from '../data/weaponEvolutions';
 import { getShopLayout, isMobileViewport } from '../systems/upgrade/ShopLayout';
 import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
@@ -706,112 +700,12 @@ const DESKTOP_FONT = '"Segoe UI", "PingFang SC", sans-serif';
 
 type Rect = { x: number; y: number; w: number; h: number };
 
-export type StartingWeaponView = {
-  readonly id: string;
-  readonly name: string;
-  readonly icon: string;
-  readonly legacyType: WeaponType;
-  readonly generated: boolean;
-};
-
 type MenuLayout = {
   content: Rect;
   rail: Rect;
 };
 
 const DESKTOP_TABS: DesktopTab[] = ['home', 'skins', 'growth', 'codex'];
-
-export function getBattleSetupBackButtonRect(w: number, h: number): Rect {
-  const mobile = isMobileViewport(w, h);
-  return {
-    x: mobile ? 16 : Math.max(24, w * 0.035),
-    y: mobile ? 16 : Math.max(24, h * 0.035),
-    w: mobile ? 96 : 118,
-    h: mobile ? 40 : 44,
-  };
-}
-
-export function getDesktopStartButtonRect(w: number, h: number): Rect {
-  const btnW = Math.min(320, Math.max(240, w * 0.26));
-  const btnH = 64;
-  return {
-    x: w / 2 - btnW / 2,
-    y: h * 0.76,
-    w: btnW,
-    h: btnH,
-  };
-}
-
-export function getRunDifficultyCardRects(w: number, h: number): Array<Rect & { id: RunDifficultyId }> {
-  const { content } = getMenuLayout(w, h);
-  const mobile = isMobileViewport(w, h);
-  if (mobile) {
-    const cardW = Math.min(420, content.w - 28);
-    const cardH = Math.min(92, Math.max(78, content.h * 0.16));
-    const gap = 10;
-    const totalH = cardH * RUN_DIFFICULTY_ORDER.length + gap * (RUN_DIFFICULTY_ORDER.length - 1);
-    const startY = content.y + Math.max(18, Math.min(42, (content.h - totalH) * 0.18));
-    return RUN_DIFFICULTY_ORDER.map((id, index) => ({
-      id,
-      x: content.x + content.w / 2 - cardW / 2,
-      y: startY + index * (cardH + gap),
-      w: cardW,
-      h: cardH,
-    }));
-  }
-
-  const gap = 18;
-  const cardW = Math.min(260, Math.max(210, (content.w - gap * 2) / 3));
-  const cardH = Math.min(178, Math.max(148, content.h * 0.28));
-  const totalW = cardW * RUN_DIFFICULTY_ORDER.length + gap * (RUN_DIFFICULTY_ORDER.length - 1);
-  const startX = content.x + content.w / 2 - totalW / 2;
-  const y = content.y + content.h * 0.22;
-  return RUN_DIFFICULTY_ORDER.map((id, index) => ({
-    id,
-    x: startX + index * (cardW + gap),
-    y,
-    w: cardW,
-    h: cardH,
-  }));
-}
-
-export function getStartingWeaponCardRects(
-  w: number,
-  h: number,
-  weapons: readonly StartingWeaponView[]
-): Array<Rect & { definitionId: string }> {
-  const difficultyCards = getRunDifficultyCardRects(w, h);
-  const difficultyBottom = difficultyCards.reduce((bottom, card) => Math.max(bottom, card.y + card.h), 0);
-  const startButton = getDesktopStartButtonRect(w, h);
-  const { content } = getMenuLayout(w, h);
-  const mobile = isMobileViewport(w, h);
-  const count = weapons.length;
-  const gap = mobile ? 6 : 8;
-  const columns = mobile ? Math.min(5, count) : Math.min(6, count);
-  const rows = Math.ceil(count / columns);
-  const maxRowW = Math.min(content.w - 32, w - 36);
-  const baseSize = mobile ? 42 : 52;
-  const labelH = mobile ? 18 : 20;
-  const availableH = Math.max(36, startButton.y - difficultyBottom - 14);
-  const maxSizeByHeight = Math.floor((availableH - labelH - gap * (rows - 1)) / rows);
-  const size = Math.max(mobile ? 28 : 38, Math.min(baseSize, maxSizeByHeight, (maxRowW - gap * (columns - 1)) / columns));
-  const totalW = columns * size + (columns - 1) * gap;
-  const totalH = rows * size + (rows - 1) * gap;
-  const x = w / 2 - totalW / 2;
-  const y = Math.max(difficultyBottom + labelH + 8, startButton.y - totalH - 14);
-
-  return weapons.map((weapon, index) => {
-    const col = index % columns;
-    const row = Math.floor(index / columns);
-    return {
-      definitionId: weapon.id,
-      x: x + col * (size + gap),
-      y: y + row * (size + gap),
-      w: size,
-      h: size,
-    };
-  });
-}
 
 function getMenuLayout(w: number, h: number): MenuLayout {
   const marginX = Math.max(28, Math.min(72, w * 0.045));
@@ -844,15 +738,11 @@ export function drawDesktop(
   meta: MetaState,
   activeTab: DesktopTab,
   activeCodexTab: CodexTab,
-  selectedStartingWeaponId: string,
-  startingWeapons: readonly StartingWeaponView[],
   hoveredStarId?: MetaUpgradeNode['id']
 ) {
   drawDesktopBackdrop(rc);
 
-  if (activeTab === 'start') {
-    drawStartButton(rc, meta.selectedDifficulty, selectedStartingWeaponId, startingWeapons);
-  } else if (activeTab === 'skins') {
+  if (activeTab === 'skins') {
     drawSkinPanel(rc, meta);
   } else if (activeTab === 'growth') {
     drawMetaGrowth(rc, meta, hoveredStarId);
@@ -860,7 +750,7 @@ export function drawDesktop(
     drawCodexPanel(rc, activeCodexTab);
   }
 
-  if (activeTab !== 'home' && activeTab !== 'start') drawDesktopTabs(rc, activeTab);
+  if (activeTab !== 'home') drawDesktopTabs(rc, activeTab);
 }
 
 export function getDesktopTabRects(w: number, h: number = 720): Array<Rect & { id: DesktopTab }> {
@@ -989,182 +879,6 @@ function drawDesktopBackdrop(rc: RenderContext) {
     const dw = img.width * scale;
     const dh = img.height * scale;
     ctx.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
-  }
-}
-
-function drawStartButton(
-  rc: RenderContext,
-  selectedDifficulty: RunDifficultyId,
-  selectedStartingWeaponId: string,
-  startingWeapons: readonly StartingWeaponView[]
-) {
-  const { ctx, w, h } = rc;
-  const mobile = isMobileViewport(w, h);
-  const cards = getRunDifficultyCardRects(w, h);
-
-  const back = getBattleSetupBackButtonRect(w, h);
-  ctx.fillStyle = 'rgba(3,7,13,0.72)';
-  ctx.beginPath();
-  ctx.roundRect(back.x, back.y, back.w, back.h, 10);
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.roundRect(back.x, back.y, back.w, back.h, 10);
-  ctx.stroke();
-  ctx.font = `800 ${mobile ? 13 : 14}px ${DESKTOP_FONT}`;
-  ctx.fillStyle = 'rgba(238,244,255,0.82)';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('← 返回首页', back.x + back.w / 2, back.y + back.h / 2);
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  ctx.font = `900 ${mobile ? 26 : 34}px ${DESKTOP_FONT}`;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('调整出征配置', w / 2, mobile ? h * 0.18 : h * 0.24);
-
-  for (const card of cards) {
-    const preset = RUN_DIFFICULTY_PRESETS[card.id];
-    const selected = preset.id === selectedDifficulty;
-    const accent = selected ? '#ffd166' : preset.id === 'nightmare' ? '#ff7a76' : preset.id === 'easy' ? '#9dffba' : '#8fe8ff';
-    ctx.save();
-    if (selected) {
-      ctx.shadowColor = colorWithAlpha(accent, 0.55);
-      ctx.shadowBlur = 20;
-    }
-    uiPanel(ctx, card.x, card.y, card.w, card.h, selected ? accent : colorWithAlpha(accent, 0.35), 12);
-    ctx.restore();
-
-    ctx.fillStyle = selected ? colorWithAlpha(accent, 0.18) : 'rgba(255,255,255,0.035)';
-    ctx.beginPath();
-    ctx.roundRect(card.x + 8, card.y + 8, card.w - 16, card.h - 16, 9);
-    ctx.fill();
-
-    ctx.textAlign = mobile ? 'left' : 'center';
-    ctx.textBaseline = 'top';
-    ctx.font = `${mobile ? 22 : 28}px serif`;
-    ctx.fillStyle = accent;
-    const iconX = mobile ? card.x + 22 : card.x + card.w / 2;
-    ctx.fillText(preset.icon, iconX, card.y + (mobile ? 16 : 20));
-
-    ctx.font = `900 ${mobile ? 18 : 21}px ${DESKTOP_FONT}`;
-    ctx.fillStyle = selected ? '#fff4cf' : '#ffffff';
-    const titleX = mobile ? card.x + 58 : card.x + card.w / 2;
-    ctx.fillText(preset.name, titleX, card.y + (mobile ? 18 : 58));
-
-    ctx.font = `800 ${mobile ? 12 : 13}px ${DESKTOP_FONT}`;
-    ctx.fillStyle = accent;
-    ctx.fillText(preset.shortName, titleX, card.y + (mobile ? 43 : 88));
-
-    ctx.font = `${mobile ? 11 : 12}px ${DESKTOP_FONT}`;
-    ctx.fillStyle = 'rgba(225,232,250,0.72)';
-    if (mobile) {
-      drawWrappedText(ctx, preset.desc, card.x + 58, card.y + 62, card.w - 78, 14, 1);
-    } else {
-      ctx.textAlign = 'left';
-      drawWrappedText(ctx, preset.desc, card.x + 22, card.y + 118, card.w - 44, 17, 2);
-    }
-
-    if (selected) {
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'bottom';
-      ctx.font = `800 12px ${DESKTOP_FONT}`;
-      ctx.fillStyle = '#ffd166';
-      ctx.fillText('已选择', card.x + card.w - 16, card.y + card.h - 14);
-    }
-  }
-
-  drawStartingWeaponPicker(rc, selectedStartingWeaponId, startingWeapons);
-
-  const b = getDesktopStartButtonRect(w, h);
-  ctx.save();
-  ctx.shadowColor = 'rgba(255,140,60,0.5)';
-  ctx.shadowBlur = 22;
-  const g = ctx.createLinearGradient(b.x, b.y, b.x, b.y + b.h);
-  g.addColorStop(0, '#ffd270');
-  g.addColorStop(1, '#ff7e3c');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.roundRect(b.x, b.y, b.w, b.h, 14);
-  ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = 'rgba(255,246,205,0.85)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.roundRect(b.x, b.y, b.w, b.h, 14);
-  ctx.stroke();
-  ctx.font = `900 24px ${DESKTOP_FONT}`;
-  ctx.fillStyle = '#2a1206';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('开始夜潮', b.x + b.w / 2, b.y + b.h / 2);
-}
-
-function drawStartingWeaponPicker(
-  rc: RenderContext,
-  selectedStartingWeaponId: string,
-  weapons: readonly StartingWeaponView[]
-) {
-  const { ctx, w, h } = rc;
-  const mobile = isMobileViewport(w, h);
-  const cards = getStartingWeaponCardRects(w, h, weapons);
-  if (cards.length === 0) return;
-
-  const first = cards[0];
-  const selectedData = weapons.find((weapon) => weapon.id === selectedStartingWeaponId) ?? weapons[0];
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'bottom';
-  ctx.font = `800 ${mobile ? 12 : 14}px ${DESKTOP_FONT}`;
-  ctx.fillStyle = '#ffd166';
-  ctx.fillText(
-    `初始武器：${selectedData.name} · 武器槽 ${PLAYER_WEAPON_SLOT_LIMIT}`,
-    w / 2,
-    first.y - (mobile ? 5 : 7)
-  );
-
-  for (const card of cards) {
-    const data = weapons.find((weapon) => weapon.id === card.definitionId);
-    if (!data) continue;
-    const selected = card.definitionId === selectedStartingWeaponId;
-    const accent = selected ? '#ffd166' : colorWithAlpha('#8fe8ff', 0.38);
-
-    ctx.save();
-    if (selected) {
-      ctx.shadowColor = 'rgba(255,209,102,0.48)';
-      ctx.shadowBlur = 14;
-    }
-    uiPanel(ctx, card.x, card.y, card.w, card.h, accent, 8);
-    ctx.restore();
-
-    ctx.fillStyle = selected ? 'rgba(255,209,102,0.18)' : 'rgba(255,255,255,0.035)';
-    ctx.beginPath();
-    ctx.roundRect(card.x + 4, card.y + 4, card.w - 8, card.h - 8, 6);
-    ctx.fill();
-
-    const drew = !data.generated && weaponSpriteRegistry.drawWeapon(
-      ctx,
-      data.legacyType,
-      card.x + card.w / 2,
-      card.y + card.h / 2 - (card.h > 44 ? 1 : 0),
-      card.w * 0.74,
-      { glow: selected }
-    );
-    if (!drew) {
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = `${Math.max(20, Math.floor(card.w * 0.48))}px serif`;
-      ctx.fillStyle = selected ? '#fff4cf' : COLORS.uiText;
-      ctx.fillText(data.icon, card.x + card.w / 2, card.y + card.h / 2);
-    }
-
-    if (selected) {
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      ctx.font = `900 ${mobile ? 9 : 10}px ${DESKTOP_FONT}`;
-      ctx.fillStyle = '#ffd166';
-      ctx.fillText('已选', card.x + card.w / 2, card.y + card.h - 4);
-    }
   }
 }
 
@@ -1510,14 +1224,12 @@ function drawDesktopTabs(rc: RenderContext, activeTab: DesktopTab) {
   const { ctx, w, h } = rc;
   const labels: Record<DesktopTab, string> = {
     home: '首页',
-    start: '出征',
     skins: '衣橱',
     growth: '星图',
     codex: '内容库',
   };
   const icons: Record<DesktopTab, string> = {
     home: '⌂',
-    start: '✦',
     skins: '●',
     growth: '◆',
     codex: '▣',

@@ -20,7 +20,7 @@
 - 单文档 `AppStateStore`、冻结 Registry、动态内容快照和武器行为分派。
 - 投射物 `ContentPackV1`、严格 Validator、内容库原子安装和 AI 武器生成服务。
 
-当前 Registry 已注册首批投射物原语和现有通用 Modifier，魔法法器与通过校验并启用的 AI 投射物武器使用同一 Recipe 执行链；其他内置武器仍使用兼容行为。产品首页已改为 AI 游戏引擎工作台，可直接描述武器、查看 Cherry/引擎状态、按当前配置立即开战或进入聚焦的出征配置页，并通过统一的内容库查看内置内容与模块；Forge 可生成、预览、接受并在重载后选择武器。一次自动修复、Job 恢复管理 UI、包管理 UI 和 BehaviorGraph 尚未实现。
+当前 Registry 已注册首批投射物原语和现有通用 Modifier，魔法法器与通过校验并启用的 AI 投射物武器使用同一 Recipe 执行链；其他内置武器仍使用兼容行为。产品首页已改为 AI 游戏引擎工作台，可直接描述武器、查看 Cherry AI 连接状态，并在同一页面选择难度、系统武器或 AI 生成武器后开始游戏；统一的内容库用于查看内置内容与模块。Forge 可生成、预览、接受并在重载后选择武器。一次自动修复、Job 恢复管理 UI、包管理 UI 和 BehaviorGraph 尚未实现。
 
 ## 2. 当前目录
 
@@ -85,7 +85,7 @@ main.ts
   ├─ AppHost：提供 Storage 与 Host 可见性
   ├─ AppStateStore：加载/迁移单一状态文档，串行持久化事务
   ├─ GameContentSnapshot：冻结内置行为、武器和怪物定义
-  ├─ EngineHomeScreen：AI 引擎首页、宿主状态与产品入口
+  ├─ EngineHomeScreen：AI 引擎首页、连接状态与出征配置
   ├─ WeaponForgeService/Panel：通过 Cherry AI 生成、校验和接受内容
   └─ Game：输入、状态、单局循环、系统调度、桌面 UI 流程
        ├─ systems：确定性玩法系统
@@ -106,7 +106,7 @@ main.ts
 3. 读取稳定 Key `survivor-game:app-state` 中带 `stateVersion` 的文档；首次运行时读取三个旧 Key 并迁移，但不删除旧值。
 4. 把 AppState 的内容库交给装配器，通过核心 `EnginePlugin` 注册武器行为、投射物原语和 Modifier，校验所有已启用 ContentPack，并把内置魔法法器与动态投射物 Recipe 编译进冻结快照。启用 ID 缺失、内容无效或包未接受时阻止启动。
 5. 创建 `Game`，注入内容快照和 AppState 持久化回调。
-6. 创建 `WeaponForgeService`、Forge Panel 与 `EngineHomeScreen`。首页显示 Capability 状态、最近生成武器和当前出征配置；自然语言输入进入同一个 Forge，玩家也可以直接按当前配置开战或显式调整难度与开局武器。生成仍只允许在主菜单或结算边界发生。
+6. 创建 `WeaponForgeService`、Forge Panel 与 `EngineHomeScreen`。首页只显示 Cherry AI 连接状态，并直接分区提供难度、系统武器与 AI 生成武器选择；自然语言输入进入同一个 Forge，玩家确认配置后可立即开始游戏。生成仍只允许在主菜单或结算边界发生。
 7. 接受内容后重载并重建不可变内容快照。
 8. 将 Host 可见性事件同时转发给 Game 和 Forge，暂停游戏并取消在途 AI。
 9. 启动失败时显示可点击重试提示。
@@ -221,7 +221,7 @@ menu ↔ playing ↔ paused
 
 ## 11. 渲染
 
-`EngineHomeScreen` 使用 DOM/CSS 实现可输入、响应式的产品首页；首页提供当前配置的直接开战入口，只有显式选择“调整配置”才进入 Canvas 出征配置页。进入出征配置、衣橱、星图和内容库后仍由 Canvas 桌面 UI 接管；出征配置页是无全局 Tab 的聚焦流程。`Renderer` 持有 Canvas Context、尺寸与 `WorldRenderer`，将绘制委托给：
+`EngineHomeScreen` 使用 DOM/CSS 实现可输入、响应式的产品首页，并直接负责难度、系统武器、AI 生成武器的选择与开战。衣橱、星图和内容库仍由 Canvas 桌面 UI 接管，不再存在单独的 Canvas 出征配置页。`Renderer` 持有 Canvas Context、尺寸与 `WorldRenderer`，将绘制委托给：
 
 - `WorldRenderer`：背景、网格、边界和地图。
 - `EntityRenderer`：玩家、武器展示、怪物、弹幕和经验。
