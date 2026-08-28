@@ -1,4 +1,5 @@
 import type { Vec2 } from '../types';
+import { SYSTEM_RANDOM, type RandomSource } from '../kernel/Random';
 
 export function dist(a: Vec2, b: Vec2): number {
   const dx = a.x - b.x;
@@ -20,16 +21,16 @@ export function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
 }
 
-export function randFloat(min: number, max: number): number {
-  return min + Math.random() * (max - min);
+export function randFloat(min: number, max: number, random: RandomSource = SYSTEM_RANDOM): number {
+  return min + random.next() * (max - min);
 }
 
-export function randInt(min: number, max: number): number {
-  return Math.floor(randFloat(min, max + 1));
+export function randInt(min: number, max: number, random: RandomSource = SYSTEM_RANDOM): number {
+  return Math.floor(randFloat(min, max + 1, random));
 }
 
-export function randSign(): number {
-  return Math.random() < 0.5 ? -1 : 1;
+export function randSign(random: RandomSource = SYSTEM_RANDOM): number {
+  return random.next() < 0.5 ? -1 : 1;
 }
 
 export function circlesOverlap(
@@ -42,9 +43,9 @@ export function circlesOverlap(
   return dx * dx + dy * dy < rSum * rSum;
 }
 
-export function weightedRandom<T>(items: T[], weights: number[]): T {
+export function weightedRandom<T>(items: T[], weights: number[], random: RandomSource = SYSTEM_RANDOM): T {
   const total = weights.reduce((a, b) => a + b, 0);
-  let r = Math.random() * total;
+  let r = random.next() * total;
   for (let i = 0; i < items.length; i++) {
     r -= weights[i];
     if (r <= 0) return items[i];
@@ -52,9 +53,9 @@ export function weightedRandom<T>(items: T[], weights: number[]): T {
   return items[items.length - 1];
 }
 
-export function shuffleArray<T>(array: T[]): T[] {
+export function shuffleArray<T>(array: T[], random: RandomSource = SYSTEM_RANDOM): T[] {
   for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random.next() * (i + 1));
     [array[i], array[j]] = [array[j], array[i]];
   }
   return array;

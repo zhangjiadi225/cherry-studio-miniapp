@@ -689,6 +689,9 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze<Engi
           getLookupRadius(projectile) {
             return projectile.radius + 64;
           },
+          getSweepRadius(projectile) {
+            return projectile.radius;
+          },
           overlaps(projectile, enemy) {
             const dx = projectile.x - enemy.x;
             const dy = projectile.y - enemy.y;
@@ -724,6 +727,9 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze<Engi
           maximumTargetsPerTick: 1000,
           getLookupRadius(projectile) {
             return length + projectile.radius * widthScale + 64;
+          },
+          getSweepRadius() {
+            return undefined;
           },
           overlaps(projectile, enemy) {
             const direction = getProjectileDirection(projectile);
@@ -766,6 +772,9 @@ export const CORE_PROJECTILE_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze<Engi
           maximumTargetsPerTick: 1000,
           getLookupRadius(projectile) {
             return reach + projectile.radius + 64;
+          },
+          getSweepRadius() {
+            return undefined;
           },
           overlaps(projectile, enemy) {
             const direction = getProjectileDirection(projectile);

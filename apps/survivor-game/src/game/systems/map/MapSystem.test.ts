@@ -50,4 +50,19 @@ describe('MapSystem', () => {
     const nearby = map.getNearby(boneWall.x - 20, boneWall.y - 20, boneWall.x + 20, boneWall.y + 20);
     expect(nearby).not.toContain(boneWall);
   });
+
+  it('detects a projectile path that crosses an obstacle between endpoints', () => {
+    const map = new MapSystem();
+    map.generate();
+    const obstacle = map.getObstacles()[0];
+
+    expect(map.projectileHitsSolidObstacle(
+      obstacle.x + obstacle.width,
+      obstacle.y,
+      2,
+      false,
+      obstacle.x - obstacle.width,
+      obstacle.y
+    )).toBe(true);
+  });
 });

@@ -143,6 +143,7 @@ export interface ResolvedCollisionBehavior {
   readonly repeatHitInterval: number;
   readonly maximumTargetsPerTick: number;
   getLookupRadius(projectile: Projectile): number;
+  getSweepRadius(projectile: Projectile): number | undefined;
   overlaps(projectile: Projectile, enemy: Enemy): boolean;
   handleMapCollision(projectile: Projectile): boolean;
 }

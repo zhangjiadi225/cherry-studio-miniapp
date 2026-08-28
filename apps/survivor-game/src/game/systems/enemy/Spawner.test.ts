@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { getDifficultyParams } from '../../data/difficulty';
 import { RUN_DIFFICULTY_PRESETS } from '../../data/runDifficulties';
-import { EnemyType } from '../../types';
-import { getAvailableEnemyTypes } from './Enemy';
-import { getEnemySpawnWeights, getRangedPressureWeightShare } from './Spawner';
+import { EnemyType, type Enemy } from '../../types';
+import { getAvailableEnemyTypes, resetEnemyIds } from './Enemy';
+import { getEnemySpawnWeights, getRangedPressureWeightShare, Spawner } from './Spawner';
+import { SeededRandom } from '../../kernel/Random';
+import { createPlayer } from '../player/Player';
+
+afterEach(() => resetEnemyIds());
 
 describe('enemy spawn weights', () => {
   it('decays newly unlocked enemies from their effective difficulty unlock time', () => {
@@ -26,4 +30,34 @@ describe('enemy spawn weights', () => {
 
     expect(rangedShare).toBeLessThanOrEqual(runDifficulty.rangedEnemyWeightCap + 0.001);
   });
+
+  it('repeats spawn rules for the same run seed', () => {
+    const firstSpawner = new Spawner(new SeededRandom(20260828));
+    const secondSpawner = new Spawner(new SeededRandom(20260828));
+    const firstEnemies: Enemy[] = [];
+    const secondEnemies: Enemy[] = [];
+    const player = createPlayer();
+    const runDifficulty = RUN_DIFFICULTY_PRESETS.hard;
+
+    resetEnemyIds();
+    firstSpawner.update(firstEnemies, player, 120, 4, 2, 1, runDifficulty);
+    const firstSnapshot = firstEnemies.map(snapshotEnemySpawn);
+    resetEnemyIds();
+    secondSpawner.update(secondEnemies, player, 120, 4, 2, 1, runDifficulty);
+
+    expect(firstSnapshot).toEqual(secondEnemies.map(snapshotEnemySpawn));
+  });
 });
+
+function snapshotEnemySpawn(enemy: Enemy) {
+  return {
+    id: enemy.id,
+    type: enemy.type,
+    x: enemy.x,
+    y: enemy.y,
+    isElite: enemy.isElite,
+    attackCooldown: enemy.attackCooldown,
+    animTimer: enemy.animTimer,
+    traitCooldown: enemy.traitCooldown,
+  };
+}

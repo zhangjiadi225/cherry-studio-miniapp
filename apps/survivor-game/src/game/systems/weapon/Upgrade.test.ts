@@ -5,6 +5,7 @@ import { WEAPON_EVOLUTIONS_BY_WEAPON } from '../../data/weaponEvolutions';
 import { createPlayer } from '../player/Player';
 import { createWeapon, upgradeWeapon } from './Weapon';
 import { applyUpgrade, generateUpgradeOptions, getSellableCards, sellOwnedCard } from './Upgrade';
+import { SeededRandom } from '../../kernel/Random';
 
 function weaponAtLevel(type: WeaponType, level: number) {
   const weapon = createWeapon(type);
@@ -15,6 +16,30 @@ function weaponAtLevel(type: WeaponType, level: number) {
 describe('generateUpgradeOptions', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('repeats shop choices for the same run seed', () => {
+    const firstPlayer = createPlayer();
+    const secondPlayer = createPlayer();
+    firstPlayer.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
+    secondPlayer.weapons.push(createWeapon(WeaponType.MAGIC_WAND));
+
+    const first = generateUpgradeOptions(
+      firstPlayer,
+      6,
+      true,
+      Object.values(GenericModifierType),
+      new SeededRandom(20260828)
+    );
+    const second = generateUpgradeOptions(
+      secondPlayer,
+      6,
+      true,
+      Object.values(GenericModifierType),
+      new SeededRandom(20260828)
+    );
+
+    expect(first).toEqual(second);
   });
 
   it('does not return duplicate option identities in one roll', () => {

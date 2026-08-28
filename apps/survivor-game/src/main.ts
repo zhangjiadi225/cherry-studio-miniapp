@@ -29,19 +29,27 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+function parseConfiguredRunSeed(value: string | null): number | undefined {
+  if (value === null || value.trim() === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 async function bootstrap() {
   const host = createAppHost();
   const stateStore = await AppStateStore.open(host.storage);
   const state = stateStore.getSnapshot();
   const content = createBuiltinGameContentSnapshot(state.contentLibrary);
+  const searchParams = new URLSearchParams(window.location.search);
 
   const game = new Game(canvas, {
     content,
     meta: state.meta,
     muted: state.settings.muted,
     perfEnabled:
-      new URLSearchParams(window.location.search).has('perf') ||
+      searchParams.has('perf') ||
       state.settings.perfEnabled,
+    runSeed: parseConfiguredRunSeed(searchParams.get('seed')),
     persistMeta: (meta) => stateStore.setMeta(meta),
     persistMuted: (muted) => stateStore.setMuted(muted),
   });

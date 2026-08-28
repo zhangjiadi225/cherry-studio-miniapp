@@ -17,6 +17,7 @@ import { circlesOverlap } from '../../utils/math';
 import { pools } from '../../utils/PoolManager';
 import type { MapSystem } from '../map/MapSystem';
 import { getEnemyEngagementProfile } from './EnemyAttack';
+import { SYSTEM_RANDOM, type RandomSource } from '../../kernel/Random';
 
 let nextEnemyId = 1;
 
@@ -49,7 +50,8 @@ export function createEnemy(
   isBoss: boolean = false,
   difficultyParams?: DifficultyParams,
   elapsed: number = 0,
-  enhancementUnlockTimeMult: number = 1
+  enhancementUnlockTimeMult: number = 1,
+  random: RandomSource = SYSTEM_RANDOM
 ): Enemy {
   const data = ENEMY_DATA[type];
   const enhancement = getEnemyEnhancement(type, elapsed, enhancementUnlockTimeMult);
@@ -77,10 +79,10 @@ export function createEnemy(
   enemy.knockbackX = 0;
   enemy.knockbackY = 0;
   enemy.hitFlash = 0;
-  enemy.animTimer = Math.random() * Math.PI * 2;
+  enemy.animTimer = random.next() * Math.PI * 2;
   enemy.xpValue = data.xpValue * (isElite ? ELITE_XP_MULT : 1) * curseMult;
   enemy.contactCooldown = CONTACT_COOLDOWN;
-  enemy.attackCooldown = randInitialAttackCooldown(type, isBoss);
+  enemy.attackCooldown = randInitialAttackCooldown(type, isBoss, random);
   enemy.attackWindup = 0;
   enemy.attackPatternIndex = 0;
   enemy.pendingAttackPattern = -1;
@@ -292,8 +294,8 @@ function startDirectedTrait(
   e.traitCooldown = cooldown;
 }
 
-function randInitialAttackCooldown(type: EnemyType, isBoss: boolean): number {
-  if (type === EnemyType.CULTIST) return 0.6 + Math.random() * 0.8;
+function randInitialAttackCooldown(type: EnemyType, isBoss: boolean, random: RandomSource): number {
+  if (type === EnemyType.CULTIST) return 0.6 + random.next() * 0.8;
   if (isBoss && (type === EnemyType.DEMON || type === EnemyType.WRAITH)) return 1.0;
   return 0;
 }

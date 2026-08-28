@@ -1,10 +1,10 @@
 import type { Enemy, EnemyProjectile, EnemyProjectileKind, Player } from '../../types';
 import { EnemyType } from '../../types';
 import { pools } from '../../utils/PoolManager';
-import { circlesOverlap } from '../../utils/math';
 import { MAX_ACTIVE_ENEMY_PROJECTILES } from '../../constants';
 import type { MapSystem } from '../map/MapSystem';
 import { getRunDifficultyPreset, type RunDifficultyPreset } from '../../data/runDifficulties';
+import { sweptCircleCircleHitFraction } from '../../utils/collision';
 
 type EnemyAttackPatternId =
   | 'single'
@@ -288,12 +288,34 @@ export function updateEnemyProjectile(
   mapSystem: MapSystem,
   dt: number
 ): 'active' | 'expired' | 'hitPlayer' {
+  const previousX = projectile.x;
+  const previousY = projectile.y;
   projectile.animTimer += dt;
   projectile.x += projectile.vx * dt;
   projectile.y += projectile.vy * dt;
   projectile.life -= dt;
   if (projectile.life <= 0) return 'expired';
-  if (mapSystem.projectileHitsSolidObstacle(projectile.x, projectile.y, projectile.radius, false)) return 'expired';
-  if (circlesOverlap(projectile.x, projectile.y, projectile.radius, player.x, player.y, player.radius)) return 'hitPlayer';
+  if (
+    mapSystem.projectileHitsSolidObstacle(
+      projectile.x,
+      projectile.y,
+      projectile.radius,
+      false,
+      previousX,
+      previousY
+    )
+  ) return 'expired';
+  if (
+    sweptCircleCircleHitFraction(
+      previousX,
+      previousY,
+      projectile.x,
+      projectile.y,
+      projectile.radius,
+      player.x,
+      player.y,
+      player.radius
+    ) !== undefined
+  ) return 'hitPlayer';
   return 'active';
 }

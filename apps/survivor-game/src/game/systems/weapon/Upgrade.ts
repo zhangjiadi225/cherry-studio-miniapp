@@ -30,26 +30,28 @@ import {
 } from './Weapon';
 import { applyPassive, getPassiveLevel, removePassive } from '../player/Player';
 import { shuffleArray } from '../../utils/math';
+import { SYSTEM_RANDOM, type RandomSource } from '../../kernel/Random';
 
 export function generateUpgradeOptions(
   player: Player,
   count: number = getShopOptionCount(player),
   includeModifiers: boolean = true,
-  modifierPool: GenericModifierType[] = Object.values(GenericModifierType)
+  modifierPool: GenericModifierType[] = Object.values(GenericModifierType),
+  random: RandomSource = SYSTEM_RANDOM
 ): UpgradeOption[] {
   const weaponLevelOptions = getWeaponLevelOptions(player);
   const evolutionOptions = getWeaponEvolutionOptions(player);
   const newWeaponOptions = getNewWeaponOptions(player);
-  const passiveOptions = getPassiveOptions(player);
+  const passiveOptions = getPassiveOptions(player, random);
   const modifierOptions = includeModifiers ? getModifierOptions(player, modifierPool) : [];
-  const supplyOptions = getSupplyOptions(player);
+  const supplyOptions = getSupplyOptions(player, random);
   const options: UpgradeOption[] = [];
   const usedKeys = new Set<string>();
 
-  pushRandomOption(options, weaponLevelOptions, usedKeys, count);
-  pushRandomOption(options, evolutionOptions.length > 0 ? evolutionOptions : newWeaponOptions, usedKeys, count);
-  pushRandomOption(options, modifierOptions, usedKeys, count);
-  pushRandomOption(options, [...supplyOptions, ...passiveOptions], usedKeys, count);
+  pushRandomOption(options, weaponLevelOptions, usedKeys, count, random);
+  pushRandomOption(options, evolutionOptions.length > 0 ? evolutionOptions : newWeaponOptions, usedKeys, count, random);
+  pushRandomOption(options, modifierOptions, usedKeys, count, random);
+  pushRandomOption(options, [...supplyOptions, ...passiveOptions], usedKeys, count, random);
 
   const leftovers = [
     ...weaponLevelOptions,
@@ -59,7 +61,7 @@ export function generateUpgradeOptions(
     ...supplyOptions,
     ...passiveOptions,
   ];
-  shuffleArray(leftovers);
+  shuffleArray(leftovers, random);
   for (const option of leftovers) {
     if (options.length >= count) break;
     pushUniqueOption(options, option, usedKeys);
@@ -149,11 +151,11 @@ function getNewWeaponOptions(player: Player): UpgradeOption[] {
   return options;
 }
 
-function getPassiveOptions(player: Player): UpgradeOption[] {
+function getPassiveOptions(player: Player, random: RandomSource): UpgradeOption[] {
   const options: UpgradeOption[] = [];
   for (const [type, data] of Object.entries(PASSIVE_DATA)) {
     const currentLevel = getPassiveLevel(player, type as PassiveType);
-    if (Math.random() >= SHOP_PASSIVE_OPTION_CHANCE) continue;
+    if (random.next() >= SHOP_PASSIVE_OPTION_CHANCE) continue;
     if (currentLevel >= data.maxLevel) continue;
     const nextLevel = currentLevel + 1;
     const rarity = getPassiveQuality(type as PassiveType, nextLevel, data.maxLevel).rarity;
@@ -175,10 +177,11 @@ function pushRandomOption(
   target: UpgradeOption[],
   pool: UpgradeOption[],
   usedKeys: Set<string>,
-  limit: number
+  limit: number,
+  random: RandomSource
 ) {
   if (target.length >= limit || pool.length === 0) return;
-  shuffleArray(pool);
+  shuffleArray(pool, random);
   for (const option of pool) {
     if (pushUniqueOption(target, option, usedKeys)) return;
   }
@@ -394,19 +397,19 @@ function getModifierBaseCost(weapon: Weapon, modifierType: GenericModifierType):
   return 12 + weapon.level * 3 + modifier.priceTier * 4;
 }
 
-function getSupplyOptions(player: Player): UpgradeOption[] {
+function getSupplyOptions(player: Player, random: RandomSource): UpgradeOption[] {
   const options: UpgradeOption[] = [];
 
-  if (player.hp <= player.maxHp * 0.65 && Math.random() < SHOP_FIELD_RATION_OPTION_CHANCE) {
+  if (player.hp <= player.maxHp * 0.65 && random.next() < SHOP_FIELD_RATION_OPTION_CHANCE) {
     options.push(createSupplyOption(SupplyType.FIELD_RATION, player));
   }
 
   if (player.level >= 4) {
     const supplyChance = Math.min(0.85, 0.35 * player.luck);
-    if (Math.random() < supplyChance) {
+    if (random.next() < supplyChance) {
       options.push(createSupplyOption(SupplyType.OVERCLOCK, player));
     }
-    if (Math.random() < supplyChance) {
+    if (random.next() < supplyChance) {
       options.push(createSupplyOption(SupplyType.AEGIS_CHARM, player));
     }
   }

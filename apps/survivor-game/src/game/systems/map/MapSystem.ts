@@ -1,6 +1,6 @@
 import { MapObstacle } from '../../types';
 import { hashXY } from '../../utils/math';
-import { circleRectOverlap, pushCircleFromRect } from '../../utils/collision';
+import { pushCircleFromRect, sweptCircleRectHitFraction } from '../../utils/collision';
 import { ARENA_SIZE, OBSTACLE_CELL_SIZE, OBSTACLE_HP } from '../../constants';
 
 const START_SAFE_RADIUS = 500;
@@ -120,23 +120,54 @@ export class MapSystem {
     return { x: pushX, y: pushY };
   }
 
-  handleProjectileCollision(px: number, py: number, radius: number): boolean {
-    return this.projectileHitsSolidObstacle(px, py, radius, true);
+  handleProjectileCollision(
+    px: number,
+    py: number,
+    radius: number,
+    previousX: number = px,
+    previousY: number = py
+  ): boolean {
+    return this.projectileHitsSolidObstacle(px, py, radius, true, previousX, previousY);
   }
 
-  projectileHitsSolidObstacle(px: number, py: number, radius: number, damageBoneWall = false): boolean {
-    let hit = false;
-    this.forNearby(px - OBSTACLE_QUERY_PADDING, py - OBSTACLE_QUERY_PADDING, px + OBSTACLE_QUERY_PADDING, py + OBSTACLE_QUERY_PADDING, (obs) => {
-      if (hit) return;
-      if (obs.hp <= 0) return;
-      if (circleRectOverlap(px, py, radius, obs.x, obs.y, obs.width, obs.height)) {
-        if (damageBoneWall && obs.type === 'bone_wall') {
-          obs.hp = Math.max(0, obs.hp - 1);
-        }
-        hit = true;
+  projectileHitsSolidObstacle(
+    px: number,
+    py: number,
+    radius: number,
+    damageBoneWall = false,
+    previousX: number = px,
+    previousY: number = py
+  ): boolean {
+    let firstObstacle: MapObstacle | undefined;
+    let firstHitFraction = Infinity;
+    const padding = radius + OBSTACLE_QUERY_PADDING;
+    this.forNearby(
+      Math.min(previousX, px) - padding,
+      Math.min(previousY, py) - padding,
+      Math.max(previousX, px) + padding,
+      Math.max(previousY, py) + padding,
+      (obs) => {
+        if (obs.hp <= 0) return;
+        const hitFraction = sweptCircleRectHitFraction(
+          previousX,
+          previousY,
+          px,
+          py,
+          radius,
+          obs.x,
+          obs.y,
+          obs.width,
+          obs.height
+        );
+        if (hitFraction === undefined || hitFraction >= firstHitFraction) return;
+        firstHitFraction = hitFraction;
+        firstObstacle = obs;
       }
-    });
-    return hit;
+    );
+    if (damageBoneWall && firstObstacle?.type === 'bone_wall') {
+      firstObstacle.hp = Math.max(0, firstObstacle.hp - 1);
+    }
+    return firstObstacle !== undefined;
   }
 
   getObstacles(): MapObstacle[] {

@@ -22,6 +22,9 @@ export const MAX_ACTIVE_PLAYER_PROJECTILES = 420;
 export const MAX_ACTIVE_ENEMY_PROJECTILES = 180;
 export const MAX_ACTIVE_PARTICLES = 800;
 export const MAX_ACTIVE_DAMAGE_NUMBERS = 220;
+export const SIMULATION_STEP_SECONDS = 1 / 60;
+export const MAX_SIMULATION_STEPS_PER_FRAME = 5;
+export const MAX_SIMULATION_FRAME_DELTA = 0.25;
 
 // ===== Player =====
 export const PLAYER_RADIUS = 14;

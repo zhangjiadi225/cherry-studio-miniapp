@@ -1,5 +1,6 @@
 import type { Player, Projectile, Weapon } from '../../types';
 import type { EnemyQuery } from '../../systems/enemy/EnemyQuery';
+import type { RandomSource } from '../../kernel/Random';
 
 export const CoreWeaponBehaviorId = {
   PROJECTILE_RECIPE: 'builtin.weapon.recipe-projectile',
@@ -22,6 +23,7 @@ export interface WeaponFireContext {
   damage: number;
   area: number;
   enemyQuery: EnemyQuery;
+  random: RandomSource;
 }
 
 export interface WeaponBehaviorHandler {

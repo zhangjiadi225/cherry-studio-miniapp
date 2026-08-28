@@ -22,6 +22,8 @@ const REFLECTION_DAMAGE_RATIO = 0.72;
 const REFLECTION_ANGLE_STEP = Math.PI * 0.36;
 const RUNE_REFLECTION_BEAM_MAX_LENGTH = 360;
 const effectTargetsScratch: Enemy[] = [];
+const sweptTargetsScratch: Enemy[] = [];
+const sweptHitFractionsScratch: number[] = [];
 
 function hashString(value: string): number {
   let hash = 2166136261;
@@ -76,7 +78,13 @@ export class ProjectileCombat {
       this.emitProjectileParticles(ctx, projectile, 'trail', projectile.x, projectile.y, dt);
       if (
         this.shouldUseMapProjectileCollision(projectile) &&
-        ctx.mapSystem.handleProjectileCollision(projectile.x, projectile.y, projectile.radius)
+        ctx.mapSystem.handleProjectileCollision(
+          projectile.x,
+          projectile.y,
+          projectile.radius,
+          projectile.previousX,
+          projectile.previousY
+        )
       ) {
         const collision = projectile.runtimePlan?.projectile.collision;
         if (!collision || !collision.handleMapCollision(projectile)) {
@@ -90,37 +98,51 @@ export class ProjectileCombat {
       projectile.collisionHitsThisFrame = 0;
 
       let projectileExpired = false;
-      ctx.enemyQuery.forNearby(
-        projectile.x,
-        projectile.y,
-        this.getProjectileLookupRadius(projectile),
-        (enemy) => {
-          if (projectileExpired || enemy.hp <= 0) return;
-          const collision = projectile.runtimePlan?.projectile.collision;
-          if (
-            collision &&
-            collision.repeatHitInterval > 0 &&
-            (projectile.collisionHitsThisFrame ?? 0) >= collision.maximumTargetsPerTick
-          ) return;
-          if (!this.canHitEnemy(projectile, enemy.id)) return;
-          if (!this.projectileOverlapsEnemy(projectile, enemy)) return;
+      const visitEnemy = (enemy: Enemy) => {
+        if (projectileExpired || enemy.hp <= 0) return;
+        const collision = projectile.runtimePlan?.projectile.collision;
+        if (
+          collision &&
+          collision.repeatHitInterval > 0 &&
+          (projectile.collisionHitsThisFrame ?? 0) >= collision.maximumTargetsPerTick
+        ) return;
+        if (!this.canHitEnemy(projectile, enemy.id)) return;
 
-          const hitResult = this.applyProjectileHit(ctx, projectile, enemy);
-          projectile.collisionHitsThisFrame = (projectile.collisionHitsThisFrame ?? 0) + 1;
-          if ((projectile.runtimePlan?.projectile.collision.repeatHitInterval ?? 0) > 0) return;
-          projectile.pierceCount++;
-          if (projectile.pierceCount > projectile.pierce && !hitResult.preserved) {
-            if (projectile.type === WeaponType.FIRE_WAND && hitResult.isDead) {
-              spawnExplosionParticles(ctx.particles, enemy.x, enemy.y, '#ff6600', 15, {
-                speed: 200, life: 0.7, radius: 5, type: 'spark', glow: true,
-                innerColor: '#ffcc00', ringCount: 6,
-              });
-            }
-            this.expireRuntimeProjectile(ctx, projectile);
-            projectileExpired = true;
+        const hitResult = this.applyProjectileHit(ctx, projectile, enemy);
+        projectile.collisionHitsThisFrame = (projectile.collisionHitsThisFrame ?? 0) + 1;
+        if ((projectile.runtimePlan?.projectile.collision.repeatHitInterval ?? 0) > 0) return;
+        projectile.pierceCount++;
+        if (projectile.pierceCount > projectile.pierce && !hitResult.preserved) {
+          if (projectile.type === WeaponType.FIRE_WAND && hitResult.isDead) {
+            spawnExplosionParticles(ctx.particles, enemy.x, enemy.y, '#ff6600', 15, {
+              speed: 200, life: 0.7, radius: 5, type: 'spark', glow: true,
+              innerColor: '#ffcc00', ringCount: 6,
+            });
           }
+          this.expireRuntimeProjectile(ctx, projectile);
+          projectileExpired = true;
         }
-      );
+      };
+
+      const sweepRadius = this.getProjectileSweepRadius(projectile);
+      if (
+        sweepRadius !== undefined &&
+        projectile.previousX !== undefined &&
+        projectile.previousY !== undefined
+      ) {
+        this.collectSweptTargets(ctx.enemyQuery, projectile, sweepRadius);
+        for (const enemy of sweptTargetsScratch) visitEnemy(enemy);
+      } else {
+        ctx.enemyQuery.forNearby(
+          projectile.x,
+          projectile.y,
+          this.getProjectileLookupRadius(projectile),
+          (enemy) => {
+            if (!this.projectileOverlapsEnemy(projectile, enemy)) return;
+            visitEnemy(enemy);
+          }
+        );
+      }
     }
     this.releaseDeadProjectiles(ctx.projectiles);
   }
@@ -166,6 +188,49 @@ export class ProjectileCombat {
       return projectile.beamLength! * 0.5 + projectile.radius + PROJECTILE_COLLISION_LOOKUP_PADDING;
     }
     return projectile.radius + PROJECTILE_COLLISION_LOOKUP_PADDING;
+  }
+
+  private getProjectileSweepRadius(projectile: Projectile): number | undefined {
+    if (projectile.runtimePlan) {
+      return projectile.runtimePlan.projectile.collision.getSweepRadius(projectile);
+    }
+    if (this.isRuneBeam(projectile) || this.isAxeCleave(projectile)) return undefined;
+    return projectile.radius;
+  }
+
+  private collectSweptTargets(
+    enemyQuery: EnemyQuery,
+    projectile: Projectile,
+    sweepRadius: number
+  ): void {
+    sweptTargetsScratch.length = 0;
+    sweptHitFractionsScratch.length = 0;
+    enemyQuery.forSweptCircle(
+      projectile.previousX!,
+      projectile.previousY!,
+      projectile.x,
+      projectile.y,
+      sweepRadius,
+      (enemy, hitFraction) => {
+        let insertionIndex = sweptTargetsScratch.length;
+        sweptTargetsScratch.push(enemy);
+        sweptHitFractionsScratch.push(hitFraction);
+        while (insertionIndex > 0) {
+          const previousIndex = insertionIndex - 1;
+          const previousFraction = sweptHitFractionsScratch[previousIndex];
+          const previousEnemy = sweptTargetsScratch[previousIndex];
+          if (
+            previousFraction < hitFraction ||
+            (previousFraction === hitFraction && previousEnemy.id <= enemy.id)
+          ) break;
+          sweptTargetsScratch[insertionIndex] = previousEnemy;
+          sweptHitFractionsScratch[insertionIndex] = previousFraction;
+          insertionIndex--;
+        }
+        sweptTargetsScratch[insertionIndex] = enemy;
+        sweptHitFractionsScratch[insertionIndex] = hitFraction;
+      }
+    );
   }
 
   private isRuneBeam(projectile: Projectile): boolean {

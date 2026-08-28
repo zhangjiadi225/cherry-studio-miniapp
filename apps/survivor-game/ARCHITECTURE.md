@@ -2,7 +2,7 @@
 
 > 状态：Current
 >
-> 更新日期：2026-08-27
+> 更新日期：2026-08-28
 > 本文只描述已实现代码；未来方向见 [`docs/architecture/TARGET_ARCHITECTURE.md`](./docs/architecture/TARGET_ARCHITECTURE.md)。
 
 ## 1. 项目概览
@@ -63,6 +63,7 @@ survivor-game/
         ├── recipes/                # WeaponRecipe 合同与非热路径编译器
         ├── effects/                # 粒子与伤害飘字
         ├── events/                 # 类型化事件总线与状态机
+        ├── kernel/                 # 固定时间步与带种子规则随机数
         ├── renderers/              # 世界、实体、特效和 UI 绘制
         ├── systems/
         │   ├── audio/
@@ -121,6 +122,8 @@ main.ts
 - 管理桌面 Tab、皮肤、星图、Codex、开局武器和难度。
 - 持有 Player、Enemy、Projectile、EnemyProjectile、XPGem、Particle 和 DamageNumber 数组。
 - 运行 `requestAnimationFrame` 循环。
+- 通过 60 Hz 固定时间步推进确定性规则；单帧最多追赶 5 步并记录被丢弃的积压时间。
+- 为每局创建独立规则随机种子；刷怪、抽牌、规则落点与攻击相位只消费该随机流，视觉随机不影响规则序列。
 - 调度玩家、生成器、敌人、敌方攻击、武器、战斗、地图、经验和死亡处理。
 - 调度升级商店、局终奖励、无尽模式、渲染和性能统计。
 
@@ -143,7 +146,7 @@ main.ts
   → 玩家死亡或时间结束
 ```
 
-`dt` 上限为 0.05 秒；Host 不可见时停止 RAF，恢复时重置 `lastTime`，避免隐藏时长形成大步长。
+渲染继续跟随 RAF；规则层固定使用 `1 / 60` 秒 `dt`。输入帧差最多接收 0.25 秒，单帧最多追赶 5 个规则步，剩余完整时间步会被明确丢弃并计入性能诊断，避免更新螺旋。Host 不可见时停止 RAF 并清除时间积压，恢复时重置 `lastTime`，避免隐藏时长进入模拟。开发时可用 `?seed=<uint32>` 固定一局的规则随机种子。
 
 ## 6. 游戏系统
 
@@ -237,9 +240,13 @@ menu ↔ playing ↔ paused
 当前实现已有：
 
 - Enemy、Projectile、EnemyProjectile、XP Gem、Particle、DamageNumber 对象池。
+- 新一局或 Game 销毁时先把仍活动的实体归还对象池，保留已预热容量供后续单局复用。
 - Enemy `SpatialGrid` 与 `EnemyQuery`，避免大范围 O(n²) 查询。
+- `SpatialGrid` 在重建时复用行 Map 与桶数组，并以活动实体最大半径扩展宽阶段范围；性能面板显示活动桶数和已分配容量。
+- 移动圆形弹体使用上一位置到当前位置的扫掠圆连续碰撞，并按首次接触时间稳定处理；线段、扇区和周期区域继续使用各自注册的碰撞几何。玩家弹体、敌方弹体和地图障碍均覆盖跨规则步穿透。
 - Map 空间查询和可见缓存。
 - 敌人、玩家弹幕、敌方弹幕、粒子和飘字硬上限。
+- 性能面板除总 Update/Render 外，还记录移动、敌人、武器、战斗和表现阶段耗时、固定步追赶数、丢弃时间、规则种子及各硬上限饱和帧数。
 - 批量压缩/释放死亡实体。
 
 未来 ContentPack 和 BehaviorGraph 不得绕过这些边界。生成内容的弹幕、召唤、范围查询和视觉预算必须在安装前检查，运行时仍保留硬上限作为最后防线。

@@ -9,6 +9,7 @@ import { createEnemy, getAvailableEnemyTypes, getEnemyEnhancementUnlockAt } from
 import { weightedRandom } from '../../utils/math';
 import { getDifficultyParams, type DifficultyParams } from '../../data/difficulty';
 import { getRunDifficultyPreset, type RunDifficultyPreset } from '../../data/runDifficulties';
+import { SYSTEM_RANDOM, type RandomSource } from '../../kernel/Random';
 
 const WRAITH_SHADOW_SPAWN_MULT = 0.45;
 const SPAWN_EDGE_MARGIN = 80;
@@ -104,6 +105,8 @@ export class Spawner {
   private bossSpawned = new Set<number>();
   private totalKills = 0;
 
+  constructor(private readonly random: RandomSource = SYSTEM_RANDOM) {}
+
   reset() {
     this.spawnTimer = 0;
     this.bossSpawned.clear();
@@ -141,7 +144,8 @@ export class Spawner {
         false,
         difficultyParams,
         elapsed,
-        runDifficulty.enemyUnlockTimeMult
+        runDifficulty.enemyUnlockTimeMult,
+        this.random
       ));
     }
   }
@@ -195,7 +199,7 @@ export class Spawner {
 
       const type = this.pickEnemyType(available, elapsed, difficultyParams, runDifficulty);
       const pos = this.getSpawnPosition(player);
-      const isElite = Math.random() < difficultyParams.eliteChance;
+      const isElite = this.random.next() < difficultyParams.eliteChance;
       enemies.push(createEnemy(
         type,
         pos.x,
@@ -206,7 +210,8 @@ export class Spawner {
         false,
         difficultyParams,
         elapsed,
-        runDifficulty.enemyUnlockTimeMult
+        runDifficulty.enemyUnlockTimeMult,
+        this.random
       ));
     }
   }
@@ -234,7 +239,8 @@ export class Spawner {
       true,
       difficultyParams,
       bossTime,
-      runDifficulty.enemyUnlockTimeMult
+      runDifficulty.enemyUnlockTimeMult,
+      this.random
     );
     boss.radius *= 2;
     boss.maxHp *= BOSS_HP_MULT;
@@ -246,7 +252,7 @@ export class Spawner {
     const minionCount = Math.max(8, Math.round(BOSS_MINION_COUNT * runDifficulty.waveCountMult));
     for (let i = 0; i < minionCount; i++) {
       const angle = (i / minionCount) * Math.PI * 2;
-      const d = 100 + Math.random() * 100;
+      const d = 100 + this.random.next() * 100;
       const minionType = isLateBoss ? EnemyType.GHOST : EnemyType.SKELETON;
       enemies.push(createEnemy(
         minionType,
@@ -258,7 +264,8 @@ export class Spawner {
         false,
         difficultyParams,
         bossTime,
-        runDifficulty.enemyUnlockTimeMult
+        runDifficulty.enemyUnlockTimeMult,
+        this.random
       ));
     }
   }
@@ -297,7 +304,7 @@ export class Spawner {
   ): EnemyType {
     const weights = getEnemySpawnWeights(available, elapsed, difficultyParams, runDifficulty);
 
-    return weightedRandom(available, weights);
+    return weightedRandom(available, weights, this.random);
   }
 
   private getSpawnPosition(player: Player): { x: number; y: number } {
@@ -305,8 +312,8 @@ export class Spawner {
     let fallback = { x: player.x, y: player.y };
 
     for (let attempt = 0; attempt < 8; attempt++) {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = SPAWN_DISTANCE + Math.random() * 200;
+      const angle = this.random.next() * Math.PI * 2;
+      const dist = SPAWN_DISTANCE + this.random.next() * 200;
       const candidate = {
         x: player.x + Math.cos(angle) * dist,
         y: player.y + Math.sin(angle) * dist,

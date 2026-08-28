@@ -2,7 +2,7 @@
 
 > 状态：Draft Spec
 >
-> 规范版本：0.5
+> 规范版本：0.6
 >
 > 更新日期：2026-08-27
 
@@ -186,6 +186,8 @@ interface ProjectileVisualRecipeV1 {
 - `emission.origin` 只计算施放点，不得读取内容 ID 或直接生成弹体。
 - 运行计划必须保留独立瞄准角；`speed: 0` 与 `motion.stationary` 不能让线段、扇区、光束或圆弧退化为固定世界方向。
 - `radius` 是规则碰撞半径；`visual.scale` 只控制展示，二者不能互相覆盖。
+- Collision Handler 通过可信的 `getSweepRadius(projectile)` 决定是否启用连续扫掠圆判定；标准圆形、墙面反弹和地形停止返回规则半径，线段、扇区与周期区域返回 `undefined` 并保留各自的几何语义。该能力属于本地原语合同，ContentPack 不能直接开关或覆盖。
+- 启用连续判定的弹体使用本规则步的前后位置查询空间网格，并按首次接触时间、敌人稳定 ID 的顺序处理命中；地图障碍和敌方弹体对玩家使用同一段移动路径，避免高速弹体跨步穿透。
 - `hitEffects` 与 `lifecycle` 有数量上限，按数组顺序确定执行顺序。
 - `visual.body`、`layers`、`trail` 和 `particles` 只引用可信渲染原语；颜色与几何参数由内容提供，但不能包含 SVG/XML、CSS、Shader 或模块路径。
 - `visual.emitters` 最多包含 4 个 Particle Effect，其中最多一个持续拖尾；支持 `spawn`、`trail`、`hit`、`kill` 和 `expire` 事件。

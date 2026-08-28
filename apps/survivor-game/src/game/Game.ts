@@ -5,7 +5,9 @@ import {
 import {
   SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY, COLORS,
   CONTACT_COOLDOWN,
-  MAX_ENEMIES,
+  MAX_ENEMIES, MAX_ACTIVE_PLAYER_PROJECTILES, MAX_ACTIVE_ENEMY_PROJECTILES,
+  MAX_ACTIVE_PARTICLES, MAX_ACTIVE_DAMAGE_NUMBERS,
+  SIMULATION_STEP_SECONDS, MAX_SIMULATION_STEPS_PER_FRAME, MAX_SIMULATION_FRAME_DELTA,
 } from './constants';
 import { Input } from './systems/input/Input';
 import { Renderer } from './Renderer';
@@ -44,11 +46,13 @@ import {
 import { getDifficultyParams } from './data/difficulty';
 import { MapSystem } from './systems/map/MapSystem';
 import { SpatialEnemyQuery } from './systems/enemy/EnemyQuery';
-import { pools, clearAllPools } from './utils/PoolManager';
+import { pools } from './utils/PoolManager';
 import { SpatialGrid } from './utils/SpatialGrid';
 import { eventBus, gameState, GameEvent } from './events';
 import { GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from './data/modifiers';
 import type { GameContentSnapshot } from '../content/runtime/GameContentSnapshot';
+import { FixedStepClock } from './kernel/FixedStepClock';
+import { createRunSeed, normalizeSeed, SeededRandom } from './kernel/Random';
 
 type ObjectiveBeat = {
   time: number;
@@ -61,6 +65,7 @@ export interface GameOptions {
   meta: MetaState;
   muted: boolean;
   perfEnabled: boolean;
+  runSeed?: number;
   persistMeta(meta: MetaState): Promise<void>;
   persistMuted(muted: boolean): Promise<void>;
 }
@@ -87,14 +92,25 @@ const MINIMAP_REFRESH_INTERVAL = 0.15;
 const MINIMAP_WORLD_HALF_SIZE = 1500;
 const MINIMAP_QUERY_RADIUS = MINIMAP_WORLD_HALF_SIZE * Math.SQRT2;
 
+type UpdatePhaseTimes = Pick<
+  PerformanceStats,
+  'movementMs' | 'enemiesMs' | 'weaponsMs' | 'combatMs' | 'effectsMs'
+>;
+
 export class Game {
   private canvas: HTMLCanvasElement;
   private input: Input;
   private renderer: Renderer;
-  private spawner = new Spawner();
+  private readonly ruleRandom = new SeededRandom(0);
+  private readonly simulationClock = new FixedStepClock(
+    SIMULATION_STEP_SECONDS,
+    MAX_SIMULATION_STEPS_PER_FRAME,
+    MAX_SIMULATION_FRAME_DELTA
+  );
+  private readonly spawner = new Spawner(this.ruleRandom);
   private audio: AudioSystem;
   private projectileCombat = new ProjectileCombat();
-  private shop = new ShopSystem();
+  private readonly shop = new ShopSystem(this.ruleRandom);
   private mapSystem = new MapSystem();
   private enemyGrid = new SpatialGrid<Enemy>(240);
   private enemyQuery = new SpatialEnemyQuery(this.enemyGrid);
@@ -105,6 +121,7 @@ export class Game {
   private objectiveBeats: ObjectiveBeat[];
   private readonly persistMeta: GameOptions['persistMeta'];
   private readonly persistMuted: GameOptions['persistMuted'];
+  private readonly configuredRunSeed?: number;
   private desktopTab: DesktopTab = 'home';
   private codexTab: CodexTab = 'weapons';
   private selectedStartingWeaponId = 'builtin.weapon.magic-wand';
@@ -139,18 +156,41 @@ export class Game {
   private levelUpFlashTimer = 0;
   private minimapRefreshTimer = 0;
   private mapCleanupTimer = 0;
+  private runSeed = 0;
   private perfEnabled = false;
+  private framePhaseTimes: UpdatePhaseTimes = {
+    movementMs: 0,
+    enemiesMs: 0,
+    weaponsMs: 0,
+    combatMs: 0,
+    effectsMs: 0,
+  };
   private perfStats: PerformanceStats = {
     fps: 0,
     updateMs: 0,
     renderMs: 0,
     frameMs: 0,
+    simulationSteps: 0,
+    droppedSimulationMs: 0,
+    movementMs: 0,
+    enemiesMs: 0,
+    weaponsMs: 0,
+    combatMs: 0,
+    effectsMs: 0,
+    runSeed: 0,
     enemies: 0,
     projectiles: 0,
     enemyProjectiles: 0,
     particles: 0,
     damageNumbers: 0,
     xpGems: 0,
+    enemyCapFrames: 0,
+    projectileCapFrames: 0,
+    enemyProjectileCapFrames: 0,
+    particleCapFrames: 0,
+    damageNumberCapFrames: 0,
+    spatialBuckets: 0,
+    spatialBucketCapacity: 0,
   };
   private garlicWeapon?: Weapon;
   private activeBoss?: Enemy;
@@ -174,6 +214,10 @@ export class Game {
   private readonly handleCanvasMouseMove = (e: MouseEvent) => this.onMouseMove(e);
   private readonly handleCanvasTouchStart = (e: TouchEvent) => this.onTouchStart(e);
   private readonly handleAnimationFrame = (time: number) => this.loop(time);
+  private readonly handleSimulationStep = (dt: number) => {
+    this.update(dt);
+    return gameState.is('playing');
+  };
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   private readonly unsubscribeWeaponFeedback: () => void;
 
@@ -185,6 +229,7 @@ export class Game {
     this.objectiveBeats = getObjectiveBeats(this.runDifficulty);
     this.persistMeta = options.persistMeta;
     this.persistMuted = options.persistMuted;
+    this.configuredRunSeed = options.runSeed === undefined ? undefined : normalizeSeed(options.runSeed);
     this.input = new Input(canvas);
     this.renderer = new Renderer(canvas);
     this.audio = new AudioSystem(options.muted);
@@ -217,6 +262,7 @@ export class Game {
     this.canvas.removeEventListener('touchstart', this.handleCanvasTouchStart);
     if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
     this.animationFrameId = 0;
+    this.releaseRunEntities();
     this.input.destroy();
     this.audio.destroy();
     this.unsubscribeWeaponFeedback();
@@ -233,11 +279,13 @@ export class Game {
       this.audio.suspend();
       if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = 0;
+      this.simulationClock.discardPendingTime();
       this.commitMetaState();
       return;
     }
 
     this.lastTime = performance.now();
+    this.simulationClock.discardPendingTime();
     this.animationFrameId = requestAnimationFrame(this.handleAnimationFrame);
   }
 
@@ -534,10 +582,14 @@ export class Game {
 
   private startGame() {
     gameState.transition('start');
+    this.runSeed = this.configuredRunSeed ?? createRunSeed();
+    this.ruleRandom.reset(this.runSeed);
+    this.simulationClock.reset();
+    this.resetRunPerformanceStats();
     this.runDifficulty = getRunDifficultyPreset(this.meta.selectedDifficulty);
     this.objectiveBeats = getObjectiveBeats(this.runDifficulty);
     resetEnemyIds();
-    clearAllPools();
+    this.releaseRunEntities();
     this.player = createPlayer(this.meta.selectedSkin);
     this.player.shards = getInitialShards(this.meta);
     const startingDefinition = this.content.weapons.get(this.selectedStartingWeaponId) ??
@@ -545,14 +597,9 @@ export class Game {
     this.player.weapons.push(createWeapon(startingDefinition.legacyType, startingDefinition));
     this.refreshWeaponRefs();
     this.activeBoss = undefined;
-    this.enemies = [];
-    this.projectiles = [];
-    this.enemyProjectiles = [];
     this.minimapEnemies.length = 0;
     this.minimapObstacles.length = 0;
-    this.xpGems = [];
-    this.particles = [];
-    this.damageNumbers = [];
+    this.visibleObstacles.length = 0;
     this.elapsed = 0;
     this.difficulty = 0;
     this.killCount = 0;
@@ -591,22 +638,67 @@ export class Game {
 
   // ──────────────────────────── Game Loop ────────────────────────────
 
+  private resetRunPerformanceStats() {
+    this.perfStats.fps = 0;
+    this.perfStats.updateMs = 0;
+    this.perfStats.renderMs = 0;
+    this.perfStats.frameMs = 0;
+    this.perfStats.simulationSteps = 0;
+    this.perfStats.droppedSimulationMs = 0;
+    this.perfStats.movementMs = 0;
+    this.perfStats.enemiesMs = 0;
+    this.perfStats.weaponsMs = 0;
+    this.perfStats.combatMs = 0;
+    this.perfStats.effectsMs = 0;
+    this.perfStats.runSeed = this.runSeed;
+    this.perfStats.enemies = 0;
+    this.perfStats.projectiles = 0;
+    this.perfStats.enemyProjectiles = 0;
+    this.perfStats.particles = 0;
+    this.perfStats.damageNumbers = 0;
+    this.perfStats.xpGems = 0;
+    this.perfStats.enemyCapFrames = 0;
+    this.perfStats.projectileCapFrames = 0;
+    this.perfStats.enemyProjectileCapFrames = 0;
+    this.perfStats.particleCapFrames = 0;
+    this.perfStats.damageNumberCapFrames = 0;
+    this.perfStats.spatialBuckets = 0;
+    this.perfStats.spatialBucketCapacity = this.enemyGrid.bucketCapacity;
+  }
+
   private loop(time: number) {
     this.animationFrameId = 0;
     if (this.destroyed || !this.hostVisible) return;
-    const rawDt = (time - this.lastTime) / 1000;
+    const rawDt = Math.max(0, (time - this.lastTime) / 1000);
     this.lastTime = time;
-    if (rawDt <= 1.0) {
-      const frameStart = performance.now();
-      const dt = Math.min(0.05, rawDt);
-      const updateStart = performance.now();
-      this.update(dt);
-      const updateMs = performance.now() - updateStart;
-      const renderStart = performance.now();
-      this.render(time / 1000);
-      const renderMs = performance.now() - renderStart;
-      this.recordPerformanceStats(rawDt, updateMs, renderMs, performance.now() - frameStart);
+    const frameStart = performance.now();
+    this.framePhaseTimes.movementMs = 0;
+    this.framePhaseTimes.enemiesMs = 0;
+    this.framePhaseTimes.weaponsMs = 0;
+    this.framePhaseTimes.combatMs = 0;
+    this.framePhaseTimes.effectsMs = 0;
+
+    let simulationSteps = 0;
+    const updateStart = performance.now();
+    if (gameState.is('playing')) {
+      const result = this.simulationClock.advance(rawDt, this.handleSimulationStep);
+      simulationSteps = result.steps;
+    } else {
+      this.simulationClock.discardPendingTime();
     }
+    const updateMs = performance.now() - updateStart;
+
+    const renderStart = performance.now();
+    this.render(time / 1000);
+    const renderMs = performance.now() - renderStart;
+    this.recordCapacitySaturation();
+    this.recordPerformanceStats(
+      rawDt,
+      updateMs,
+      renderMs,
+      performance.now() - frameStart,
+      simulationSteps
+    );
     this.animationFrameId = requestAnimationFrame(this.handleAnimationFrame);
   }
 
@@ -614,23 +706,60 @@ export class Game {
     void this.persistMeta(this.meta).catch((error) => console.error('Failed to persist meta progression', error));
   }
 
-  private recordPerformanceStats(rawDt: number, updateMs: number, renderMs: number, frameMs: number) {
+  private recordPerformanceStats(
+    rawDt: number,
+    updateMs: number,
+    renderMs: number,
+    frameMs: number,
+    simulationSteps: number
+  ) {
     const alpha = 0.12;
     const smooth = (previous: number, next: number) => previous === 0 ? next : previous * (1 - alpha) + next * alpha;
     this.perfStats.fps = smooth(this.perfStats.fps, rawDt > 0 ? 1 / rawDt : 0);
     this.perfStats.updateMs = smooth(this.perfStats.updateMs, updateMs);
     this.perfStats.renderMs = smooth(this.perfStats.renderMs, renderMs);
     this.perfStats.frameMs = smooth(this.perfStats.frameMs, frameMs);
+    this.perfStats.simulationSteps = simulationSteps;
+    this.perfStats.droppedSimulationMs = this.simulationClock.totalDroppedSeconds * 1000;
+    this.perfStats.movementMs = smooth(this.perfStats.movementMs, this.framePhaseTimes.movementMs);
+    this.perfStats.enemiesMs = smooth(this.perfStats.enemiesMs, this.framePhaseTimes.enemiesMs);
+    this.perfStats.weaponsMs = smooth(this.perfStats.weaponsMs, this.framePhaseTimes.weaponsMs);
+    this.perfStats.combatMs = smooth(this.perfStats.combatMs, this.framePhaseTimes.combatMs);
+    this.perfStats.effectsMs = smooth(this.perfStats.effectsMs, this.framePhaseTimes.effectsMs);
+    this.perfStats.runSeed = this.runSeed;
     this.perfStats.enemies = this.enemies.length;
     this.perfStats.projectiles = this.projectiles.length;
     this.perfStats.enemyProjectiles = this.enemyProjectiles.length;
     this.perfStats.particles = this.particles.length;
     this.perfStats.damageNumbers = this.damageNumbers.length;
     this.perfStats.xpGems = this.xpGems.length;
+    this.perfStats.spatialBuckets = this.enemyGrid.activeBucketCount;
+    this.perfStats.spatialBucketCapacity = this.enemyGrid.bucketCapacity;
+  }
+
+  private recordCapacitySaturation() {
+    if (!this.perfEnabled || !gameState.is('playing')) return;
+    if (this.enemies.length >= MAX_ENEMIES) this.perfStats.enemyCapFrames++;
+    if (this.projectiles.length >= MAX_ACTIVE_PLAYER_PROJECTILES) this.perfStats.projectileCapFrames++;
+    if (this.enemyProjectiles.length >= MAX_ACTIVE_ENEMY_PROJECTILES) this.perfStats.enemyProjectileCapFrames++;
+    if (this.particles.length >= MAX_ACTIVE_PARTICLES) this.perfStats.particleCapFrames++;
+    if (this.damageNumbers.length >= MAX_ACTIVE_DAMAGE_NUMBERS) this.perfStats.damageNumberCapFrames++;
+  }
+
+  private beginUpdatePhase(): number {
+    return this.perfEnabled ? performance.now() : 0;
+  }
+
+  private finishUpdatePhase(phase: keyof UpdatePhaseTimes, startedAt: number): number {
+    if (!this.perfEnabled) return 0;
+    const now = performance.now();
+    this.framePhaseTimes[phase] += now - startedAt;
+    return now;
   }
 
   private update(dt: number) {
     if (!gameState.is('playing')) return;
+    let phaseStart = this.beginUpdatePhase();
 
     this.elapsed += dt;
     this.difficulty = Math.floor(this.elapsed / 30);
@@ -653,12 +782,14 @@ export class Game {
     updatePlayer(this.player, move.x, move.y, dt, this.mapSystem);
 
     updateCamera(this.camera, this.player, dt);
+    phaseStart = this.finishUpdatePhase('movementMs', phaseStart);
     this.spawner.update(this.enemies, this.player, this.elapsed, this.difficulty, dt, this.player.curse, this.runDifficulty);
     this.updateEnemies(dt);
     this.updateEnemyProjectiles(dt);
     updateEnemyAttacks(this.enemies, this.player, this.enemyProjectiles, dt, this.runDifficulty);
     this.enemyGrid.rebuild(this.enemies);
     this.updateMinimapEnemyCache(dt);
+    phaseStart = this.finishUpdatePhase('enemiesMs', phaseStart);
 
     for (const w of this.player.weapons) {
       updateWeapon(
@@ -667,7 +798,8 @@ export class Game {
         this.projectiles,
         dt,
         this.enemyQuery,
-        this.content.weaponBehaviors
+        this.content.weaponBehaviors,
+        this.ruleRandom
       );
     }
 
@@ -689,6 +821,7 @@ export class Game {
         }
       }
     }
+    phaseStart = this.finishUpdatePhase('weaponsMs', phaseStart);
 
     updateBiblePositions(this.projectiles, this.player);
     this.projectileCombat.update({
@@ -707,6 +840,7 @@ export class Game {
     }
     this.releaseDeadEnemies();
     this.refreshActiveBoss();
+    phaseStart = this.finishUpdatePhase('combatMs', phaseStart);
 
     this.updateXPGems(dt);
 
@@ -731,9 +865,22 @@ export class Game {
         level: this.player.level,
       });
     }
+    this.finishUpdatePhase('effectsMs', phaseStart);
   }
 
   // ──────────────────────────── Update Sub-systems ────────────────────────────
+
+  private releaseRunEntities() {
+    this.minimapEnemies.length = 0;
+    pools.enemies.releaseAll(this.enemies);
+    pools.projectiles.releaseAll(this.projectiles);
+    pools.enemyProjectiles.releaseAll(this.enemyProjectiles);
+    pools.xpGems.releaseAll(this.xpGems);
+    pools.particles.releaseAll(this.particles);
+    pools.damageNumbers.releaseAll(this.damageNumbers);
+    this.enemyGrid.rebuild(this.enemies);
+    this.activeBoss = undefined;
+  }
 
   private refreshWeaponRefs() {
     this.garlicWeapon = this.player.weapons.find(w => w.type === WeaponType.GARLIC);
@@ -959,7 +1106,8 @@ export class Game {
         false,
         difficultyParams,
         0,
-        1
+        1,
+        this.ruleRandom
       );
       child.hp *= 0.55;
       child.maxHp = child.hp;

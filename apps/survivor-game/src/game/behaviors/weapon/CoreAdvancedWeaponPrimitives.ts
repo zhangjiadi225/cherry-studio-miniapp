@@ -753,6 +753,9 @@ export const CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze
           getLookupRadius(projectile) {
             return projectile.radius * radiusScale + 64;
           },
+          getSweepRadius() {
+            return undefined;
+          },
           overlaps(projectile, enemy) {
             return circleOverlaps(projectile, enemy, radiusScale);
           },
@@ -781,6 +784,9 @@ export const CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze
           maximumTargetsPerTick: 1,
           getLookupRadius(projectile) {
             return projectile.radius + 64;
+          },
+          getSweepRadius(projectile) {
+            return projectile.radius;
           },
           overlaps(projectile, enemy) {
             return circleOverlaps(projectile, enemy);
@@ -816,6 +822,9 @@ export const CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze
           maximumTargetsPerTick: 1,
           getLookupRadius(projectile) {
             return projectile.radius + 64;
+          },
+          getSweepRadius(projectile) {
+            return projectile.radius;
           },
           overlaps(projectile, enemy) {
             return circleOverlaps(projectile, enemy);

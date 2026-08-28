@@ -49,6 +49,7 @@ import {
   type ProjectileRecipeRuntimeAdapter,
 } from '../../recipes/weapon/ProjectileRecipeRuntime';
 import type { WeaponRuntimePlan } from '../../recipes/weapon/WeaponRuntimePlan';
+import { SYSTEM_RANDOM, type RandomSource } from '../../kernel/Random';
 
 const nearestEnemiesScratch: Enemy[] = [];
 const nearestDistancesScratch: number[] = [];
@@ -304,7 +305,8 @@ export function updateWeapon(
   projectiles: Projectile[],
   dt: number,
   enemyQuery: EnemyQuery,
-  weaponBehaviors: ReadonlyRegistry<WeaponBehaviorHandler> = getDefaultWeaponBehaviorRegistry()
+  weaponBehaviors: ReadonlyRegistry<WeaponBehaviorHandler> = getDefaultWeaponBehaviorRegistry(),
+  random: RandomSource = SYSTEM_RANDOM
 ) {
   const behavior = weaponBehaviors.require(w.behaviorId);
   if (behavior.mode === 'continuous') return;
@@ -325,7 +327,8 @@ export function updateWeapon(
         projectiles,
         w.pendingBurstDamage ?? runtimePlan.projectile.damage * player.might,
         w.area * player.area,
-        enemyQuery
+        enemyQuery,
+        random
       );
       w.pendingBurstRemaining = (w.pendingBurstRemaining ?? 1) - 1;
       w.pendingBurstTimer = (w.pendingBurstTimer ?? 0) + runtimePlan.emission.burstInterval;
@@ -360,7 +363,7 @@ export function updateWeapon(
   const effectiveArea = w.area * player.area;
 
   const fired = fireWeaponVolley(
-    w, behavior, player, projectiles, effectiveDamage, effectiveArea, enemyQuery
+    w, behavior, player, projectiles, effectiveDamage, effectiveArea, enemyQuery, random
   );
   if (fired) {
     w.timer = 0;
@@ -382,7 +385,8 @@ function fireWeaponVolley(
   projectiles: Projectile[],
   damage: number,
   area: number,
-  enemyQuery: EnemyQuery
+  enemyQuery: EnemyQuery,
+  random: RandomSource
 ): boolean {
   let fired = false;
   for (const castDamage of getCastDamages(weapon, damage)) {
@@ -393,6 +397,7 @@ function fireWeaponVolley(
       damage: castDamage,
       area,
       enemyQuery,
+      random,
     }) || fired;
   }
   if (fired && weapon.runtimePlan) {
@@ -433,18 +438,18 @@ function registerCoreWeaponBehaviors(registry: Registry<WeaponBehaviorHandler>):
   register(CoreWeaponBehaviorId.BIBLE, 'cast', ({ weapon, player, projectiles, damage, area }) =>
     fireBible(weapon, player, projectiles, damage, area));
   register(CoreWeaponBehaviorId.GARLIC_AURA, 'continuous', () => false);
-  register(CoreWeaponBehaviorId.FIRE_WAND, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
-    fireFireWand(weapon, player, projectiles, damage, area, enemyQuery));
-  register(CoreWeaponBehaviorId.HOLY_WATER, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
-    fireHolyWater(weapon, player, projectiles, damage, area, enemyQuery));
+  register(CoreWeaponBehaviorId.FIRE_WAND, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery, random }) =>
+    fireFireWand(weapon, player, projectiles, damage, area, enemyQuery, random));
+  register(CoreWeaponBehaviorId.HOLY_WATER, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery, random }) =>
+    fireHolyWater(weapon, player, projectiles, damage, area, enemyQuery, random));
   register(CoreWeaponBehaviorId.LIGHTNING, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
     fireLightning(weapon, player, projectiles, damage, area, enemyQuery));
   register(CoreWeaponBehaviorId.AXE, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
     fireAxe(weapon, player, projectiles, damage, area, enemyQuery));
   register(CoreWeaponBehaviorId.RUNE_LANCE, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
     fireRuneLance(weapon, player, projectiles, damage, area, enemyQuery));
-  register(CoreWeaponBehaviorId.MOON_BLADE, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery }) =>
-    fireMoonBlade(weapon, player, projectiles, damage, area, enemyQuery));
+  register(CoreWeaponBehaviorId.MOON_BLADE, 'cast', ({ weapon, player, projectiles, damage, area, enemyQuery, random }) =>
+    fireMoonBlade(weapon, player, projectiles, damage, area, enemyQuery, random));
 }
 
 export const CORE_WEAPON_BEHAVIOR_PLUGIN: EnginePlugin = Object.freeze<EnginePlugin>({
@@ -850,7 +855,8 @@ function fireMagicWand(
 function fireFireWand(
   w: Weapon, player: Player,
   projectiles: Projectile[], damage: number, area: number,
-  enemyQuery: EnemyQuery
+  enemyQuery: EnemyQuery,
+  random: RandomSource
 ): boolean {
   let bonusCount = 0;
   if (hasWeaponEvolution(w, WeaponEvolutionId.FIRE_BURST)) bonusCount += 1;
@@ -867,7 +873,7 @@ function fireFireWand(
   for (let i = 0; i < count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
     const origin = getWeaponCastOrigin(player, w, i, count);
-    const fallbackAngle = Math.random() * Math.PI * 2;
+    const fallbackAngle = random.next() * Math.PI * 2;
     const aimAngle = target ? Math.atan2(target.y - origin.y, target.x - origin.x) : fallbackAngle;
     const splashOffset = target ? (i === 0 ? 0 : 18 + i * 5) * area : 180 + i * 26;
     const splashAngle = aimAngle + (target ? i * 2.399963 : 0);
@@ -993,10 +999,11 @@ function fireRuneLance(
 function fireMoonBlade(
   w: Weapon, player: Player,
   projectiles: Projectile[], damage: number, area: number,
-  enemyQuery: EnemyQuery
+  enemyQuery: EnemyQuery,
+  random: RandomSource
 ): boolean {
   const target = findNearestEnemies(player, enemyQuery, 1, FIND_ENEMY_RANGE)[0];
-  const baseAngle = target ? Math.atan2(target.y - player.y, target.x - player.x) : Math.random() * Math.PI * 2;
+  const baseAngle = target ? Math.atan2(target.y - player.y, target.x - player.x) : random.next() * Math.PI * 2;
   let bonusCount = 0;
   if (hasWeaponEvolution(w, WeaponEvolutionId.MOON_TWIN)) bonusCount += 1;
   if (hasWeaponEvolution(w, WeaponEvolutionId.MOON_RING)) bonusCount += 2;
@@ -1174,7 +1181,8 @@ function fireBible(
 function fireHolyWater(
   w: Weapon, player: Player,
   projectiles: Projectile[], damage: number, area: number,
-  enemyQuery: EnemyQuery
+  enemyQuery: EnemyQuery,
+  random: RandomSource
 ): boolean {
   const bonusCount =
     (hasWeaponEvolution(w, WeaponEvolutionId.HOLY_TIDE) ? 1 : 0) +
@@ -1190,8 +1198,8 @@ function fireHolyWater(
   let fired = false;
   for (let i = 0; i < count; i++) {
     const target = targets.length > 0 ? targets[i % targets.length] : undefined;
-    const tx = target ? target.x : player.x + randFloat(-200, 200);
-    const ty = target ? target.y : player.y + randFloat(-200, 200);
+    const tx = target ? target.x : player.x + randFloat(-200, 200, random);
+    const ty = target ? target.y : player.y + randFloat(-200, 200, random);
     fired = spawnWeaponProjectile(w, projectiles, {
       x: tx,
       y: ty,

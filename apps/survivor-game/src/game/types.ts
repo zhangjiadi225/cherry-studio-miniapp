@@ -34,12 +34,27 @@ export interface PerformanceStats {
   updateMs: number;
   renderMs: number;
   frameMs: number;
+  simulationSteps: number;
+  droppedSimulationMs: number;
+  movementMs: number;
+  enemiesMs: number;
+  weaponsMs: number;
+  combatMs: number;
+  effectsMs: number;
+  runSeed: number;
   enemies: number;
   projectiles: number;
   enemyProjectiles: number;
   particles: number;
   damageNumbers: number;
   xpGems: number;
+  enemyCapFrames: number;
+  projectileCapFrames: number;
+  enemyProjectileCapFrames: number;
+  particleCapFrames: number;
+  damageNumberCapFrames: number;
+  spatialBuckets: number;
+  spatialBucketCapacity: number;
 }
 
 export interface PlayerMovement {

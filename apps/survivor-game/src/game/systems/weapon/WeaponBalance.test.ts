@@ -17,6 +17,7 @@ import { WEAPON_EVOLUTIONS_BY_WEAPON, applyWeaponEvolution } from '../../data/we
 import type { EnemyQuery } from '../enemy/EnemyQuery';
 import { createPlayer } from '../player/Player';
 import { ProjectileCombat } from '../combat/ProjectileCombat';
+import { sweptCircleCircleHitFraction } from '../../utils/collision';
 import {
   createWeapon,
   getGarlicRadius,
@@ -77,6 +78,21 @@ function enemyQuery(enemies: Enemy[]): EnemyQuery {
   return {
     forNearby(_x, _y, _radius, visit) {
       for (const enemy of enemies) visit(enemy);
+    },
+    forSweptCircle(startX, startY, endX, endY, radius, visit) {
+      for (const enemy of enemies) {
+        const hitFraction = sweptCircleCircleHitFraction(
+          startX,
+          startY,
+          endX,
+          endY,
+          radius,
+          enemy.x,
+          enemy.y,
+          enemy.radius
+        );
+        if (hitFraction !== undefined) visit(enemy, hitFraction);
+      }
     },
   };
 }
@@ -299,6 +315,31 @@ describe('weapon output model', () => {
 
     expect(target.hp).toBeLessThan(target.maxHp);
     expect(offLine.hp).toBe(offLine.maxHp);
+  });
+
+  it('hits an enemy crossed between two fixed simulation positions', () => {
+    const player = createPlayer();
+    const weapon = createWeapon(WeaponType.MAGIC_WAND);
+    weapon.timer = weapon.cooldown;
+    const target = makeEnemy(100, 0);
+    const projectiles: Projectile[] = [];
+
+    updateWeapon(weapon, player, projectiles, 0, enemyQuery([target]));
+    projectiles[0].x = 0;
+    projectiles[0].y = 0;
+    projectiles[0].vx = 12_000;
+    projectiles[0].vy = 0;
+
+    new ProjectileCombat().update({
+      player,
+      projectiles,
+      enemyQuery: enemyQuery([target]),
+      mapSystem: { handleProjectileCollision: () => false } as any,
+      particles: [],
+      damageNumbers: [],
+    }, 1 / 60);
+
+    expect(target.hp).toBeLessThan(target.maxHp);
   });
 
   it('casts fire wand as stationary flame eruptions on enemy positions', () => {

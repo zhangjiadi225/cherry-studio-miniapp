@@ -10,6 +10,7 @@ import type { Player, SellableCard, UpgradeOption } from '../../types';
 import { WEAPON_EVOLUTION_DATA } from '../../data/weaponEvolutions';
 import { applyUpgrade, generateUpgradeOptions, getSellableCards, sellOwnedCard } from '../weapon/Upgrade';
 import { getShopLayout } from './ShopLayout';
+import { SYSTEM_RANDOM, type RandomSource } from '../../kernel/Random';
 
 export type ShopClickAction =
   | { type: 'buy' }
@@ -22,6 +23,8 @@ export class ShopSystem {
   selectedIndex = 0;
   private freeRerollAvailable = true;
   private paidRerollsThisRound = 0;
+
+  constructor(private readonly random: RandomSource = SYSTEM_RANDOM) {}
 
   reset() {
     this.options = [];
@@ -132,7 +135,8 @@ export class ShopSystem {
       player,
       getMetaShopOptionCount(meta, player.level),
       areModifierCardsUnlocked(meta),
-      unlockedModifiers
+      unlockedModifiers,
+      this.random
     );
   }
 

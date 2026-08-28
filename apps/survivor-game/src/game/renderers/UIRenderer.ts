@@ -2150,8 +2150,8 @@ export function drawPerformanceOverlay(rc: RenderContext, stats: PerformanceStat
   const { ctx } = rc;
   const x = 12;
   const y = 96;
-  const w = 176;
-  const h = 150;
+  const w = 252;
+  const h = 294;
   const fpsColor = stats.fps >= 55 ? '#8fffa8' : stats.fps >= 45 ? '#ffd166' : '#ff6b6b';
 
   ctx.save();
@@ -2171,13 +2171,32 @@ export function drawPerformanceOverlay(rc: RenderContext, stats: PerformanceStat
 
   ctx.fillStyle = 'rgba(255,255,255,0.82)';
   ctx.fillText(`Frame ${stats.frameMs.toFixed(1)} ms`, x + 10, y + 28);
-  ctx.fillText(`Update ${stats.updateMs.toFixed(1)} ms`, x + 10, y + 46);
-  ctx.fillText(`Render ${stats.renderMs.toFixed(1)} ms`, x + 10, y + 64);
+  ctx.fillText(`Update ${stats.updateMs.toFixed(1)} / Render ${stats.renderMs.toFixed(1)} ms`, x + 10, y + 46);
+  ctx.fillText(
+    `Steps ${stats.simulationSteps} / Dropped ${stats.droppedSimulationMs.toFixed(0)} ms`,
+    x + 10,
+    y + 64
+  );
+  ctx.fillText(`Seed 0x${stats.runSeed.toString(16).padStart(8, '0')}`, x + 10, y + 82);
 
   ctx.fillStyle = 'rgba(255,255,255,0.68)';
-  ctx.fillText(`Enemies ${stats.enemies}`, x + 10, y + 88);
-  ctx.fillText(`Proj ${stats.projectiles} / EProj ${stats.enemyProjectiles}`, x + 10, y + 106);
-  ctx.fillText(`Particles ${stats.particles}`, x + 10, y + 124);
-  ctx.fillText(`DMG ${stats.damageNumbers} / Gems ${stats.xpGems}`, x + 10, y + 142);
+  ctx.fillText('Update phases', x + 10, y + 106);
+  ctx.fillText(`Move ${stats.movementMs.toFixed(2)} / Enemy ${stats.enemiesMs.toFixed(2)} ms`, x + 10, y + 124);
+  ctx.fillText(`Weapon ${stats.weaponsMs.toFixed(2)} / Combat ${stats.combatMs.toFixed(2)} ms`, x + 10, y + 142);
+  ctx.fillText(`Effects ${stats.effectsMs.toFixed(2)} ms`, x + 10, y + 160);
+  ctx.fillText(`Enemies ${stats.enemies}`, x + 10, y + 184);
+  ctx.fillText(`Proj ${stats.projectiles} / EProj ${stats.enemyProjectiles}`, x + 10, y + 202);
+  ctx.fillText(`Particles ${stats.particles} / DMG ${stats.damageNumbers} / Gems ${stats.xpGems}`, x + 10, y + 220);
+  ctx.fillText(
+    `Cap frames E${stats.enemyCapFrames} P${stats.projectileCapFrames} EP${stats.enemyProjectileCapFrames}`,
+    x + 10,
+    y + 238
+  );
+  ctx.fillText(`FX${stats.particleCapFrames} D${stats.damageNumberCapFrames}`, x + 10, y + 256);
+  ctx.fillText(
+    `Grid cells ${stats.spatialBuckets} / capacity ${stats.spatialBucketCapacity}`,
+    x + 10,
+    y + 274
+  );
   ctx.restore();
 }
