@@ -1,7 +1,8 @@
 export const COLORS = {
   bg: '#7f8881',
   groundOutside: '#5f6762',
-  groundMark: 'rgba(34,45,39,0.18)',
+  groundCheckerLight: '#eef0ef',
+  groundCheckerDark: '#b9bfbc',
   playerBody: '#4a9eff',
   playerOutline: '#2d7ad6',
   playerGlow: 'rgba(74,158,255,0.3)',

@@ -8,7 +8,19 @@ import type { AiGateway } from './AiGateway';
 /** Cherry AI adapter. All host calls stay behind the shared MiniApp kit. */
 export const cherryKitAiGateway: AiGateway = {
   async getRuntimeSnapshot(modelSlot) {
-    return getRuntimeSnapshot(modelSlot);
+    const snapshot = await getRuntimeSnapshot(modelSlot);
+    return {
+      permissions: snapshot.permissions,
+      capabilities: snapshot.capabilities.available
+        ? {
+            reasoning: snapshot.capabilities.reasoning,
+            contextWindow: snapshot.capabilities.contextWindow,
+          }
+        : {
+            reasoning: false,
+            contextWindow: null,
+          },
+    };
   },
 
   async streamText(request) {

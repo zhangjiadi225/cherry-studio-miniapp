@@ -40,67 +40,38 @@ export class WorldRenderer {
     ctx.fillRect(viewL, viewT, viewR - viewL, viewB - viewT);
 
     if (mapL < mapR && mapT < mapB) {
-      ctx.fillStyle = COLORS.bg;
+      ctx.fillStyle = COLORS.groundCheckerLight;
       ctx.fillRect(mapL, mapT, mapR - mapL, mapB - mapT);
 
       ctx.save();
       ctx.beginPath();
       ctx.rect(mapL, mapT, mapR - mapL, mapB - mapT);
       ctx.clip();
-      this.drawSparseGroundMarks(ctx, mapL, mapT, mapR, mapB);
+      this.drawCheckerboard(ctx, mapL, mapT, mapR, mapB);
       ctx.restore();
     }
     ctx.restore();
   }
 
-  /** 只为当前视口按坐标哈希补绘少量地面标记，不保存地图块或纹理。 */
-  private drawSparseGroundMarks(
+  /** 只补绘视口中的深色格；格子锚定世界坐标，镜头移动时不会漂移。 */
+  private drawCheckerboard(
     ctx: CanvasRenderingContext2D,
     startX: number,
     startY: number,
     endX: number,
     endY: number
   ) {
-    const cellSize = MAP_GRID_SIZE * 3;
-    const firstX = Math.floor(startX / cellSize) * cellSize;
-    const firstY = Math.floor(startY / cellSize) * cellSize;
+    const cellSize = MAP_GRID_SIZE;
+    const firstColumn = Math.floor(startX / cellSize);
+    const lastColumn = Math.floor(endX / cellSize);
+    const firstRow = Math.floor(startY / cellSize);
+    const lastRow = Math.floor(endY / cellSize);
 
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 1.2;
-    ctx.fillStyle = COLORS.groundMark;
-    ctx.strokeStyle = COLORS.groundMark;
-
-    for (let x = firstX; x <= endX; x += cellSize) {
-      for (let y = firstY; y <= endY; y += cellSize) {
-        const hash = hashXY(x, y);
-        if (hash % 4 !== 0) continue;
-
-        const px = x + 36 + ((hash >>> 5) % (cellSize - 72));
-        const py = y + 36 + ((hash >>> 13) % (cellSize - 72));
-
-        switch ((hash >>> 21) % 3) {
-          case 0:
-            ctx.beginPath();
-            ctx.moveTo(px - 8, py - 5);
-            ctx.lineTo(px + 2, py + 1);
-            ctx.lineTo(px + 10, py + 9);
-            ctx.stroke();
-            break;
-          case 1:
-            ctx.beginPath();
-            ctx.ellipse(px, py, 7, 4, (hash % 7) * 0.2, 0, Math.PI * 2);
-            ctx.stroke();
-            break;
-          default:
-            ctx.beginPath();
-            ctx.moveTo(px - 6, py - 6);
-            ctx.lineTo(px + 6, py + 6);
-            ctx.moveTo(px + 6, py - 6);
-            ctx.lineTo(px - 6, py + 6);
-            ctx.stroke();
-            break;
-        }
+    ctx.fillStyle = COLORS.groundCheckerDark;
+    for (let row = firstRow; row <= lastRow; row++) {
+      for (let column = firstColumn; column <= lastColumn; column++) {
+        if ((row + column) % 2 === 0) continue;
+        ctx.fillRect(column * cellSize, row * cellSize, cellSize, cellSize);
       }
     }
   }

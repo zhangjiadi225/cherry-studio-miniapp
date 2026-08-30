@@ -228,7 +228,7 @@ menu ↔ playing ↔ paused
 
 `EngineHomeScreen` 使用 DOM/CSS 实现可输入、响应式的产品首页，并直接负责难度、系统武器、AI 生成武器的选择与开战。衣橱、星图和内容库仍由 Canvas 桌面 UI 接管，不再存在单独的 Canvas 出征配置页。`Renderer` 持有 Canvas Context、尺寸与 `WorldRenderer`，将绘制委托给：
 
-- `WorldRenderer`：背景、网格、边界和地图。
+- `WorldRenderer`：灰白棋盘格地面、边界和地图障碍。
 - `EntityRenderer`：玩家、武器展示、怪物、弹幕和经验。
 - `EffectsRenderer`：粒子、飘字、受伤/升级闪光和 Boss 预警。
 - `UIRenderer`：HUD、桌面、商店、暂停和结算。
