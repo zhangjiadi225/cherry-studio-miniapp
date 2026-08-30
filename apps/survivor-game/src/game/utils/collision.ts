@@ -151,6 +151,15 @@ export function pushCircleFromRect(
   cx: number, cy: number, cr: number,
   rx: number, ry: number, rw: number, rh: number
 ): { x: number; y: number } | null {
+  const result = { x: 0, y: 0 };
+  return pushCircleFromRectInto(cx, cy, cr, rx, ry, rw, rh, result) ? result : null;
+}
+
+export function pushCircleFromRectInto(
+  cx: number, cy: number, cr: number,
+  rx: number, ry: number, rw: number, rh: number,
+  out: { x: number; y: number }
+): boolean {
   const halfW = rw / 2;
   const halfH = rh / 2;
   const nearestX = Math.max(rx - halfW, Math.min(cx, rx + halfW));
@@ -158,7 +167,7 @@ export function pushCircleFromRect(
   const dx = cx - nearestX;
   const dy = cy - nearestY;
   const distSq = dx * dx + dy * dy;
-  if (distSq >= cr * cr) return null;
+  if (distSq >= cr * cr) return false;
   // 圆心在矩形内部：沿最小穿透轴推出
   if (distSq === 0) {
     const distLeft   = cx - (rx - halfW);
@@ -166,12 +175,24 @@ export function pushCircleFromRect(
     const distTop    = cy - (ry - halfH);
     const distBottom = (ry + halfH) - cy;
     const minDist = Math.min(distLeft, distRight, distTop, distBottom);
-    if (minDist === distLeft)   return { x: -(cr + distLeft),   y: 0 };
-    if (minDist === distRight)  return { x: cr + distRight,     y: 0 };
-    if (minDist === distTop)    return { x: 0, y: -(cr + distTop) };
-    return { x: 0, y: cr + distBottom };
+    if (minDist === distLeft) {
+      out.x = -(cr + distLeft);
+      out.y = 0;
+    } else if (minDist === distRight) {
+      out.x = cr + distRight;
+      out.y = 0;
+    } else if (minDist === distTop) {
+      out.x = 0;
+      out.y = -(cr + distTop);
+    } else {
+      out.x = 0;
+      out.y = cr + distBottom;
+    }
+    return true;
   }
   const distVal = Math.sqrt(distSq);
   const overlap = cr - distVal;
-  return { x: (dx / distVal) * overlap, y: (dy / distVal) * overlap };
+  out.x = (dx / distVal) * overlap;
+  out.y = (dy / distVal) * overlap;
+  return true;
 }

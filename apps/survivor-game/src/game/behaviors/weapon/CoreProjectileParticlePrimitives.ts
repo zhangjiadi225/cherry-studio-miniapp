@@ -1,5 +1,7 @@
-import { MAX_ACTIVE_PARTICLES } from '../../constants';
-import { createParticle } from '../../effects/Particle';
+import {
+  createResolvedParticle,
+  reserveParticleCapacity,
+} from '../../effects/Particle';
 import type { PrimitiveParamsV1 } from '../../recipes/weapon/WeaponRecipe';
 import {
   WeaponPrimitiveParameterError,
@@ -161,14 +163,17 @@ function readEnum<T extends string>(
   return value as T;
 }
 
-function seededRandom(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6d2b79f5) | 0;
-    let value = Math.imul(state ^ (state >>> 15), 1 | state);
-    value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  };
+let particleRandomState = 0;
+
+function resetParticleRandom(seed: number): void {
+  particleRandomState = seed >>> 0;
+}
+
+function nextParticleRandom(): number {
+  particleRandomState = (particleRandomState + 0x6d2b79f5) | 0;
+  let value = Math.imul(particleRandomState ^ (particleRandomState >>> 15), 1 | particleRandomState);
+  value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+  return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
 }
 
 function paletteColor(
@@ -189,24 +194,20 @@ function pushParticle(
   glow: boolean,
   random: () => number
 ): void {
-  if (context.particles.length >= MAX_ACTIVE_PARTICLES) return;
-  context.particles.push(createParticle(
+  if (!reserveParticleCapacity(context.particles)) return;
+  context.particles.push(createResolvedParticle(
     context.x,
     context.y,
     color,
-    speed,
     lifetime,
     radius,
-    {
-      type: shape,
-      angle,
-      minSpeed: speed,
-      maxSpeed: speed,
-      glow,
-      glowRadius: radius * 4,
-      rotSpeed: (random() * 2 - 1) * 5,
-      random,
-    }
+    shape,
+    angle,
+    speed,
+    random() * Math.PI * 2,
+    (random() * 2 - 1) * 5,
+    glow,
+    radius * 4
   ));
 }
 
@@ -321,7 +322,8 @@ export const CORE_PROJECTILE_PARTICLE_PLUGIN: EnginePlugin = Object.freeze<Engin
             particlesPerEmission: count,
             maxParticleLifetime: lifetime,
             emit(context) {
-              const random = seededRandom(context.seed);
+              resetParticleRandom(context.seed);
+              const random = nextParticleRandom;
               const hasVelocity = Math.abs(context.projectile.vx) + Math.abs(context.projectile.vy) > 0.0001;
               const headingAngle = hasVelocity
                 ? Math.atan2(context.projectile.vy, context.projectile.vx)
@@ -376,7 +378,8 @@ export const CORE_PROJECTILE_PARTICLE_PLUGIN: EnginePlugin = Object.freeze<Engin
             particlesPerEmission: count,
             maxParticleLifetime: lifetime,
             emit(context) {
-              const random = seededRandom(context.seed);
+              resetParticleRandom(context.seed);
+              const random = nextParticleRandom;
               const phase = random() * Math.PI * 2;
               for (let index = 0; index < count; index++) {
                 pushParticle(
@@ -436,7 +439,8 @@ export const CORE_PROJECTILE_PARTICLE_PLUGIN: EnginePlugin = Object.freeze<Engin
             particlesPerEmission: count,
             maxParticleLifetime: lifetime,
             emit(context) {
-              const random = seededRandom(context.seed);
+              resetParticleRandom(context.seed);
+              const random = nextParticleRandom;
               const phase = random() * Math.PI * 2;
               for (let index = 0; index < count; index++) {
                 const inRing = index < ringCount;
@@ -486,22 +490,25 @@ export const CORE_PROJECTILE_PARTICLE_PLUGIN: EnginePlugin = Object.freeze<Engin
             particlesPerEmission: count,
             maxParticleLifetime: lifetime,
             emit(context) {
-              const random = seededRandom(context.seed);
+              resetParticleRandom(context.seed);
+              const random = nextParticleRandom;
               const phase = random() * Math.PI * 2;
               for (let index = 0; index < count; index++) {
-                if (context.particles.length >= MAX_ACTIVE_PARTICLES) break;
+                if (!reserveParticleCapacity(context.particles)) break;
                 const angle = phase + index / count * Math.PI * 2;
-                const particle = createParticle(
+                const particle = createResolvedParticle(
                   context.x + Math.cos(angle) * ringRadius,
                   context.y + Math.sin(angle) * ringRadius,
                   paletteColor(context.palette, colorSlot),
-                  0,
                   lifetime,
                   radius,
-                  {
-                    type: 'circle', minSpeed: 0, maxSpeed: 0, glow,
-                    glowRadius: radius * 4, rotSpeed: 0, random,
-                  }
+                  'circle',
+                  angle,
+                  0,
+                  random() * Math.PI * 2,
+                  0,
+                  glow,
+                  radius * 4
                 );
                 context.particles.push(particle);
               }
@@ -540,7 +547,8 @@ export const CORE_PROJECTILE_PARTICLE_PLUGIN: EnginePlugin = Object.freeze<Engin
             particlesPerEmission: count,
             maxParticleLifetime: lifetime,
             emit(context) {
-              const random = seededRandom(context.seed);
+              resetParticleRandom(context.seed);
+              const random = nextParticleRandom;
               const phase = random() * Math.PI * 2;
               for (let index = 0; index < count; index++) {
                 pushParticle(

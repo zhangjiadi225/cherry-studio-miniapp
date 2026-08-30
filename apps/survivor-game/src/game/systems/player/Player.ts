@@ -7,6 +7,8 @@ import {
 } from '../../constants';
 import type { MapSystem } from '../map/MapSystem';
 
+const mapCollisionPushScratch = { x: 0, y: 0 };
+
 export function createPlayer(skinId: string = 'wanderer'): Player {
   return {
     x: 0,
@@ -46,9 +48,9 @@ export function updatePlayer(p: Player, dx: number, dy: number, dt: number, mapS
   if (dx !== 0) p.facingLeft = dx < 0;
 
   if (mapSystem) {
-    const push = mapSystem.handleCircleCollision(p.x, p.y, p.radius);
-    p.x += push.x;
-    p.y += push.y;
+    mapSystem.handleCircleCollisionInto(p.x, p.y, p.radius, mapCollisionPushScratch);
+    p.x += mapCollisionPushScratch.x;
+    p.y += mapCollisionPushScratch.y;
   }
 
   p.x = Math.max(-ARENA_HALF, Math.min(ARENA_HALF, p.x));

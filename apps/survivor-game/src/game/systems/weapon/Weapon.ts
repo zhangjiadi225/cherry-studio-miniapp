@@ -53,6 +53,41 @@ import { SYSTEM_RANDOM, type RandomSource } from '../../kernel/Random';
 
 const nearestEnemiesScratch: Enemy[] = [];
 const nearestDistancesScratch: number[] = [];
+export interface GarlicAuraHit {
+  x: number;
+  y: number;
+  dmg: number;
+}
+let activeGarlicPlayer: Player | undefined;
+let activeGarlicHits: GarlicAuraHit[] | undefined;
+let activeGarlicHitCount = 0;
+let activeGarlicRadius = 0;
+let activeGarlicDamage = 0;
+let activeGarlicKnockback = 0;
+const hitGarlicEnemy = (enemy: Enemy): void => {
+  if (enemy.hp <= 0) return;
+  const player = activeGarlicPlayer!;
+  const dx = enemy.x - player.x;
+  const dy = enemy.y - player.y;
+  const hitRadius = activeGarlicRadius + enemy.radius;
+  if (dx * dx + dy * dy >= hitRadius * hitRadius) return;
+  enemy.hp -= activeGarlicDamage;
+  enemy.hitFlash = 1;
+  if (activeGarlicKnockback > 0) {
+    const length = Math.sqrt(dx * dx + dy * dy) || 1;
+    enemy.knockbackX += dx / length * activeGarlicKnockback;
+    enemy.knockbackY += dy / length * activeGarlicKnockback;
+  }
+  let hit = activeGarlicHits![activeGarlicHitCount];
+  if (!hit) {
+    hit = { x: 0, y: 0, dmg: 0 };
+    activeGarlicHits![activeGarlicHitCount] = hit;
+  }
+  hit.x = enemy.x;
+  hit.y = enemy.y;
+  hit.dmg = activeGarlicDamage;
+  activeGarlicHitCount++;
+};
 const ORBITAL_PROJECTILE_RADIUS_MIN = 48;
 const ORBITAL_PROJECTILE_RADIUS_MAX = 132;
 const ORBITAL_PROJECTILE_RADIUS_PADDING = 34;
@@ -1306,34 +1341,43 @@ export function updateGarlicAura(
   tickTimer: { value: number },
   enemyQuery: EnemyQuery
 ): { hits: Array<{ x: number; y: number; dmg: number }> } {
-  const hits: Array<{ x: number; y: number; dmg: number }> = [];
+  const hits: GarlicAuraHit[] = [];
+  const hitCount = updateGarlicAuraInto(
+    garlicWeapon,
+    player,
+    dt,
+    tickTimer,
+    enemyQuery,
+    hits
+  );
+  hits.length = hitCount;
+  return { hits };
+}
+
+export function updateGarlicAuraInto(
+  garlicWeapon: Weapon,
+  player: Player,
+  dt: number,
+  tickTimer: { value: number },
+  enemyQuery: EnemyQuery,
+  hits: GarlicAuraHit[]
+): number {
   tickTimer.value += dt;
   const tickInterval = hasWeaponEvolution(garlicWeapon, WeaponEvolutionId.GARLIC_THORNS) ? 0.38 : 0.5;
-  if (tickTimer.value < tickInterval) return { hits };
+  if (tickTimer.value < tickInterval) return 0;
   tickTimer.value = 0;
 
-  const radius = getGarlicRadius(garlicWeapon, player);
-  const dmg = garlicWeapon.damage * player.might * getEvolutionDamageMultiplier(garlicWeapon);
+  activeGarlicPlayer = player;
+  activeGarlicHits = hits;
+  activeGarlicHitCount = 0;
+  activeGarlicRadius = getGarlicRadius(garlicWeapon, player);
+  activeGarlicDamage = garlicWeapon.damage * player.might * getEvolutionDamageMultiplier(garlicWeapon);
   const hasRepulsion = hasModifier(garlicWeapon, GenericModifierType.REPULSION_FIELD);
   const wardKnockback = hasWeaponEvolution(garlicWeapon, WeaponEvolutionId.GARLIC_WARD) ? 90 : 0;
-  const hitEnemy = (e: Enemy) => {
-    if (e.hp <= 0) return;
-    const dx = e.x - player.x;
-    const dy = e.y - player.y;
-    const hitRadius = radius + e.radius;
-    if (dx * dx + dy * dy < hitRadius * hitRadius) {
-      e.hp -= dmg;
-      e.hitFlash = 1;
-      if (hasRepulsion || wardKnockback > 0) {
-        const dir = normalize({ x: e.x - player.x, y: e.y - player.y });
-        const knockback = (hasRepulsion ? 120 : 0) + wardKnockback;
-        e.knockbackX += dir.x * knockback;
-        e.knockbackY += dir.y * knockback;
-      }
-      hits.push({ x: e.x, y: e.y, dmg });
-    }
-  };
-
-  enemyQuery.forNearby(player.x, player.y, radius, hitEnemy);
-  return { hits };
+  activeGarlicKnockback = (hasRepulsion ? 120 : 0) + wardKnockback;
+  enemyQuery.forNearby(player.x, player.y, activeGarlicRadius, hitGarlicEnemy);
+  const hitCount = activeGarlicHitCount;
+  activeGarlicPlayer = undefined;
+  activeGarlicHits = undefined;
+  return hitCount;
 }

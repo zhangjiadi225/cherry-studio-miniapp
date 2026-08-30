@@ -8,6 +8,7 @@ import { spriteRegistry } from './SpriteRegistry';
 import { weaponSpriteRegistry } from './WeaponSpriteRegistry';
 import { playerSpriteRegistry } from './PlayerSpriteRegistry';
 import type { SkinId } from '../systems/meta/MetaProgression';
+import type { ProjectileRenderPrimitiveContext } from '../recipes/weapon/WeaponRuntimePlan';
 
 // ──────────────────────────── Helpers ────────────────────────────
 
@@ -1259,6 +1260,30 @@ function getProjectileAngle(p: Projectile, fallback = 0): number {
   return speed > 0.1 ? Math.atan2(p.vy, p.vx) : fallback;
 }
 
+let activeRuntimeRenderContext: CanvasRenderingContext2D;
+let activeRuntimeRenderProjectile: Projectile;
+let activeRuntimeRenderLifeAlpha = 1;
+const runtimeProjectileRenderContext: ProjectileRenderPrimitiveContext = {
+  get ctx() {
+    return activeRuntimeRenderContext;
+  },
+  get projectile() {
+    return activeRuntimeRenderProjectile;
+  },
+  get palette() {
+    return activeRuntimeRenderProjectile.runtimePlan!.projectile.visual.palette;
+  },
+  get lifeAlpha() {
+    return activeRuntimeRenderLifeAlpha;
+  },
+  get recipeScale() {
+    return activeRuntimeRenderProjectile.runtimePlan!.projectile.visual.scale;
+  },
+  get recipeOpacity() {
+    return activeRuntimeRenderProjectile.runtimePlan!.projectile.visual.opacity;
+  },
+};
+
 function drawRuntimeProjectileVisual(
   rc: RenderContext,
   p: Projectile,
@@ -1284,18 +1309,13 @@ function drawRuntimeProjectileVisual(
     ctx.restore();
   }
 
-  const primitiveContext = {
-    ctx,
-    projectile: p,
-    palette: visual.palette,
-    lifeAlpha,
-    recipeScale: visual.scale,
-    recipeOpacity: visual.opacity,
-  };
-  visual.body.draw(primitiveContext);
-  for (const layer of visual.layers) layer.draw(primitiveContext);
-  visual.trail?.draw(primitiveContext);
-  visual.particles?.draw(primitiveContext);
+  activeRuntimeRenderContext = ctx;
+  activeRuntimeRenderProjectile = p;
+  activeRuntimeRenderLifeAlpha = lifeAlpha;
+  visual.body.draw(runtimeProjectileRenderContext);
+  for (const layer of visual.layers) layer.draw(runtimeProjectileRenderContext);
+  visual.trail?.draw(runtimeProjectileRenderContext);
+  visual.particles?.draw(runtimeProjectileRenderContext);
   return true;
 }
 

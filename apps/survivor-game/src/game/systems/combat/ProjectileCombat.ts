@@ -14,9 +14,23 @@ import { updateProjectile } from '../weapon/Weapon';
 import { pools } from '../../utils/PoolManager';
 import { circlesOverlap } from '../../utils/math';
 import type { EnemyQuery } from '../enemy/EnemyQuery';
-import type { ProjectileParticleEvent } from '../../recipes/weapon/WeaponRuntimePlan';
+import type {
+  ProjectileHitEffectContext,
+  ProjectileLifecycleContext,
+  ProjectileLifecycleEvent,
+  ProjectileParticleEffectContext,
+  ProjectileParticleEvent,
+  WeaponFeedbackContext,
+  WeaponFeedbackEvent,
+} from '../../recipes/weapon/WeaponRuntimePlan';
 
 const MODIFIERS = Object.values(GENERIC_MODIFIER_DATA);
+const KNOCKBACK_MODIFIER_MASK = MODIFIERS.reduce(
+  (mask, modifier) => modifier.effect === 'knockback'
+    ? mask | GENERIC_MODIFIER_MASK[modifier.id]
+    : mask,
+  0
+);
 const PROJECTILE_COLLISION_LOOKUP_PADDING = 64;
 const REFLECTION_DAMAGE_RATIO = 0.72;
 const REFLECTION_ANGLE_STEP = Math.PI * 0.36;
@@ -24,25 +38,79 @@ const RUNE_REFLECTION_BEAM_MAX_LENGTH = 360;
 const effectTargetsScratch: Enemy[] = [];
 const sweptTargetsScratch: Enemy[] = [];
 const sweptHitFractionsScratch: number[] = [];
-
-function hashString(value: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index++) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
+const effectTargetDistancesScratch: number[] = [];
+const HIT_DEAD = 1;
+const HIT_PRESERVED = 2;
+const BASE_HIT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 150,
+  life: 0.5,
+  radius: 3,
+  type: 'spark' as const,
+  glow: true,
+});
+const FIRE_HIT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 100,
+  life: 0.4,
+  radius: 4,
+  type: 'circle' as const,
+  glow: true,
+});
+const LIGHTNING_HIT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 120,
+  life: 0.3,
+  radius: 2,
+  type: 'star' as const,
+  glow: true,
+});
+const FIRE_EXPLOSION_PARTICLE_OPTIONS = Object.freeze({
+  speed: 200,
+  life: 0.7,
+  radius: 5,
+  type: 'spark' as const,
+  glow: true,
+  innerColor: '#ffcc00',
+  ringCount: 6,
+});
+const AXE_CLEAR_PARTICLE_OPTIONS = Object.freeze({
+  speed: 95,
+  life: 0.26,
+  radius: 2.2,
+  type: 'spark' as const,
+  glow: true,
+});
+const REFLECT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 100,
+  life: 0.3,
+  radius: 2,
+  type: 'star' as const,
+  glow: true,
+});
+const DEATH_EXPLOSION_PARTICLE_OPTIONS = Object.freeze({
+  speed: 170,
+  life: 0.55,
+  radius: 4,
+  type: 'spark' as const,
+  glow: true,
+  innerColor: '#ffffff',
+  ringCount: 7,
+});
+const CHAIN_HIT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 130,
+  life: 0.35,
+  radius: 2.5,
+  type: 'star' as const,
+  glow: true,
+});
 
 function particleEventSeed(
-  definitionId: string,
+  definitionHash: number,
   projectile: Projectile,
   event: ProjectileParticleEvent,
   sequence: number
 ): number {
   const eventValue = event === 'spawn' ? 1 : event === 'trail' ? 2 : event === 'hit' ? 3 : event === 'kill' ? 4 : 5;
   return (
-    hashString(definitionId) ^
+    definitionHash ^
     Math.imul(sequence + 1, 0x9e3779b1) ^
     Math.imul(Math.round(projectile.x * 16), 0x85ebca6b) ^
     Math.imul(Math.round(projectile.y * 16), 0xc2b2ae35) ^
@@ -60,7 +128,316 @@ export interface ProjectileCombatContext {
   enemyProjectiles?: EnemyProjectile[];
 }
 
+export interface ProjectileCombatMetrics {
+  collisionCandidates: number;
+  hits: number;
+}
+
 export class ProjectileCombat {
+  private metricsEnabled = false;
+  private readonly frameMetrics: ProjectileCombatMetrics = {
+    collisionCandidates: 0,
+    hits: 0,
+  };
+  private activeUpdateContext?: ProjectileCombatContext;
+  private activeProjectile?: Projectile;
+  private activeProjectileExpired = false;
+  private activeHitContext?: ProjectileCombatContext;
+  private activeHitProjectile?: Projectile;
+  private activeHitEnemy?: Enemy;
+  private hitDamageScale = 0;
+  private hitKnockbackScale = 0;
+  private activeParticleContext?: ProjectileCombatContext;
+  private activeParticleProjectile?: Projectile;
+  private activeParticleX = 0;
+  private activeParticleY = 0;
+  private activeParticleDt = 0;
+  private activeParticleSeed = 0;
+  private activeLifecycleContext?: ProjectileCombatContext;
+  private activeLifecycleProjectile?: Projectile;
+  private activeLifecycleEnemy?: Enemy;
+  private activeLifecycleEvent: ProjectileLifecycleEvent = 'hit';
+  private activeLifecycleTriggerCount = 0;
+  private activeLifecyclePrimitiveId = '';
+  private activeLifecyclePreserved = false;
+  private activeFeedbackDefinitionId = '';
+  private activeFeedbackEvent: WeaponFeedbackEvent = 'cast';
+  private activeFeedbackX = 0;
+  private activeFeedbackY = 0;
+  private activeAreaContext?: ProjectileCombatContext;
+  private activeAreaProjectile?: Projectile;
+  private activeAreaSourceId = 0;
+  private activeAreaDamage = 0;
+  private activeAreaMaximumTargets = 0;
+  private activeAreaHits = 0;
+  private activeChainSource?: Enemy;
+  private activeChainMaximumTargets = 0;
+  private readonly directionScratch = { x: 1, y: 0 };
+  private readonly hitEffectContext = this.createHitEffectContext();
+  private readonly particleEffectContext = this.createParticleEffectContext();
+  private readonly lifecycleEffectContext = this.createLifecycleEffectContext();
+  private readonly feedbackEffectContext = this.createFeedbackEffectContext();
+
+  private readonly visitProjectileEnemy = (enemy: Enemy): boolean => {
+    const ctx = this.activeUpdateContext!;
+    const projectile = this.activeProjectile!;
+    if (this.activeProjectileExpired || enemy.hp <= 0) return !this.activeProjectileExpired;
+    const collision = projectile.runtimePlan?.projectile.collision;
+    if (
+      collision &&
+      collision.repeatHitInterval > 0 &&
+      (projectile.collisionHitsThisFrame ?? 0) >= collision.maximumTargetsPerTick
+    ) return false;
+    if (!this.canHitEnemy(projectile, enemy.id)) return true;
+
+    const hitFlags = this.applyProjectileHit(ctx, projectile, enemy);
+    if (this.metricsEnabled) this.frameMetrics.hits++;
+    projectile.collisionHitsThisFrame = (projectile.collisionHitsThisFrame ?? 0) + 1;
+    if ((projectile.runtimePlan?.projectile.collision.repeatHitInterval ?? 0) > 0) {
+      return (projectile.collisionHitsThisFrame ?? 0) < (collision?.maximumTargetsPerTick ?? Infinity);
+    }
+    projectile.pierceCount++;
+    if (projectile.pierceCount > projectile.pierce && (hitFlags & HIT_PRESERVED) === 0) {
+      if (projectile.type === WeaponType.FIRE_WAND && (hitFlags & HIT_DEAD) !== 0) {
+        spawnExplosionParticles(
+          ctx.particles,
+          enemy.x,
+          enemy.y,
+          '#ff6600',
+          15,
+          FIRE_EXPLOSION_PARTICLE_OPTIONS
+        );
+      }
+      this.expireRuntimeProjectile(ctx, projectile);
+      this.activeProjectileExpired = true;
+    }
+    return !this.activeProjectileExpired;
+  };
+
+  private readonly visitOverlappingProjectileEnemy = (enemy: Enemy): boolean => {
+    const projectile = this.activeProjectile!;
+    if (this.metricsEnabled) this.frameMetrics.collisionCandidates++;
+    if (!this.projectileOverlapsEnemy(projectile, enemy)) return true;
+    return this.visitProjectileEnemy(enemy);
+  };
+
+  private readonly collectSweptTarget = (enemy: Enemy, hitFraction: number): void => {
+    let insertionIndex = sweptTargetsScratch.length;
+    sweptTargetsScratch.push(enemy);
+    sweptHitFractionsScratch.push(hitFraction);
+    while (insertionIndex > 0) {
+      const previousIndex = insertionIndex - 1;
+      const previousFraction = sweptHitFractionsScratch[previousIndex];
+      const previousEnemy = sweptTargetsScratch[previousIndex];
+      if (
+        previousFraction < hitFraction ||
+        (previousFraction === hitFraction && previousEnemy.id <= enemy.id)
+      ) break;
+      sweptTargetsScratch[insertionIndex] = previousEnemy;
+      sweptHitFractionsScratch[insertionIndex] = previousFraction;
+      insertionIndex--;
+    }
+    sweptTargetsScratch[insertionIndex] = enemy;
+    sweptHitFractionsScratch[insertionIndex] = hitFraction;
+  };
+
+  private readonly visitAreaTarget = (target: Enemy): boolean => {
+    if (this.activeAreaHits >= this.activeAreaMaximumTargets) return false;
+    if (target.hp <= 0 || target.id === this.activeAreaSourceId) return true;
+    this.dealSecondaryDamage(
+      this.activeAreaContext!,
+      this.activeAreaProjectile!,
+      target,
+      this.activeAreaDamage
+    );
+    this.activeAreaHits++;
+    return this.activeAreaHits < this.activeAreaMaximumTargets;
+  };
+
+  private readonly collectBoundedChainTarget = (target: Enemy): void => {
+    const source = this.activeChainSource!;
+    if (target.hp <= 0 || target.id === source.id) return;
+    const dx = target.x - source.x;
+    const dy = target.y - source.y;
+    const distance = dx * dx + dy * dy;
+    let insertionIndex = effectTargetsScratch.length;
+    while (
+      insertionIndex > 0 &&
+      (
+        effectTargetDistancesScratch[insertionIndex - 1] > distance ||
+        (
+          effectTargetDistancesScratch[insertionIndex - 1] === distance &&
+          effectTargetsScratch[insertionIndex - 1].id > target.id
+        )
+      )
+    ) {
+      insertionIndex--;
+    }
+    if (insertionIndex >= this.activeChainMaximumTargets) return;
+    const previousLength = effectTargetsScratch.length;
+    const nextLength = Math.min(previousLength + 1, this.activeChainMaximumTargets);
+    effectTargetsScratch.length = nextLength;
+    effectTargetDistancesScratch.length = nextLength;
+    for (let index = nextLength - 1; index > insertionIndex; index--) {
+      effectTargetsScratch[index] = effectTargetsScratch[index - 1];
+      effectTargetDistancesScratch[index] = effectTargetDistancesScratch[index - 1];
+    }
+    effectTargetsScratch[insertionIndex] = target;
+    effectTargetDistancesScratch[insertionIndex] = distance;
+  };
+
+  setMetricsEnabled(enabled: boolean): void {
+    this.metricsEnabled = enabled;
+  }
+
+  resetMetrics(): void {
+    this.frameMetrics.collisionCandidates = 0;
+    this.frameMetrics.hits = 0;
+  }
+
+  get metrics(): Readonly<ProjectileCombatMetrics> {
+    return this.frameMetrics;
+  }
+
+  private createHitEffectContext(): ProjectileHitEffectContext {
+    const combat = this;
+    return {
+      get projectile() {
+        return combat.activeHitProjectile!;
+      },
+      get enemy() {
+        return combat.activeHitEnemy!;
+      },
+      dealDamage(scale: number) {
+        combat.hitDamageScale += scale;
+        return false;
+      },
+      applyKnockback(scale: number) {
+        combat.hitKnockbackScale += scale;
+      },
+      applySlow(speedMultiplier: number, duration: number) {
+        applyEnemySlow(combat.activeHitEnemy!, speedMultiplier, duration);
+      },
+      applyBurn(damagePerSecondScale: number, duration: number) {
+        applyEnemyBurn(
+          combat.activeHitEnemy!,
+          combat.activeHitProjectile!.damage * damagePerSecondScale,
+          duration
+        );
+      },
+      dealAreaDamage(radius: number, damageScale: number, maxTargets: number) {
+        combat.dealAreaEffect(
+          combat.activeHitContext!,
+          combat.activeHitProjectile!,
+          combat.activeHitEnemy!,
+          radius,
+          damageScale,
+          maxTargets
+        );
+      },
+      dealChainDamage(range: number, damageScale: number, maxTargets: number) {
+        combat.dealChainEffect(
+          combat.activeHitContext!,
+          combat.activeHitProjectile!,
+          combat.activeHitEnemy!,
+          range,
+          damageScale,
+          maxTargets
+        );
+      },
+    };
+  }
+
+  private createParticleEffectContext(): ProjectileParticleEffectContext {
+    const combat = this;
+    return {
+      get particles() {
+        return combat.activeParticleContext!.particles;
+      },
+      get projectile() {
+        return combat.activeParticleProjectile!;
+      },
+      get x() {
+        return combat.activeParticleX;
+      },
+      get y() {
+        return combat.activeParticleY;
+      },
+      get dt() {
+        return combat.activeParticleDt;
+      },
+      get seed() {
+        return combat.activeParticleSeed;
+      },
+      get palette() {
+        return combat.activeParticleProjectile!.runtimePlan!.projectile.visual.palette;
+      },
+    };
+  }
+
+  private createLifecycleEffectContext(): ProjectileLifecycleContext {
+    const combat = this;
+    return {
+      get projectile() {
+        return combat.activeLifecycleProjectile!;
+      },
+      get enemy() {
+        return combat.activeLifecycleEnemy;
+      },
+      get event() {
+        return combat.activeLifecycleEvent;
+      },
+      get triggerCount() {
+        return combat.activeLifecycleTriggerCount;
+      },
+      setTriggerCount(value: number) {
+        combat.activeLifecycleProjectile!.lifecycleTriggerCounts!.set(
+          combat.activeLifecyclePrimitiveId,
+          Math.max(0, Math.floor(value))
+        );
+      },
+      spawnChild(angle, damageScale, speedScale, lifetimeScale, inheritLifecycle) {
+        return combat.spawnLifecycleChild(
+          combat.activeLifecycleContext!,
+          combat.activeLifecycleProjectile!,
+          angle,
+          damageScale,
+          speedScale,
+          lifetimeScale,
+          inheritLifecycle
+        );
+      },
+      redirect(angle, speedScale) {
+        const projectile = combat.activeLifecycleProjectile!;
+        const speed = Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) * speedScale;
+        projectile.headingAngle = angle;
+        projectile.vx = Math.cos(angle) * speed;
+        projectile.vy = Math.sin(angle) * speed;
+      },
+      preserveProjectile() {
+        combat.activeLifecyclePreserved = true;
+      },
+    };
+  }
+
+  private createFeedbackEffectContext(): WeaponFeedbackContext {
+    const combat = this;
+    return {
+      get definitionId() {
+        return combat.activeFeedbackDefinitionId;
+      },
+      get event() {
+        return combat.activeFeedbackEvent;
+      },
+      get x() {
+        return combat.activeFeedbackX;
+      },
+      get y() {
+        return combat.activeFeedbackY;
+      },
+    };
+  }
+
   update(ctx: ProjectileCombatContext, dt: number) {
     const projectileCount = ctx.projectiles.length;
     for (let i = 0; i < projectileCount; i++) {
@@ -97,32 +474,9 @@ export class ProjectileCombat {
       if (projectile.runtimePlan && !projectile.runtimePlan.delivery.canCollide(projectile)) continue;
       projectile.collisionHitsThisFrame = 0;
 
-      let projectileExpired = false;
-      const visitEnemy = (enemy: Enemy) => {
-        if (projectileExpired || enemy.hp <= 0) return;
-        const collision = projectile.runtimePlan?.projectile.collision;
-        if (
-          collision &&
-          collision.repeatHitInterval > 0 &&
-          (projectile.collisionHitsThisFrame ?? 0) >= collision.maximumTargetsPerTick
-        ) return;
-        if (!this.canHitEnemy(projectile, enemy.id)) return;
-
-        const hitResult = this.applyProjectileHit(ctx, projectile, enemy);
-        projectile.collisionHitsThisFrame = (projectile.collisionHitsThisFrame ?? 0) + 1;
-        if ((projectile.runtimePlan?.projectile.collision.repeatHitInterval ?? 0) > 0) return;
-        projectile.pierceCount++;
-        if (projectile.pierceCount > projectile.pierce && !hitResult.preserved) {
-          if (projectile.type === WeaponType.FIRE_WAND && hitResult.isDead) {
-            spawnExplosionParticles(ctx.particles, enemy.x, enemy.y, '#ff6600', 15, {
-              speed: 200, life: 0.7, radius: 5, type: 'spark', glow: true,
-              innerColor: '#ffcc00', ringCount: 6,
-            });
-          }
-          this.expireRuntimeProjectile(ctx, projectile);
-          projectileExpired = true;
-        }
-      };
+      this.activeUpdateContext = ctx;
+      this.activeProjectile = projectile;
+      this.activeProjectileExpired = false;
 
       const sweepRadius = this.getProjectileSweepRadius(projectile);
       if (
@@ -131,19 +485,31 @@ export class ProjectileCombat {
         projectile.previousY !== undefined
       ) {
         this.collectSweptTargets(ctx.enemyQuery, projectile, sweepRadius);
-        for (const enemy of sweptTargetsScratch) visitEnemy(enemy);
+        for (const enemy of sweptTargetsScratch) {
+          if (this.metricsEnabled) this.frameMetrics.collisionCandidates++;
+          if (!this.visitProjectileEnemy(enemy)) break;
+        }
       } else {
-        ctx.enemyQuery.forNearby(
-          projectile.x,
-          projectile.y,
-          this.getProjectileLookupRadius(projectile),
-          (enemy) => {
-            if (!this.projectileOverlapsEnemy(projectile, enemy)) return;
-            visitEnemy(enemy);
-          }
-        );
+        const radius = this.getProjectileLookupRadius(projectile);
+        if (ctx.enemyQuery.forNearbyUntil) {
+          ctx.enemyQuery.forNearbyUntil(
+            projectile.x,
+            projectile.y,
+            radius,
+            this.visitOverlappingProjectileEnemy
+          );
+        } else {
+          ctx.enemyQuery.forNearby(
+            projectile.x,
+            projectile.y,
+            radius,
+            this.visitOverlappingProjectileEnemy
+          );
+        }
       }
     }
+    this.activeUpdateContext = undefined;
+    this.activeProjectile = undefined;
     this.releaseDeadProjectiles(ctx.projectiles);
   }
 
@@ -211,25 +577,7 @@ export class ProjectileCombat {
       projectile.x,
       projectile.y,
       sweepRadius,
-      (enemy, hitFraction) => {
-        let insertionIndex = sweptTargetsScratch.length;
-        sweptTargetsScratch.push(enemy);
-        sweptHitFractionsScratch.push(hitFraction);
-        while (insertionIndex > 0) {
-          const previousIndex = insertionIndex - 1;
-          const previousFraction = sweptHitFractionsScratch[previousIndex];
-          const previousEnemy = sweptTargetsScratch[previousIndex];
-          if (
-            previousFraction < hitFraction ||
-            (previousFraction === hitFraction && previousEnemy.id <= enemy.id)
-          ) break;
-          sweptTargetsScratch[insertionIndex] = previousEnemy;
-          sweptHitFractionsScratch[insertionIndex] = previousFraction;
-          insertionIndex--;
-        }
-        sweptTargetsScratch[insertionIndex] = enemy;
-        sweptHitFractionsScratch[insertionIndex] = hitFraction;
-      }
+      this.collectSweptTarget
     );
   }
 
@@ -301,9 +649,14 @@ export class ProjectileCombat {
       if (!this.arcOverlapsCircle(projectile, enemyProjectile.x, enemyProjectile.y, enemyProjectile.radius)) continue;
       enemyProjectile.life = 0;
       if (cleared < 5) {
-        spawnHitParticles(ctx.particles, enemyProjectile.x, enemyProjectile.y, '#ffd18a', 4, {
-          speed: 95, life: 0.26, radius: 2.2, type: 'spark', glow: true,
-        });
+        spawnHitParticles(
+          ctx.particles,
+          enemyProjectile.x,
+          enemyProjectile.y,
+          '#ffd18a',
+          4,
+          AXE_CLEAR_PARTICLE_OPTIONS
+        );
       }
       cleared++;
     }
@@ -327,7 +680,7 @@ export class ProjectileCombat {
     ctx: ProjectileCombatContext,
     projectile: Projectile,
     enemy: Enemy
-  ): { isDead: boolean; preserved: boolean } {
+  ): number {
     const repeatInterval = projectile.runtimePlan?.projectile.collision.repeatHitInterval ?? 0;
     if (repeatInterval > 0) {
       projectile.hitCooldowns ??= new Map<number, number>();
@@ -337,71 +690,49 @@ export class ProjectileCombat {
     }
     const knockbackSourceX = projectile.type === WeaponType.AXE && projectile.originX !== undefined ? projectile.originX : projectile.x;
     const knockbackSourceY = projectile.type === WeaponType.AXE && projectile.originY !== undefined ? projectile.originY : projectile.y;
-    const dir = { x: enemy.x - knockbackSourceX, y: enemy.y - knockbackSourceY };
-    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
-    const knockbackModifier = this.getProjectileModifierByEffect(projectile, 'knockback');
+    const dirX = enemy.x - knockbackSourceX;
+    const dirY = enemy.y - knockbackSourceY;
+    const len = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+    const hasKnockbackModifier = (projectile.modifierMask & KNOCKBACK_MODIFIER_MASK) !== 0;
     let appliedDamage = projectile.damage;
     let isDead: boolean;
     if (projectile.runtimePlan) {
-      let damageScale = 0;
-      let knockbackScale = 0;
-      const effectContext = {
-        projectile,
-        enemy,
-        dealDamage(scale: number) {
-          damageScale += scale;
-          return false;
-        },
-        applyKnockback(scale: number) {
-          knockbackScale += scale;
-        },
-        applySlow(speedMultiplier: number, duration: number) {
-          applyEnemySlow(enemy, speedMultiplier, duration);
-        },
-        applyBurn(damagePerSecondScale: number, duration: number) {
-          applyEnemyBurn(enemy, projectile.damage * damagePerSecondScale, duration);
-        },
-        dealAreaDamage: (radius: number, damageScale: number, maxTargets: number) => {
-          this.dealAreaEffect(ctx, projectile, enemy, radius, damageScale, maxTargets);
-        },
-        dealChainDamage: (range: number, damageScale: number, maxTargets: number) => {
-          this.dealChainEffect(ctx, projectile, enemy, range, damageScale, maxTargets);
-        },
-      };
+      this.activeHitContext = ctx;
+      this.activeHitProjectile = projectile;
+      this.activeHitEnemy = enemy;
+      this.hitDamageScale = 0;
+      this.hitKnockbackScale = 0;
       for (const effect of projectile.runtimePlan.projectile.hitEffects) {
-        effect.apply(effectContext);
+        effect.apply(this.hitEffectContext);
       }
-      appliedDamage = projectile.damage * damageScale;
-      const knockback = projectile.knockback * knockbackScale + (knockbackModifier ? 120 : 0);
+      appliedDamage = projectile.damage * this.hitDamageScale;
+      const knockback = projectile.knockback * this.hitKnockbackScale + (hasKnockbackModifier ? 120 : 0);
       isDead = damageEnemy(
         enemy,
         appliedDamage,
-        (dir.x / len) * knockback,
-        (dir.y / len) * knockback
+        (dirX / len) * knockback,
+        (dirY / len) * knockback
       );
+      this.activeHitContext = undefined;
+      this.activeHitProjectile = undefined;
+      this.activeHitEnemy = undefined;
     } else {
-      const knockback = projectile.knockback + (knockbackModifier ? 120 : 0);
+      const knockback = projectile.knockback + (hasKnockbackModifier ? 120 : 0);
       isDead = damageEnemy(
         enemy,
         projectile.damage,
-        (dir.x / len) * knockback,
-        (dir.y / len) * knockback
+        (dirX / len) * knockback,
+        (dirY / len) * knockback
       );
     }
     const hitColor = ENEMY_DATA[enemy.type].color;
 
-    spawnHitParticles(ctx.particles, enemy.x, enemy.y, hitColor, 6, {
-      speed: 150, life: 0.5, radius: 3, type: 'spark', glow: true,
-    });
+    spawnHitParticles(ctx.particles, enemy.x, enemy.y, hitColor, 6, BASE_HIT_PARTICLE_OPTIONS);
     if (projectile.type === WeaponType.FIRE_WAND) {
-      spawnHitParticles(ctx.particles, enemy.x, enemy.y, '#ff8800', 4, {
-        speed: 100, life: 0.4, radius: 4, type: 'circle', glow: true,
-      });
+      spawnHitParticles(ctx.particles, enemy.x, enemy.y, '#ff8800', 4, FIRE_HIT_PARTICLE_OPTIONS);
     }
     if (projectile.type === WeaponType.LIGHTNING) {
-      spawnHitParticles(ctx.particles, enemy.x, enemy.y, '#ffff88', 3, {
-        speed: 120, life: 0.3, radius: 2, type: 'star', glow: true,
-      });
+      spawnHitParticles(ctx.particles, enemy.x, enemy.y, '#ffff88', 3, LIGHTNING_HIT_PARTICLE_OPTIONS);
     }
 
     const dmgColor = this.getProjectileDamageColor(projectile);
@@ -415,7 +746,7 @@ export class ProjectileCombat {
     }
     this.triggerProjectileModifiers(ctx, projectile, enemy, isDead);
     const preserved = this.triggerProjectileLifecycle(ctx, projectile, 'hit', enemy);
-    return { isDead, preserved };
+    return (isDead ? HIT_DEAD : 0) | (preserved ? HIT_PRESERVED : 0);
   }
 
   private dealAreaEffect(
@@ -426,12 +757,20 @@ export class ProjectileCombat {
     damageScale: number,
     maxTargets: number
   ): void {
-    let hits = 0;
-    ctx.enemyQuery.forNearby(source.x, source.y, radius, (target) => {
-      if (hits >= maxTargets || target.hp <= 0 || target.id === source.id) return;
-      this.dealSecondaryDamage(ctx, projectile, target, projectile.damage * damageScale);
-      hits++;
-    });
+    if (maxTargets <= 0) return;
+    this.activeAreaContext = ctx;
+    this.activeAreaProjectile = projectile;
+    this.activeAreaSourceId = source.id;
+    this.activeAreaDamage = projectile.damage * damageScale;
+    this.activeAreaMaximumTargets = maxTargets;
+    this.activeAreaHits = 0;
+    if (ctx.enemyQuery.forNearbyUntil) {
+      ctx.enemyQuery.forNearbyUntil(source.x, source.y, radius, this.visitAreaTarget);
+    } else {
+      ctx.enemyQuery.forNearby(source.x, source.y, radius, this.visitAreaTarget);
+    }
+    this.activeAreaContext = undefined;
+    this.activeAreaProjectile = undefined;
   }
 
   private dealChainEffect(
@@ -442,20 +781,16 @@ export class ProjectileCombat {
     damageScale: number,
     maxTargets: number
   ): void {
+    if (maxTargets <= 0) return;
     effectTargetsScratch.length = 0;
-    ctx.enemyQuery.forNearby(source.x, source.y, range, (target) => {
-      if (target.hp > 0 && target.id !== source.id) effectTargetsScratch.push(target);
-    });
-    effectTargetsScratch.sort((left, right) => {
-      const ldx = left.x - source.x;
-      const ldy = left.y - source.y;
-      const rdx = right.x - source.x;
-      const rdy = right.y - source.y;
-      return ldx * ldx + ldy * ldy - rdx * rdx - rdy * rdy || left.id - right.id;
-    });
+    effectTargetDistancesScratch.length = 0;
+    this.activeChainSource = source;
+    this.activeChainMaximumTargets = maxTargets;
+    ctx.enemyQuery.forNearby(source.x, source.y, range, this.collectBoundedChainTarget);
+    this.activeChainSource = undefined;
     let fromX = source.x;
     let fromY = source.y;
-    for (let index = 0; index < Math.min(maxTargets, effectTargetsScratch.length); index++) {
+    for (let index = 0; index < effectTargetsScratch.length; index++) {
       const target = effectTargetsScratch[index];
       spawnChainLightningParticle(ctx.particles, fromX, fromY, target.x, target.y);
       this.dealSecondaryDamage(ctx, projectile, target, projectile.damage * damageScale);
@@ -533,15 +868,15 @@ export class ProjectileCombat {
     const plan = projectile.runtimePlan!;
     const sequence = projectile.visualEffectSequence ?? 0;
     projectile.visualEffectSequence = sequence + 1;
-    effect.emit({
-      particles: ctx.particles,
-      projectile,
-      x,
-      y,
-      dt,
-      seed: particleEventSeed(plan.definitionId, projectile, event, sequence),
-      palette: plan.projectile.visual.palette,
-    });
+    this.activeParticleContext = ctx;
+    this.activeParticleProjectile = projectile;
+    this.activeParticleX = x;
+    this.activeParticleY = y;
+    this.activeParticleDt = dt;
+    this.activeParticleSeed = particleEventSeed(plan.definitionHash, projectile, event, sequence);
+    effect.emit(this.particleEffectContext);
+    this.activeParticleContext = undefined;
+    this.activeParticleProjectile = undefined;
   }
 
   private emitWeaponFeedback(
@@ -552,9 +887,13 @@ export class ProjectileCombat {
   ): void {
     const plan = projectile.runtimePlan;
     if (!plan) return;
+    this.activeFeedbackDefinitionId = plan.definitionId;
+    this.activeFeedbackEvent = event;
+    this.activeFeedbackX = x;
+    this.activeFeedbackY = y;
     for (const effect of plan.feedback) {
       if (effect.event === event) {
-        effect.emit({ definitionId: plan.definitionId, event, x, y });
+        effect.emit(this.feedbackEffectContext);
       }
     }
   }
@@ -567,40 +906,22 @@ export class ProjectileCombat {
   ): boolean {
     const plan = projectile.runtimePlan;
     if (!plan || projectile.lifecycleSuppressed) return false;
-    let preserved = false;
     projectile.lifecycleTriggerCounts ??= new Map<string, number>();
+    this.activeLifecycleContext = ctx;
+    this.activeLifecycleProjectile = projectile;
+    this.activeLifecycleEnemy = enemy;
+    this.activeLifecycleEvent = event;
+    this.activeLifecyclePreserved = false;
     for (const effect of plan.projectile.lifecycle) {
       if (effect.event !== event) continue;
-      const triggerCount = projectile.lifecycleTriggerCounts.get(effect.primitiveId) ?? 0;
-      effect.handle({
-        projectile,
-        enemy,
-        event,
-        triggerCount,
-        setTriggerCount: (value) => {
-          projectile.lifecycleTriggerCounts!.set(effect.primitiveId, Math.max(0, Math.floor(value)));
-        },
-        spawnChild: (angle, damageScale, speedScale, lifetimeScale, inheritLifecycle) =>
-          this.spawnLifecycleChild(
-            ctx,
-            projectile,
-            angle,
-            damageScale,
-            speedScale,
-            lifetimeScale,
-            inheritLifecycle
-          ),
-        redirect(angle, speedScale) {
-          const speed = Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy) * speedScale;
-          projectile.headingAngle = angle;
-          projectile.vx = Math.cos(angle) * speed;
-          projectile.vy = Math.sin(angle) * speed;
-        },
-        preserveProjectile() {
-          preserved = true;
-        },
-      });
+      this.activeLifecyclePrimitiveId = effect.primitiveId;
+      this.activeLifecycleTriggerCount = projectile.lifecycleTriggerCounts.get(effect.primitiveId) ?? 0;
+      effect.handle(this.lifecycleEffectContext);
     }
+    const preserved = this.activeLifecyclePreserved;
+    this.activeLifecycleContext = undefined;
+    this.activeLifecycleProjectile = undefined;
+    this.activeLifecycleEnemy = undefined;
     return preserved;
   }
 
@@ -636,7 +957,7 @@ export class ProjectileCombat {
     child.headingAngle = angle;
     child.runtimePlan = source.runtimePlan;
     child.useLegacyProjectileSprite = source.useLegacyProjectileSprite;
-    child.evolutionIds = source.evolutionIds ? [...source.evolutionIds] : undefined;
+    child.evolutionIds = source.evolutionIds;
     child.lifecycleDepth = (source.lifecycleDepth ?? 0) + 1;
     child.lifecycleSuppressed = !inheritLifecycle;
     child.visualSpawnPending = true;
@@ -679,9 +1000,14 @@ export class ProjectileCombat {
           break;
         case 'reflect':
           if (this.spawnReflectionProjectile(ctx, projectile, enemy)) {
-            spawnHitParticles(ctx.particles, enemy.x, enemy.y, modifier.visual.accent, 5, {
-              speed: 100, life: 0.3, radius: 2, type: 'star', glow: true,
-            });
+            spawnHitParticles(
+              ctx.particles,
+              enemy.x,
+              enemy.y,
+              modifier.visual.accent,
+              5,
+              REFLECT_PARTICLE_OPTIONS
+            );
             this.emitModifierCue(modifier.id);
           }
           break;
@@ -691,15 +1017,6 @@ export class ProjectileCombat {
 
   private projectileHasModifier(projectile: Projectile, modifier: keyof typeof GENERIC_MODIFIER_MASK): boolean {
     return (projectile.modifierMask & GENERIC_MODIFIER_MASK[modifier]) !== 0;
-  }
-
-  private getProjectileModifierByEffect(projectile: Projectile, effect: 'knockback') {
-    for (const modifier of MODIFIERS) {
-      if (modifier.effect === effect && this.projectileHasModifier(projectile, modifier.id)) {
-        return modifier;
-      }
-    }
-    return undefined;
   }
 
   private emitModifierCue(modifierType: GenericModifierType) {
@@ -718,24 +1035,41 @@ export class ProjectileCombat {
   }
 
   private getProjectileDirection(projectile: Projectile, fallbackTarget?: Enemy): { x: number; y: number } {
+    const direction = this.directionScratch;
     const speed = Math.sqrt(projectile.vx * projectile.vx + projectile.vy * projectile.vy);
-    if (speed > 0.01) return { x: projectile.vx / speed, y: projectile.vy / speed };
+    if (speed > 0.01) {
+      direction.x = projectile.vx / speed;
+      direction.y = projectile.vy / speed;
+      return direction;
+    }
     if (projectile.headingAngle !== undefined) {
-      return { x: Math.cos(projectile.headingAngle), y: Math.sin(projectile.headingAngle) };
+      direction.x = Math.cos(projectile.headingAngle);
+      direction.y = Math.sin(projectile.headingAngle);
+      return direction;
     }
     if (projectile.originX !== undefined && projectile.originY !== undefined) {
       const dx = projectile.x - projectile.originX;
       const dy = projectile.y - projectile.originY;
       const len = Math.sqrt(dx * dx + dy * dy);
-      if (len > 0.01) return { x: dx / len, y: dy / len };
+      if (len > 0.01) {
+        direction.x = dx / len;
+        direction.y = dy / len;
+        return direction;
+      }
     }
     if (fallbackTarget) {
       const dx = fallbackTarget.x - projectile.x;
       const dy = fallbackTarget.y - projectile.y;
       const len = Math.sqrt(dx * dx + dy * dy);
-      if (len > 0.01) return { x: dx / len, y: dy / len };
+      if (len > 0.01) {
+        direction.x = dx / len;
+        direction.y = dy / len;
+        return direction;
+      }
     }
-    return { x: 1, y: 0 };
+    direction.x = 1;
+    direction.y = 0;
+    return direction;
   }
 
   private spawnImpactPulse(ctx: ProjectileCombatContext, projectile: Projectile, source: Enemy, accent = '#925dff') {
@@ -771,10 +1105,14 @@ export class ProjectileCombat {
     color: string
   ) {
     const damage = projectile.damage * damageRatio;
-    spawnExplosionParticles(ctx.particles, source.x, source.y, color, 16, {
-      speed: 170, life: 0.55, radius: 4, type: 'spark', glow: true,
-      innerColor: '#ffffff', ringCount: 7,
-    });
+    spawnExplosionParticles(
+      ctx.particles,
+      source.x,
+      source.y,
+      color,
+      16,
+      DEATH_EXPLOSION_PARTICLE_OPTIONS
+    );
 
     ctx.enemyQuery.forNearby(source.x, source.y, radius, (target) => {
       if (target.hp <= 0 || target.id === source.id) return;
@@ -805,14 +1143,13 @@ export class ProjectileCombat {
     if (!best) return false;
 
     projectile.hitEnemies.add(best.id);
-    const dir = { x: best.x - source.x, y: best.y - source.y };
-    const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y) || 1;
+    const dirX = best.x - source.x;
+    const dirY = best.y - source.y;
+    const len = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
     const damage = projectile.damage * 0.55;
-    damageEnemy(best, damage, (dir.x / len) * projectile.knockback * 0.7, (dir.y / len) * projectile.knockback * 0.7);
+    damageEnemy(best, damage, (dirX / len) * projectile.knockback * 0.7, (dirY / len) * projectile.knockback * 0.7);
     spawnChainLightningParticle(ctx.particles, source.x, source.y, best.x, best.y, accent);
-    spawnHitParticles(ctx.particles, best.x, best.y, accent, 6, {
-      speed: 130, life: 0.35, radius: 2.5, type: 'star', glow: true,
-    });
+    spawnHitParticles(ctx.particles, best.x, best.y, accent, 6, CHAIN_HIT_PARTICLE_OPTIONS);
     pushDamageNumber(ctx.damageNumbers, best.x, best.y, damage, accent, 13);
     return true;
   }
@@ -841,7 +1178,7 @@ export class ProjectileCombat {
   }
 
   private copyProjectileEvolutionAssets(child: Projectile, source: Projectile) {
-    child.evolutionIds = source.evolutionIds !== undefined ? [...source.evolutionIds] : undefined;
+    child.evolutionIds = source.evolutionIds;
   }
 
   private configureStationaryFirePatch(

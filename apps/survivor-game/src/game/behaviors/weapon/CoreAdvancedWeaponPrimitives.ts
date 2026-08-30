@@ -858,7 +858,7 @@ export const CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze
       (params, path) => {
         const speedMultiplier = numberParam(params, 'speedMultiplier', path, 0.2, 1);
         const duration = numberParam(params, 'duration', path, 0.1, 12);
-        return Object.freeze({
+        return Object.freeze<ResolvedHitEffect>({
           primitiveId: CoreAdvancedWeaponPrimitiveId.EFFECT_SLOW,
           maximumDamageMultiplier: 0,
           maximumExtraTargets: 0,
@@ -871,7 +871,7 @@ export const CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze
       (params, path) => {
         const scale = numberParam(params, 'damagePerSecondScale', path, 0.05, 3);
         const duration = numberParam(params, 'duration', path, 0.2, 12);
-        return Object.freeze({
+        return Object.freeze<ResolvedHitEffect>({
           primitiveId: CoreAdvancedWeaponPrimitiveId.EFFECT_BURN,
           maximumDamageMultiplier: scale * duration,
           maximumExtraTargets: 0,
@@ -885,7 +885,7 @@ export const CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze
         const radius = numberParam(params, 'radius', path, 16, 500);
         const scale = numberParam(params, 'damageScale', path, 0.05, 4);
         const maxTargets = numberParam(params, 'maxTargets', path, 1, 16, undefined, true);
-        return Object.freeze({
+        return Object.freeze<ResolvedHitEffect>({
           primitiveId: CoreAdvancedWeaponPrimitiveId.EFFECT_AREA_DAMAGE,
           maximumDamageMultiplier: scale * maxTargets,
           maximumExtraTargets: maxTargets,
@@ -899,7 +899,7 @@ export const CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze
         const range = numberParam(params, 'range', path, 16, 600);
         const scale = numberParam(params, 'damageScale', path, 0.05, 3);
         const maxTargets = numberParam(params, 'maxTargets', path, 1, 12, undefined, true);
-        return Object.freeze({
+        return Object.freeze<ResolvedHitEffect>({
           primitiveId: CoreAdvancedWeaponPrimitiveId.EFFECT_CHAIN,
           maximumDamageMultiplier: scale * maxTargets,
           maximumExtraTargets: maxTargets,
@@ -1015,12 +1015,13 @@ export const CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze
         const event = enumParam(params, 'event', path, ['charge', 'cast', 'hit', 'kill', 'expire'] as const, 'cast');
         const cue = enumParam(params, 'cue', path, ['charge', 'cast', 'impact', 'burst', 'pulse'] as const, 'cast') as WeaponAudioCue;
         const intensity = numberParam(params, 'intensity', path, 0.1, 1, 0.6);
+        const signal = Object.freeze({ kind: 'audio' as const, cue, intensity });
         return Object.freeze<ResolvedWeaponFeedbackEffect>({
           primitiveId: CoreAdvancedWeaponPrimitiveId.AUDIO_CUE,
           event,
           estimatedCost: 0.08,
           emit() {
-            eventBus.emit(GameEvent.WEAPON_FEEDBACK, { kind: 'audio', cue, intensity });
+            eventBus.emit(GameEvent.WEAPON_FEEDBACK, signal);
           },
         });
       },
@@ -1037,12 +1038,13 @@ export const CORE_ADVANCED_WEAPON_PRIMITIVE_PLUGIN: EnginePlugin = Object.freeze
         const event = enumParam(params, 'event', path, ['charge', 'cast', 'hit', 'kill', 'expire'] as const, 'hit');
         const duration = numberParam(params, 'duration', path, 0.02, 0.4);
         const intensity = numberParam(params, 'intensity', path, 0.1, 12);
+        const signal = Object.freeze({ kind: 'camera' as const, duration, intensity });
         return Object.freeze<ResolvedWeaponFeedbackEffect>({
           primitiveId: CoreAdvancedWeaponPrimitiveId.CAMERA_IMPULSE,
           event,
           estimatedCost: 0.08,
           emit() {
-            eventBus.emit(GameEvent.WEAPON_FEEDBACK, { kind: 'camera', duration, intensity });
+            eventBus.emit(GameEvent.WEAPON_FEEDBACK, signal);
           },
         });
       },

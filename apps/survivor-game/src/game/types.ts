@@ -41,6 +41,12 @@ export interface PerformanceStats {
   weaponsMs: number;
   combatMs: number;
   effectsMs: number;
+  particleRenderMs: number;
+  particleRenderQuality: 'full' | 'reduced' | 'minimal';
+  visibleParticles: number;
+  particleRenderCost: number;
+  particleEmissions: number;
+  particleEmissionDrops: number;
   runSeed: number;
   enemies: number;
   projectiles: number;
@@ -55,6 +61,18 @@ export interface PerformanceStats {
   damageNumberCapFrames: number;
   spatialBuckets: number;
   spatialBucketCapacity: number;
+  spatialQueries: number;
+  spatialCandidateChecks: number;
+  spatialMatches: number;
+  sweptCollisionTests: number;
+  spatialEarlyExits: number;
+  projectileCollisionCandidates: number;
+  projectileHits: number;
+  poolMisses: number;
+  particlePoolMisses: number;
+  projectilePoolMisses: number;
+  canvasDpr: number;
+  glowSpriteCacheEntries: number;
 }
 
 export interface PlayerMovement {
@@ -318,6 +336,7 @@ export interface DamageNumber {
   vy: number;
   color: string;
   size: number;
+  label: string;
 }
 
 export interface XPGem {

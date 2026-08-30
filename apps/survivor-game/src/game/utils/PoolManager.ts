@@ -1,4 +1,11 @@
 import { Particle, DamageNumber, Projectile, XPGem, Enemy, EnemyType, EnemyProjectile } from '../types';
+import {
+  MAX_ACTIVE_DAMAGE_NUMBERS,
+  MAX_ACTIVE_ENEMY_PROJECTILES,
+  MAX_ACTIVE_PARTICLES,
+  MAX_ACTIVE_PLAYER_PROJECTILES,
+  MAX_ENEMIES,
+} from '../constants';
 import { ObjectPool } from './ObjectPool';
 
 function resetParticle(p: Particle) {
@@ -31,6 +38,7 @@ function resetDamageNumber(d: DamageNumber) {
   d.vy = 0;
   d.color = '';
   d.size = 0;
+  d.label = '';
 }
 
 function resetProjectile(p: Projectile) {
@@ -163,17 +171,17 @@ export const pools = {
       glowRadius: 0, glowColor: '',
     }),
     resetParticle,
-    128, 2048
+    MAX_ACTIVE_PARTICLES, 2048
   ),
 
   damageNumbers: new ObjectPool<DamageNumber>(
     () => ({
       x: 0, y: 0, value: 0,
       life: 0, maxLife: 0, vy: 0,
-      color: '', size: 0,
+      color: '', size: 0, label: '',
     }),
     resetDamageNumber,
-    64, 512
+    MAX_ACTIVE_DAMAGE_NUMBERS, 512
   ),
 
   projectiles: new ObjectPool<Projectile>(
@@ -191,7 +199,7 @@ export const pools = {
       animTimer: 0,
     }),
     resetProjectile,
-    64, 512
+    MAX_ACTIVE_PLAYER_PROJECTILES, 512
   ),
 
   enemyProjectiles: new ObjectPool<EnemyProjectile>(
@@ -207,7 +215,7 @@ export const pools = {
       animTimer: 0,
     }),
     resetEnemyProjectile,
-    64, 512
+    MAX_ACTIVE_ENEMY_PROJECTILES, 512
   ),
 
   xpGems: new ObjectPool<XPGem>(
@@ -218,7 +226,7 @@ export const pools = {
       type: 'small',
     }),
     resetXPGem,
-    64, 512
+    256, 512
   ),
 
   enemies: new ObjectPool<Enemy>(
@@ -255,7 +263,7 @@ export const pools = {
       burnTickTimer: 0,
     }),
     resetEnemy,
-    256, 1024
+    MAX_ENEMIES, 1024
   ),
 };
 
@@ -266,4 +274,13 @@ export function clearAllPools() {
   pools.enemyProjectiles.clear();
   pools.xpGems.clear();
   pools.enemies.clear();
+}
+
+export function resetPoolMetrics() {
+  pools.particles.resetMetrics();
+  pools.damageNumbers.resetMetrics();
+  pools.projectiles.resetMetrics();
+  pools.enemyProjectiles.resetMetrics();
+  pools.xpGems.resetMetrics();
+  pools.enemies.resetMetrics();
 }

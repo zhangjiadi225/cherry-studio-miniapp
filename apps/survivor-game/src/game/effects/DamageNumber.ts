@@ -17,6 +17,7 @@ export function createDamageNumber(
   d.vy = -80;
   d.color = color;
   d.size = size;
+  d.label = String(Math.round(value));
   return d;
 }
 

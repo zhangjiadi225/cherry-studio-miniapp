@@ -20,17 +20,21 @@ import { updateEnemyAttacks, updateEnemyProjectile } from './systems/enemy/Enemy
 import { Spawner } from './systems/enemy/Spawner';
 import {
   updateWeapon, updateBiblePositions, getGarlicRadius,
-  createWeapon, updateGarlicAura,
+  createWeapon, updateGarlicAuraInto, type GarlicAuraHit,
 } from './systems/weapon/Weapon';
 import { getWeaponEvolutionIds } from './data/weaponEvolutions';
 import { AudioSystem } from './systems/audio/Audio';
-import { ProjectileCombat } from './systems/combat/ProjectileCombat';
+import { ProjectileCombat, type ProjectileCombatContext } from './systems/combat/ProjectileCombat';
 import { ShopSystem } from './systems/upgrade/ShopSystem';
 import { createCamera, updateCamera, shakeCamera } from './systems/camera/Camera';
 import { createXPGem, updateXPGem } from './systems/player/XPGem';
 import {
   updateParticle, spawnHitParticles, spawnDeathParticles, spawnXPParticles,
-  spawnExplosionParticles, spawnLevelUpParticles
+  spawnExplosionParticles, spawnLevelUpParticles,
+  beginParticleEmissionFrame,
+  endParticleEmissionFrame,
+  getParticleEmissionsThisFrame,
+  getParticleEmissionDropsThisFrame,
 } from './effects/Particle';
 import { pushDamageNumber, updateDamageNumber } from './effects/DamageNumber';
 import {
@@ -46,7 +50,7 @@ import {
 import { getDifficultyParams } from './data/difficulty';
 import { MapSystem } from './systems/map/MapSystem';
 import { SpatialEnemyQuery } from './systems/enemy/EnemyQuery';
-import { pools } from './utils/PoolManager';
+import { pools, resetPoolMetrics } from './utils/PoolManager';
 import { SpatialGrid } from './utils/SpatialGrid';
 import { eventBus, gameState, GameEvent } from './events';
 import { GENERIC_MODIFIER_DATA, GENERIC_MODIFIER_MASK } from './data/modifiers';
@@ -91,6 +95,86 @@ function getObjectiveBeats(runDifficulty: RunDifficultyPreset): ObjectiveBeat[] 
 const MINIMAP_REFRESH_INTERVAL = 0.15;
 const MINIMAP_WORLD_HALF_SIZE = 1500;
 const MINIMAP_QUERY_RADIUS = MINIMAP_WORLD_HALF_SIZE * Math.SQRT2;
+const PERFORMANCE_SMOOTHING_ALPHA = 0.12;
+
+function smoothPerformanceValue(previous: number, next: number): number {
+  return previous === 0
+    ? next
+    : previous * (1 - PERFORMANCE_SMOOTHING_ALPHA) + next * PERFORMANCE_SMOOTHING_ALPHA;
+}
+const GARLIC_HIT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 60,
+  life: 0.3,
+  radius: 2,
+  type: 'circle' as const,
+  glow: true,
+});
+const REPULSION_VISUAL = GENERIC_MODIFIER_DATA[GenericModifierType.REPULSION_FIELD].visual;
+const REPULSION_HIT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 95,
+  life: 0.28,
+  radius: 2.4,
+  type: REPULSION_VISUAL.particle as 'circle' | 'square' | 'star' | 'spark',
+  glow: true,
+});
+const PLAYER_CONTACT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 180,
+  life: 0.5,
+  radius: 4,
+  type: 'spark' as const,
+  glow: true,
+});
+const PLAYER_PROJECTILE_HIT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 140,
+  life: 0.42,
+  radius: 3,
+  type: 'spark' as const,
+  glow: true,
+});
+const XP_PARTICLE_OPTIONS = Object.freeze({
+  speed: 80,
+  life: 0.4,
+  radius: 2.5,
+  color: '#88ffaa',
+  glow: true,
+});
+const NORMAL_DEATH_PARTICLE_OPTIONS = Object.freeze({
+  speed: 180,
+  life: 0.6,
+  radius: 3,
+  type: 'square' as const,
+  glow: true,
+});
+const ELITE_DEATH_PARTICLE_OPTIONS = Object.freeze({
+  speed: 250,
+  life: 0.9,
+  radius: 5,
+  type: 'square' as const,
+  glow: true,
+});
+const ELITE_ACCENT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 150,
+  life: 0.8,
+  radius: 4,
+  type: 'star' as const,
+  glow: true,
+});
+const SPLIT_PARTICLE_OPTIONS = Object.freeze({
+  speed: 170,
+  life: 0.42,
+  radius: 2.5,
+  type: 'spark' as const,
+  glow: true,
+});
+const REVIVE_PARTICLE_OPTIONS = Object.freeze({
+  speed: 300,
+  life: 1.2,
+  radius: 6,
+  type: 'star' as const,
+  glow: true,
+  innerColor: '#ffffff',
+  ringCount: 12,
+});
 
 type UpdatePhaseTimes = Pick<
   PerformanceStats,
@@ -135,7 +219,18 @@ export class Game {
   private visibleObstacles: MapObstacle[] = [];
   private xpGems: XPGem[] = [];
   private particles: Particle[] = [];
+  private visibleParticles: Particle[] = [];
   private damageNumbers: DamageNumber[] = [];
+  private garlicHits: GarlicAuraHit[] = [];
+  private readonly projectileCombatContext: ProjectileCombatContext = {
+    player: this.player,
+    projectiles: this.projectiles,
+    enemyQuery: this.enemyQuery,
+    mapSystem: this.mapSystem,
+    particles: this.particles,
+    damageNumbers: this.damageNumbers,
+    enemyProjectiles: this.enemyProjectiles,
+  };
   private elapsed = 0;
   private difficulty = 0;
   private killCount = 0;
@@ -165,6 +260,10 @@ export class Game {
     combatMs: 0,
     effectsMs: 0,
   };
+  private frameParticleRenderMs = 0;
+  private frameVisibleParticles = 0;
+  private frameParticleRenderCost = 0;
+  private frameParticleRenderQuality: PerformanceStats['particleRenderQuality'] = 'full';
   private perfStats: PerformanceStats = {
     fps: 0,
     updateMs: 0,
@@ -177,6 +276,12 @@ export class Game {
     weaponsMs: 0,
     combatMs: 0,
     effectsMs: 0,
+    particleRenderMs: 0,
+    particleRenderQuality: 'full',
+    visibleParticles: 0,
+    particleRenderCost: 0,
+    particleEmissions: 0,
+    particleEmissionDrops: 0,
     runSeed: 0,
     enemies: 0,
     projectiles: 0,
@@ -191,6 +296,18 @@ export class Game {
     damageNumberCapFrames: 0,
     spatialBuckets: 0,
     spatialBucketCapacity: 0,
+    spatialQueries: 0,
+    spatialCandidateChecks: 0,
+    spatialMatches: 0,
+    sweptCollisionTests: 0,
+    spatialEarlyExits: 0,
+    projectileCollisionCandidates: 0,
+    projectileHits: 0,
+    poolMisses: 0,
+    particlePoolMisses: 0,
+    projectilePoolMisses: 0,
+    canvasDpr: 1,
+    glowSpriteCacheEntries: 0,
   };
   private garlicWeapon?: Weapon;
   private activeBoss?: Enemy;
@@ -243,6 +360,8 @@ export class Game {
       }
     });
     this.perfEnabled = options.perfEnabled;
+    this.enemyGrid.setMetricsEnabled(this.perfEnabled);
+    this.projectileCombat.setMetricsEnabled(this.perfEnabled);
 
     window.addEventListener('keydown', this.handleKeyDown);
     canvas.addEventListener('click', this.handleCanvasClick);
@@ -358,6 +477,13 @@ export class Game {
 
   private onKeyDown(e: KeyboardEvent) {
     if (this.externalUiOpen) return;
+    if (e.code === 'F3') {
+      e.preventDefault();
+      this.perfEnabled = !this.perfEnabled;
+      this.enemyGrid.setMetricsEnabled(this.perfEnabled);
+      this.projectileCombat.setMetricsEnabled(this.perfEnabled);
+      return;
+    }
     switch (gameState.state) {
       case 'upgrading':
         if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
@@ -591,6 +717,7 @@ export class Game {
     resetEnemyIds();
     this.releaseRunEntities();
     this.player = createPlayer(this.meta.selectedSkin);
+    this.projectileCombatContext.player = this.player;
     this.player.shards = getInitialShards(this.meta);
     const startingDefinition = this.content.weapons.get(this.selectedStartingWeaponId) ??
       this.content.getWeaponByType(WeaponType.MAGIC_WAND);
@@ -650,6 +777,12 @@ export class Game {
     this.perfStats.weaponsMs = 0;
     this.perfStats.combatMs = 0;
     this.perfStats.effectsMs = 0;
+    this.perfStats.particleRenderMs = 0;
+    this.perfStats.particleRenderQuality = 'full';
+    this.perfStats.visibleParticles = 0;
+    this.perfStats.particleRenderCost = 0;
+    this.perfStats.particleEmissions = 0;
+    this.perfStats.particleEmissionDrops = 0;
     this.perfStats.runSeed = this.runSeed;
     this.perfStats.enemies = 0;
     this.perfStats.projectiles = 0;
@@ -664,6 +797,19 @@ export class Game {
     this.perfStats.damageNumberCapFrames = 0;
     this.perfStats.spatialBuckets = 0;
     this.perfStats.spatialBucketCapacity = this.enemyGrid.bucketCapacity;
+    this.perfStats.spatialQueries = 0;
+    this.perfStats.spatialCandidateChecks = 0;
+    this.perfStats.spatialMatches = 0;
+    this.perfStats.sweptCollisionTests = 0;
+    this.perfStats.spatialEarlyExits = 0;
+    this.perfStats.projectileCollisionCandidates = 0;
+    this.perfStats.projectileHits = 0;
+    this.perfStats.poolMisses = 0;
+    this.perfStats.particlePoolMisses = 0;
+    this.perfStats.projectilePoolMisses = 0;
+    this.perfStats.canvasDpr = this.renderer.getDpr();
+    this.perfStats.glowSpriteCacheEntries = this.renderer.getGlowSpriteCacheSize();
+    resetPoolMetrics();
   }
 
   private loop(time: number) {
@@ -677,6 +823,15 @@ export class Game {
     this.framePhaseTimes.weaponsMs = 0;
     this.framePhaseTimes.combatMs = 0;
     this.framePhaseTimes.effectsMs = 0;
+    this.frameParticleRenderMs = 0;
+    this.frameVisibleParticles = 0;
+    this.frameParticleRenderCost = 0;
+    this.frameParticleRenderQuality = 'full';
+    beginParticleEmissionFrame();
+    if (this.perfEnabled) {
+      this.enemyGrid.resetMetrics();
+      this.projectileCombat.resetMetrics();
+    }
 
     let simulationSteps = 0;
     const updateStart = performance.now();
@@ -686,6 +841,7 @@ export class Game {
     } else {
       this.simulationClock.discardPendingTime();
     }
+    endParticleEmissionFrame();
     const updateMs = performance.now() - updateStart;
 
     const renderStart = performance.now();
@@ -713,19 +869,26 @@ export class Game {
     frameMs: number,
     simulationSteps: number
   ) {
-    const alpha = 0.12;
-    const smooth = (previous: number, next: number) => previous === 0 ? next : previous * (1 - alpha) + next * alpha;
-    this.perfStats.fps = smooth(this.perfStats.fps, rawDt > 0 ? 1 / rawDt : 0);
-    this.perfStats.updateMs = smooth(this.perfStats.updateMs, updateMs);
-    this.perfStats.renderMs = smooth(this.perfStats.renderMs, renderMs);
-    this.perfStats.frameMs = smooth(this.perfStats.frameMs, frameMs);
+    this.perfStats.fps = smoothPerformanceValue(this.perfStats.fps, rawDt > 0 ? 1 / rawDt : 0);
+    this.perfStats.updateMs = smoothPerformanceValue(this.perfStats.updateMs, updateMs);
+    this.perfStats.renderMs = smoothPerformanceValue(this.perfStats.renderMs, renderMs);
+    this.perfStats.frameMs = smoothPerformanceValue(this.perfStats.frameMs, frameMs);
     this.perfStats.simulationSteps = simulationSteps;
     this.perfStats.droppedSimulationMs = this.simulationClock.totalDroppedSeconds * 1000;
-    this.perfStats.movementMs = smooth(this.perfStats.movementMs, this.framePhaseTimes.movementMs);
-    this.perfStats.enemiesMs = smooth(this.perfStats.enemiesMs, this.framePhaseTimes.enemiesMs);
-    this.perfStats.weaponsMs = smooth(this.perfStats.weaponsMs, this.framePhaseTimes.weaponsMs);
-    this.perfStats.combatMs = smooth(this.perfStats.combatMs, this.framePhaseTimes.combatMs);
-    this.perfStats.effectsMs = smooth(this.perfStats.effectsMs, this.framePhaseTimes.effectsMs);
+    this.perfStats.movementMs = smoothPerformanceValue(this.perfStats.movementMs, this.framePhaseTimes.movementMs);
+    this.perfStats.enemiesMs = smoothPerformanceValue(this.perfStats.enemiesMs, this.framePhaseTimes.enemiesMs);
+    this.perfStats.weaponsMs = smoothPerformanceValue(this.perfStats.weaponsMs, this.framePhaseTimes.weaponsMs);
+    this.perfStats.combatMs = smoothPerformanceValue(this.perfStats.combatMs, this.framePhaseTimes.combatMs);
+    this.perfStats.effectsMs = smoothPerformanceValue(this.perfStats.effectsMs, this.framePhaseTimes.effectsMs);
+    this.perfStats.particleRenderMs = smoothPerformanceValue(
+      this.perfStats.particleRenderMs,
+      this.frameParticleRenderMs
+    );
+    this.perfStats.particleRenderQuality = this.frameParticleRenderQuality;
+    this.perfStats.visibleParticles = this.frameVisibleParticles;
+    this.perfStats.particleRenderCost = this.frameParticleRenderCost;
+    this.perfStats.particleEmissions = getParticleEmissionsThisFrame();
+    this.perfStats.particleEmissionDrops = getParticleEmissionDropsThisFrame();
     this.perfStats.runSeed = this.runSeed;
     this.perfStats.enemies = this.enemies.length;
     this.perfStats.projectiles = this.projectiles.length;
@@ -735,6 +898,26 @@ export class Game {
     this.perfStats.xpGems = this.xpGems.length;
     this.perfStats.spatialBuckets = this.enemyGrid.activeBucketCount;
     this.perfStats.spatialBucketCapacity = this.enemyGrid.bucketCapacity;
+    const spatialMetrics = this.enemyGrid.metrics;
+    this.perfStats.spatialQueries = spatialMetrics.queries;
+    this.perfStats.spatialCandidateChecks = spatialMetrics.candidateChecks;
+    this.perfStats.spatialMatches = spatialMetrics.matches;
+    this.perfStats.sweptCollisionTests = spatialMetrics.sweptCollisionTests;
+    this.perfStats.spatialEarlyExits = spatialMetrics.earlyExits;
+    const combatMetrics = this.projectileCombat.metrics;
+    this.perfStats.projectileCollisionCandidates = combatMetrics.collisionCandidates;
+    this.perfStats.projectileHits = combatMetrics.hits;
+    this.perfStats.poolMisses =
+      pools.particles.factoryMisses +
+      pools.damageNumbers.factoryMisses +
+      pools.projectiles.factoryMisses +
+      pools.enemyProjectiles.factoryMisses +
+      pools.xpGems.factoryMisses +
+      pools.enemies.factoryMisses;
+    this.perfStats.particlePoolMisses = pools.particles.factoryMisses;
+    this.perfStats.projectilePoolMisses = pools.projectiles.factoryMisses;
+    this.perfStats.canvasDpr = this.renderer.getDpr();
+    this.perfStats.glowSpriteCacheEntries = this.renderer.getGlowSpriteCacheSize();
   }
 
   private recordCapacitySaturation() {
@@ -804,19 +987,28 @@ export class Game {
     }
 
     if (this.garlicWeapon) {
-      const { hits } = updateGarlicAura(this.garlicWeapon, this.player, dt, this.garlicTickTimer, this.enemyQuery);
+      const hitCount = updateGarlicAuraInto(
+        this.garlicWeapon,
+        this.player,
+        dt,
+        this.garlicTickTimer,
+        this.enemyQuery,
+        this.garlicHits
+      );
       const hasRepulsion = (this.garlicWeapon.modifierMask & GENERIC_MODIFIER_MASK[GenericModifierType.REPULSION_FIELD]) !== 0;
-      const repulsionVisual = GENERIC_MODIFIER_DATA[GenericModifierType.REPULSION_FIELD].visual;
-      for (let i = 0; i < hits.length; i++) {
-        const hit = hits[i];
+      for (let i = 0; i < hitCount; i++) {
+        const hit = this.garlicHits[i];
         pushDamageNumber(this.damageNumbers, hit.x, hit.y, hit.dmg, '#cccc66', 14);
-        spawnHitParticles(this.particles, hit.x, hit.y, '#cccc66', 3, {
-          speed: 60, life: 0.3, radius: 2, type: 'circle', glow: true,
-        });
+        spawnHitParticles(this.particles, hit.x, hit.y, '#cccc66', 3, GARLIC_HIT_PARTICLE_OPTIONS);
         if (hasRepulsion && i < 4) {
-          spawnHitParticles(this.particles, hit.x, hit.y, repulsionVisual.accent, 4, {
-            speed: 95, life: 0.28, radius: 2.4, type: repulsionVisual.particle as 'circle' | 'square' | 'star' | 'spark', glow: true,
-          });
+          spawnHitParticles(
+            this.particles,
+            hit.x,
+            hit.y,
+            REPULSION_VISUAL.accent,
+            4,
+            REPULSION_HIT_PARTICLE_OPTIONS
+          );
           if (i === 0) eventBus.emit(GameEvent.MODIFIER_TRIGGER, GenericModifierType.REPULSION_FIELD);
         }
       }
@@ -824,15 +1016,7 @@ export class Game {
     phaseStart = this.finishUpdatePhase('weaponsMs', phaseStart);
 
     updateBiblePositions(this.projectiles, this.player);
-    this.projectileCombat.update({
-      player: this.player,
-      projectiles: this.projectiles,
-      enemyQuery: this.enemyQuery,
-      mapSystem: this.mapSystem,
-      particles: this.particles,
-      damageNumbers: this.damageNumbers,
-      enemyProjectiles: this.enemyProjectiles,
-    }, dt);
+    this.projectileCombat.update(this.projectileCombatContext, dt);
     this.cleanupMapObstacles(dt);
 
     for (const e of this.enemies) {
@@ -849,10 +1033,8 @@ export class Game {
       this.showUpgradeScreen();
     }
 
-    for (const p of this.particles) updateParticle(p, dt);
-    this.releaseDeadParticles();
-    for (const d of this.damageNumbers) updateDamageNumber(d, dt);
-    this.releaseDeadDamageNumbers();
+    this.updateAndReleaseParticles(dt);
+    this.updateAndReleaseDamageNumbers(dt);
 
     this.checkPlayerDeath();
 
@@ -872,6 +1054,7 @@ export class Game {
 
   private releaseRunEntities() {
     this.minimapEnemies.length = 0;
+    this.visibleParticles.length = 0;
     pools.enemies.releaseAll(this.enemies);
     pools.projectiles.releaseAll(this.projectiles);
     pools.enemyProjectiles.releaseAll(this.enemyProjectiles);
@@ -906,11 +1089,11 @@ export class Game {
     this.enemies.length = write;
   }
 
-  private releaseDeadParticles() {
+  private updateAndReleaseParticles(dt: number) {
     let write = 0;
     for (let read = 0; read < this.particles.length; read++) {
       const p = this.particles[read];
-      if (p.life > 0) {
+      if (updateParticle(p, dt)) {
         if (write !== read) this.particles[write] = p;
         write++;
       } else {
@@ -920,11 +1103,11 @@ export class Game {
     this.particles.length = write;
   }
 
-  private releaseDeadDamageNumbers() {
+  private updateAndReleaseDamageNumbers(dt: number) {
     let write = 0;
     for (let read = 0; read < this.damageNumbers.length; read++) {
       const d = this.damageNumbers[read];
-      if (d.life > 0) {
+      if (updateDamageNumber(d, dt)) {
         if (write !== read) this.damageNumbers[write] = d;
         write++;
       } else {
@@ -998,9 +1181,14 @@ export class Game {
           shakeCamera(this.camera, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY);
           this.damageFlashTimer = 0.35;
           pushDamageNumber(this.damageNumbers, this.player.x, this.player.y, dmg, COLORS.danger, 20);
-          spawnHitParticles(this.particles, this.player.x, this.player.y, COLORS.danger, 10, {
-            speed: 180, life: 0.5, radius: 4, type: 'spark', glow: true,
-          });
+          spawnHitParticles(
+            this.particles,
+            this.player.x,
+            this.player.y,
+            COLORS.danger,
+            10,
+            PLAYER_CONTACT_PARTICLE_OPTIONS
+          );
         }
         e.contactCooldown = CONTACT_COOLDOWN;
       }
@@ -1023,9 +1211,14 @@ export class Game {
           shakeCamera(this.camera, SHAKE_HIT_DURATION, SHAKE_HIT_INTENSITY * 0.75);
           this.damageFlashTimer = 0.28;
           pushDamageNumber(this.damageNumbers, this.player.x, this.player.y, dmg, COLORS.danger, 18);
-          spawnHitParticles(this.particles, this.player.x, this.player.y, p.color, 8, {
-            speed: 140, life: 0.42, radius: 3, type: 'spark', glow: true,
-          });
+          spawnHitParticles(
+            this.particles,
+            this.player.x,
+            this.player.y,
+            p.color,
+            8,
+            PLAYER_PROJECTILE_HIT_PARTICLE_OPTIONS
+          );
         }
       }
       p.life = 0;
@@ -1039,9 +1232,7 @@ export class Game {
       if (gem.life <= 0) continue;
       const result = updateXPGem(gem, this.player, dt, hasMagnet);
       if (result.collected) {
-        spawnXPParticles(this.particles, gem.x, gem.y, 5, {
-          speed: 80, life: 0.4, radius: 2.5, color: '#88ffaa', glow: true,
-        });
+        spawnXPParticles(this.particles, gem.x, gem.y, 5, XP_PARTICLE_OPTIONS);
         const leveled = collectShards(this.player, result.value);
         eventBus.emit(GameEvent.XP_COLLECTED, result.value);
         if (leveled) {
@@ -1070,18 +1261,17 @@ export class Game {
       e.y,
       this.content.getEnemyByType(e.type).color,
       particleCount,
-      {
-        speed: isElite ? 250 : 180,
-        life: isElite ? 0.9 : 0.6,
-        radius: isElite ? 5 : 3,
-        type: 'square',
-        glow: true,
-      }
+      isElite ? ELITE_DEATH_PARTICLE_OPTIONS : NORMAL_DEATH_PARTICLE_OPTIONS
     );
     if (isElite) {
-      spawnDeathParticles(this.particles, e.x, e.y, '#ffd700', 10, {
-        speed: 150, life: 0.8, radius: 4, type: 'star', glow: true,
-      });
+      spawnDeathParticles(
+        this.particles,
+        e.x,
+        e.y,
+        '#ffd700',
+        10,
+        ELITE_ACCENT_PARTICLE_OPTIONS
+      );
     }
     if (shouldSplitOnDeath(e)) {
       this.spawnDeathSplitMinions(e);
@@ -1117,9 +1307,7 @@ export class Game {
       child.knockbackY = Math.sin(angle) * 80;
       this.enemies.push(child);
     }
-    spawnHitParticles(this.particles, e.x, e.y, '#d6b48a', 12, {
-      speed: 170, life: 0.42, radius: 2.5, type: 'spark', glow: true,
-    });
+    spawnHitParticles(this.particles, e.x, e.y, '#d6b48a', 12, SPLIT_PARTICLE_OPTIONS);
   }
 
   private checkPlayerDeath() {
@@ -1129,10 +1317,14 @@ export class Game {
       this.player.invTime = 3;
       removePassive(this.player, PassiveType.REVIVE);
       shakeCamera(this.camera, 0.6, 12);
-      spawnExplosionParticles(this.particles, this.player.x, this.player.y, '#ffd700', 40, {
-        speed: 300, life: 1.2, radius: 6, type: 'star', glow: true,
-        innerColor: '#ffffff', ringCount: 12,
-      });
+      spawnExplosionParticles(
+        this.particles,
+        this.player.x,
+        this.player.y,
+        '#ffd700',
+        40,
+        REVIVE_PARTICLE_OPTIONS
+      );
       this.levelUpFlashTimer = 0.8;
     } else {
       gameState.transition('die');
@@ -1346,11 +1538,23 @@ export class Game {
     this.renderer.drawPickupRange(this.player);
     this.renderer.drawPlayer(this.player);
 
+    const particleRenderStart = this.perfEnabled ? performance.now() : 0;
+    this.visibleParticles.length = 0;
+    let particleRenderCost = 0;
     for (const p of this.particles) {
       if (this.renderer.isOnScreen(p.x, p.y, this.camera, Math.max(p.radius, p.glowRadius ?? 0) + 16)) {
-        this.renderer.drawParticle(p);
+        this.visibleParticles.push(p);
+        particleRenderCost += this.renderer.estimateParticleRenderCost(p);
       }
     }
+    const particleRenderQuality = this.renderer.selectParticleRenderQuality(particleRenderCost);
+    for (const particle of this.visibleParticles) {
+      this.renderer.drawParticle(particle, particleRenderQuality);
+    }
+    this.frameVisibleParticles = this.visibleParticles.length;
+    this.frameParticleRenderCost = particleRenderCost;
+    this.frameParticleRenderQuality = particleRenderQuality;
+    if (this.perfEnabled) this.frameParticleRenderMs = performance.now() - particleRenderStart;
     for (const d of this.damageNumbers) {
       if (this.renderer.isOnScreen(d.x, d.y, this.camera, d.size + 24)) {
         this.renderer.drawDamageNumber(d);

@@ -1,6 +1,6 @@
 import { MapObstacle } from '../../types';
 import { hashXY } from '../../utils/math';
-import { pushCircleFromRect, sweptCircleRectHitFraction } from '../../utils/collision';
+import { pushCircleFromRectInto, sweptCircleRectHitFraction } from '../../utils/collision';
 import { ARENA_SIZE, OBSTACLE_CELL_SIZE, OBSTACLE_HP } from '../../constants';
 
 const START_SAFE_RADIUS = 500;
@@ -17,6 +17,56 @@ export class MapSystem {
   private obstacles: MapObstacle[] = [];
   private grid = new Map<number, Map<number, MapObstacle[]>>();
   private halfArena = ARENA_SIZE / 2;
+  private activeCollection?: MapObstacle[];
+  private activeCircleX = 0;
+  private activeCircleY = 0;
+  private activeCircleRadius = 0;
+  private activeCirclePushOutput?: { x: number; y: number };
+  private readonly obstaclePushResult = { x: 0, y: 0 };
+  private activeProjectileX = 0;
+  private activeProjectileY = 0;
+  private activeProjectilePreviousX = 0;
+  private activeProjectilePreviousY = 0;
+  private activeProjectileRadius = 0;
+  private activeProjectileFirstObstacle?: MapObstacle;
+  private activeProjectileFirstHitFraction = Infinity;
+  private readonly collectObstacle = (obstacle: MapObstacle): void => {
+    this.activeCollection!.push(obstacle);
+  };
+  private readonly resolveCircleObstacle = (obstacle: MapObstacle): void => {
+    if (obstacle.hp <= 0) return;
+    const result = this.activeCirclePushOutput!;
+    if (pushCircleFromRectInto(
+      this.activeCircleX + result.x,
+      this.activeCircleY + result.y,
+      this.activeCircleRadius,
+      obstacle.x,
+      obstacle.y,
+      obstacle.width,
+      obstacle.height,
+      this.obstaclePushResult
+    )) {
+      result.x += this.obstaclePushResult.x;
+      result.y += this.obstaclePushResult.y;
+    }
+  };
+  private readonly findFirstProjectileObstacle = (obstacle: MapObstacle): void => {
+    if (obstacle.hp <= 0) return;
+    const hitFraction = sweptCircleRectHitFraction(
+      this.activeProjectilePreviousX,
+      this.activeProjectilePreviousY,
+      this.activeProjectileX,
+      this.activeProjectileY,
+      this.activeProjectileRadius,
+      obstacle.x,
+      obstacle.y,
+      obstacle.width,
+      obstacle.height
+    );
+    if (hitFraction === undefined || hitFraction >= this.activeProjectileFirstHitFraction) return;
+    this.activeProjectileFirstHitFraction = hitFraction;
+    this.activeProjectileFirstObstacle = obstacle;
+  };
 
   generate(): void {
     this.obstacles = [];
@@ -63,7 +113,9 @@ export class MapSystem {
 
   collectNearby(minX: number, minY: number, maxX: number, maxY: number, out: MapObstacle[]): MapObstacle[] {
     out.length = 0;
-    this.forNearby(minX, minY, maxX, maxY, (obs) => out.push(obs));
+    this.activeCollection = out;
+    this.forNearby(minX, minY, maxX, maxY, this.collectObstacle);
+    this.activeCollection = undefined;
     return out;
   }
 
@@ -95,29 +147,41 @@ export class MapSystem {
   }
 
   collectVisible(camX: number, camY: number, viewW: number, viewH: number, out: MapObstacle[]): MapObstacle[] {
-    out.length = 0;
-    this.forNearby(
+    return this.collectNearby(
       camX - viewW / 2 - OBSTACLE_QUERY_PADDING,
       camY - viewH / 2 - OBSTACLE_QUERY_PADDING,
       camX + viewW / 2 + OBSTACLE_QUERY_PADDING,
       camY + viewH / 2 + OBSTACLE_QUERY_PADDING,
-      (obs) => out.push(obs)
+      out
     );
-    return out;
   }
 
   handleCircleCollision(x: number, y: number, radius: number): { x: number; y: number } {
-    let pushX = 0;
-    let pushY = 0;
-    this.forNearby(x - OBSTACLE_QUERY_PADDING, y - OBSTACLE_QUERY_PADDING, x + OBSTACLE_QUERY_PADDING, y + OBSTACLE_QUERY_PADDING, (obs) => {
-      if (obs.hp <= 0) return;
-      const push = pushCircleFromRect(x + pushX, y + pushY, radius, obs.x, obs.y, obs.width, obs.height);
-      if (push) {
-        pushX += push.x;
-        pushY += push.y;
-      }
-    });
-    return { x: pushX, y: pushY };
+    const result = { x: 0, y: 0 };
+    this.handleCircleCollisionInto(x, y, radius, result);
+    return result;
+  }
+
+  handleCircleCollisionInto(
+    x: number,
+    y: number,
+    radius: number,
+    out: { x: number; y: number }
+  ): void {
+    this.activeCircleX = x;
+    this.activeCircleY = y;
+    this.activeCircleRadius = radius;
+    this.activeCirclePushOutput = out;
+    out.x = 0;
+    out.y = 0;
+    this.forNearby(
+      x - OBSTACLE_QUERY_PADDING,
+      y - OBSTACLE_QUERY_PADDING,
+      x + OBSTACLE_QUERY_PADDING,
+      y + OBSTACLE_QUERY_PADDING,
+      this.resolveCircleObstacle
+    );
+    this.activeCirclePushOutput = undefined;
   }
 
   handleProjectileCollision(
@@ -138,32 +202,22 @@ export class MapSystem {
     previousX: number = px,
     previousY: number = py
   ): boolean {
-    let firstObstacle: MapObstacle | undefined;
-    let firstHitFraction = Infinity;
+    this.activeProjectileX = px;
+    this.activeProjectileY = py;
+    this.activeProjectilePreviousX = previousX;
+    this.activeProjectilePreviousY = previousY;
+    this.activeProjectileRadius = radius;
+    this.activeProjectileFirstObstacle = undefined;
+    this.activeProjectileFirstHitFraction = Infinity;
     const padding = radius + OBSTACLE_QUERY_PADDING;
     this.forNearby(
       Math.min(previousX, px) - padding,
       Math.min(previousY, py) - padding,
       Math.max(previousX, px) + padding,
       Math.max(previousY, py) + padding,
-      (obs) => {
-        if (obs.hp <= 0) return;
-        const hitFraction = sweptCircleRectHitFraction(
-          previousX,
-          previousY,
-          px,
-          py,
-          radius,
-          obs.x,
-          obs.y,
-          obs.width,
-          obs.height
-        );
-        if (hitFraction === undefined || hitFraction >= firstHitFraction) return;
-        firstHitFraction = hitFraction;
-        firstObstacle = obs;
-      }
+      this.findFirstProjectileObstacle
     );
+    const firstObstacle = this.activeProjectileFirstObstacle as MapObstacle | undefined;
     if (damageBoneWall && firstObstacle?.type === 'bone_wall') {
       firstObstacle.hp = Math.max(0, firstObstacle.hp - 1);
     }

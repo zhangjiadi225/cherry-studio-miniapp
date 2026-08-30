@@ -3,6 +3,12 @@ import type { SpatialGrid } from '../../utils/SpatialGrid';
 
 export interface EnemyQuery {
   forNearby(x: number, y: number, radius: number, visit: (enemy: Enemy) => void): void;
+  forNearbyUntil?(
+    x: number,
+    y: number,
+    radius: number,
+    visit: (enemy: Enemy) => boolean
+  ): boolean;
   forSweptCircle(
     startX: number,
     startY: number,
@@ -18,6 +24,15 @@ export class SpatialEnemyQuery implements EnemyQuery {
 
   forNearby(x: number, y: number, radius: number, visit: (enemy: Enemy) => void): void {
     this.grid.forNearby(x, y, radius, visit);
+  }
+
+  forNearbyUntil(
+    x: number,
+    y: number,
+    radius: number,
+    visit: (enemy: Enemy) => boolean
+  ): boolean {
+    return this.grid.forNearbyUntil(x, y, radius, visit);
   }
 
   forSweptCircle(

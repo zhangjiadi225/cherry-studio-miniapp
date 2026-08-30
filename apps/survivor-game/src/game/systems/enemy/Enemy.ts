@@ -19,6 +19,7 @@ import type { MapSystem } from '../map/MapSystem';
 import { getEnemyEngagementProfile } from './EnemyAttack';
 import { SYSTEM_RANDOM, type RandomSource } from '../../kernel/Random';
 
+const mapCollisionPushScratch = { x: 0, y: 0 };
 let nextEnemyId = 1;
 
 const DASH_WINDUP = 0.22;
@@ -166,9 +167,9 @@ export function updateEnemy(
   }
 
   if (mapSystem && !phasing) {
-    const push = mapSystem.handleCircleCollision(e.x, e.y, e.radius);
-    e.x += push.x;
-    e.y += push.y;
+    mapSystem.handleCircleCollisionInto(e.x, e.y, e.radius, mapCollisionPushScratch);
+    e.x += mapCollisionPushScratch.x;
+    e.y += mapCollisionPushScratch.y;
   }
 
   e.x += e.knockbackX * dt;

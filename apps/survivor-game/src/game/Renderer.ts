@@ -16,7 +16,7 @@ import type {
   WeaponType,
 } from './types';
 import type { CodexTab, DesktopTab, MetaState, MetaUpgradeNode } from './systems/meta/MetaProgression';
-import { COLORS } from './constants';
+import { COLORS, MAX_CANVAS_DPR } from './constants';
 import { WorldRenderer, type RenderContext } from './renderers/WorldRenderer';
 import {
   drawPlayer, drawEnemy, drawProjectile, drawEnemyProjectile, drawGarlicAura,
@@ -24,7 +24,17 @@ import {
 } from './renderers/EntityRenderer';
 import { spriteRegistry } from './renderers/SpriteRegistry';
 import { playerSpriteRegistry } from './renderers/PlayerSpriteRegistry';
-import { drawParticle, drawDamageNumber, drawDamageFlash, drawLevelUpFlash, drawBossWarning } from './renderers/EffectsRenderer';
+import {
+  drawParticle,
+  drawDamageNumber,
+  drawDamageFlash,
+  drawLevelUpFlash,
+  drawBossWarning,
+  estimateParticleRenderCost,
+  getGlowSpriteCacheSize,
+  selectParticleRenderQuality,
+  type ParticleRenderQuality,
+} from './renderers/EffectsRenderer';
 import {
   drawUI, drawMinimap, drawBossBar, drawVirtualJoystick,
   drawAudioButton as drawAudioBtn, drawPauseButton as drawPauseBtn,
@@ -47,6 +57,7 @@ export class Renderer {
   private ctx: CanvasRenderingContext2D;
   private w = 0;
   private h = 0;
+  private dpr = 1;
   private worldRenderer = new WorldRenderer();
   private rc: RenderContext;
   private readonly handleResize = () => this.resize();
@@ -66,7 +77,8 @@ export class Renderer {
   }
 
   resize() {
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(MAX_CANVAS_DPR, window.devicePixelRatio || 1);
+    this.dpr = dpr;
     this.w = window.innerWidth;
     this.h = window.innerHeight;
     this.canvas.width = this.w * dpr;
@@ -80,6 +92,7 @@ export class Renderer {
 
   getWidth() { return this.w; }
   getHeight() { return this.h; }
+  getDpr() { return this.dpr; }
 
   beginFrame(timeSeconds: number) {
     spriteRegistry.beginFrame(timeSeconds);
@@ -134,7 +147,10 @@ export class Renderer {
   drawPickupRange(player: Player) { drawPickupRange(this.rc, player); }
 
   // ─── Effects ───
-  drawParticle(p: Particle) { drawParticle(this.rc, p); }
+  estimateParticleRenderCost(p: Particle) { return estimateParticleRenderCost(p); }
+  selectParticleRenderQuality(totalCost: number) { return selectParticleRenderQuality(totalCost); }
+  getGlowSpriteCacheSize() { return getGlowSpriteCacheSize(); }
+  drawParticle(p: Particle, quality: ParticleRenderQuality) { drawParticle(this.rc, p, quality); }
   drawDamageNumber(d: DamageNumber) { drawDamageNumber(this.rc, d); }
   drawDamageFlash(alpha: number) { drawDamageFlash(this.rc, alpha); }
   drawLevelUpFlash(alpha: number) { drawLevelUpFlash(this.rc, alpha); }

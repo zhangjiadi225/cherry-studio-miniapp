@@ -139,9 +139,9 @@ class WeaponSpriteRegistry {
     size: number,
     intensity: number
   ) {
-    const ids = evolutionIds.slice(0, 2);
-    for (let i = 0; i < ids.length; i++) {
-      const spec = WEAPON_EVOLUTION_ASSETS[ids[i]];
+    const layerCount = Math.min(2, evolutionIds.length);
+    for (let i = 0; i < layerCount; i++) {
+      const spec = WEAPON_EVOLUTION_ASSETS[evolutionIds[i]];
       if (!spec) continue;
       this.drawEvolutionLayer(ctx, spec, size * (1 + i * 0.18), Math.max(0.18, intensity * (0.9 - i * 0.12)), i);
     }

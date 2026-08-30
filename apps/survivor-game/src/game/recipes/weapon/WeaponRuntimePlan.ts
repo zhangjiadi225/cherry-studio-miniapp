@@ -285,6 +285,7 @@ export interface ResolvedWeaponBudget {
 
 export interface WeaponRuntimePlan {
   readonly definitionId: string;
+  readonly definitionHash: number;
   readonly delivery: ResolvedWeaponDelivery;
   readonly trigger: ResolvedWeaponTrigger;
   readonly targeting: ResolvedTargeting;

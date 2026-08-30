@@ -71,6 +71,11 @@ function makeEnemy(x: number, y: number, id = 1): Enemy {
     traitDuration: 0,
     traitDirX: 0,
     traitDirY: 0,
+    slowMultiplier: 1,
+    slowRemaining: 0,
+    burnDamagePerSecond: 0,
+    burnRemaining: 0,
+    burnTickTimer: 0,
   };
 }
 

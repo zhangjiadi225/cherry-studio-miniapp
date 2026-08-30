@@ -42,6 +42,15 @@ const MAX_PARTICLES_PER_SECOND = 320;
 const MAX_THEORETICAL_CONCURRENT_PARTICLES = 480;
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i;
 
+function hashStableString(value: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 export type WeaponRecipeCompileErrorCode =
   | 'INVALID_RECIPE'
   | 'UNKNOWN_PRIMITIVE'
@@ -569,6 +578,7 @@ export function compileProjectileWeaponRecipe(
 
   const plan: WeaponRuntimePlan = {
     definitionId,
+    definitionHash: hashStableString(definitionId),
     delivery,
     trigger,
     targeting,

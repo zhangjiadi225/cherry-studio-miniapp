@@ -2150,8 +2150,8 @@ export function drawPerformanceOverlay(rc: RenderContext, stats: PerformanceStat
   const { ctx } = rc;
   const x = 12;
   const y = 96;
-  const w = 252;
-  const h = 294;
+  const w = 286;
+  const h = 402;
   const fpsColor = stats.fps >= 55 ? '#8fffa8' : stats.fps >= 45 ? '#ffd166' : '#ff6b6b';
 
   ctx.save();
@@ -2183,20 +2183,58 @@ export function drawPerformanceOverlay(rc: RenderContext, stats: PerformanceStat
   ctx.fillText('Update phases', x + 10, y + 106);
   ctx.fillText(`Move ${stats.movementMs.toFixed(2)} / Enemy ${stats.enemiesMs.toFixed(2)} ms`, x + 10, y + 124);
   ctx.fillText(`Weapon ${stats.weaponsMs.toFixed(2)} / Combat ${stats.combatMs.toFixed(2)} ms`, x + 10, y + 142);
-  ctx.fillText(`Effects ${stats.effectsMs.toFixed(2)} ms`, x + 10, y + 160);
+  ctx.fillText(
+    `Effects ${stats.effectsMs.toFixed(2)} / Particle render ${stats.particleRenderMs.toFixed(2)} ms`,
+    x + 10,
+    y + 160
+  );
   ctx.fillText(`Enemies ${stats.enemies}`, x + 10, y + 184);
   ctx.fillText(`Proj ${stats.projectiles} / EProj ${stats.enemyProjectiles}`, x + 10, y + 202);
   ctx.fillText(`Particles ${stats.particles} / DMG ${stats.damageNumbers} / Gems ${stats.xpGems}`, x + 10, y + 220);
   ctx.fillText(
-    `Cap frames E${stats.enemyCapFrames} P${stats.projectileCapFrames} EP${stats.enemyProjectileCapFrames}`,
+    `Visible ${stats.visibleParticles} / cost ${stats.particleRenderCost} / ${stats.particleRenderQuality}`,
     x + 10,
     y + 238
   );
-  ctx.fillText(`FX${stats.particleCapFrames} D${stats.damageNumberCapFrames}`, x + 10, y + 256);
   ctx.fillText(
-    `Grid cells ${stats.spatialBuckets} / capacity ${stats.spatialBucketCapacity}`,
+    `FX emitted ${stats.particleEmissions} / dropped ${stats.particleEmissionDrops}`,
+    x + 10,
+    y + 256
+  );
+  ctx.fillText(
+    `Spatial Q${stats.spatialQueries} C${stats.spatialCandidateChecks} M${stats.spatialMatches}`,
     x + 10,
     y + 274
+  );
+  ctx.fillText(
+    `Swept ${stats.sweptCollisionTests} / early ${stats.spatialEarlyExits}`,
+    x + 10,
+    y + 292
+  );
+  ctx.fillText(
+    `Projectile candidates ${stats.projectileCollisionCandidates} / hits ${stats.projectileHits}`,
+    x + 10,
+    y + 310
+  );
+  ctx.fillText(
+    `Pool misses ${stats.poolMisses} / FX${stats.particlePoolMisses} / P${stats.projectilePoolMisses}`,
+    x + 10,
+    y + 328
+  );
+  ctx.fillText(
+    `DPR ${stats.canvasDpr.toFixed(2)} / glow cache ${stats.glowSpriteCacheEntries}`,
+    x + 10,
+    y + 346
+  );
+  ctx.fillText(
+    `Cap frames E${stats.enemyCapFrames} P${stats.projectileCapFrames} EP${stats.enemyProjectileCapFrames}`,
+    x + 10,
+    y + 364
+  );
+  ctx.fillText(
+    `FX${stats.particleCapFrames} D${stats.damageNumberCapFrames} / Grid ${stats.spatialBuckets}:${stats.spatialBucketCapacity}`,
+    x + 10,
+    y + 382
   );
   ctx.restore();
 }

@@ -1,10 +1,77 @@
 import { Particle } from '../types';
 import { randFloat } from '../utils/math';
 import { pools } from '../utils/PoolManager';
-import { MAX_ACTIVE_PARTICLES } from '../constants';
+import { MAX_ACTIVE_PARTICLES, MAX_PARTICLE_EMISSIONS_PER_FRAME } from '../constants';
 
-function hasParticleCapacity(particles: Particle[]): boolean {
-  return particles.length < MAX_ACTIVE_PARTICLES;
+let frameEmissions = 0;
+let frameEmissionDrops = 0;
+let frameEmissionBudgetActive = false;
+
+export function beginParticleEmissionFrame(): void {
+  frameEmissions = 0;
+  frameEmissionDrops = 0;
+  frameEmissionBudgetActive = true;
+}
+
+export function endParticleEmissionFrame(): void {
+  frameEmissionBudgetActive = false;
+}
+
+export function getParticleEmissionsThisFrame(): number {
+  return frameEmissions;
+}
+
+export function getParticleEmissionDropsThisFrame(): number {
+  return frameEmissionDrops;
+}
+
+export function reserveParticleCapacity(particles: Particle[]): boolean {
+  if (
+    particles.length >= MAX_ACTIVE_PARTICLES ||
+    (frameEmissionBudgetActive && frameEmissions >= MAX_PARTICLE_EMISSIONS_PER_FRAME)
+  ) {
+    frameEmissionDrops++;
+    return false;
+  }
+  if (frameEmissionBudgetActive) frameEmissions++;
+  return true;
+}
+
+export function createResolvedParticle(
+  x: number,
+  y: number,
+  color: string,
+  life: number,
+  radius: number,
+  type: Particle['type'],
+  angle: number,
+  speed: number,
+  rotation: number,
+  rotSpeed: number,
+  glow: boolean,
+  glowRadius: number,
+  glowColor: string = color
+): Particle {
+  const p = pools.particles.acquire();
+  p.x = x;
+  p.y = y;
+  p.endX = undefined;
+  p.endY = undefined;
+  p.vx = Math.cos(angle) * speed;
+  p.vy = Math.sin(angle) * speed;
+  p.life = life;
+  p.maxLife = life;
+  p.radius = radius;
+  p.color = color;
+  p.alpha = 1;
+  p.rotation = rotation;
+  p.rotSpeed = rotSpeed;
+  p.type = type ?? 'circle';
+  p.trail = false;
+  p.glow = glow;
+  p.glowRadius = glowRadius;
+  p.glowColor = glowColor;
+  return p;
 }
 
 export function createParticle(
@@ -27,29 +94,28 @@ export function createParticle(
   } = {}
 ): Particle {
   const random = options.random ?? Math.random;
-  const p = pools.particles.acquire();
   const angle = options.angle ?? random() * Math.PI * 2;
   const minSpeed = options.minSpeed ?? speed * 0.3;
   const maxSpeed = options.maxSpeed ?? speed;
   const spd = minSpeed + random() * (maxSpeed - minSpeed);
-  p.x = x;
-  p.y = y;
-  p.endX = undefined;
-  p.endY = undefined;
-  p.vx = Math.cos(angle) * spd;
-  p.vy = Math.sin(angle) * spd;
-  p.life = life;
-  p.maxLife = life;
-  p.radius = radius;
-  p.color = color;
-  p.alpha = 1;
-  p.rotation = random() * Math.PI * 2;
-  p.rotSpeed = options.rotSpeed ?? -3 + random() * 6;
-  p.type = options.type ?? 'circle';
+  const rotation = random() * Math.PI * 2;
+  const rotSpeed = options.rotSpeed ?? -3 + random() * 6;
+  const p = createResolvedParticle(
+    x,
+    y,
+    color,
+    life,
+    radius,
+    options.type,
+    angle,
+    spd,
+    rotation,
+    rotSpeed,
+    options.glow ?? false,
+    options.glowRadius ?? radius * 3,
+    options.glowColor ?? color
+  );
   p.trail = options.trail ?? false;
-  p.glow = options.glow ?? false;
-  p.glowRadius = options.glowRadius ?? radius * 3;
-  p.glowColor = options.glowColor ?? color;
   return p;
 }
 
@@ -62,16 +128,22 @@ export function spawnChainLightningParticle(
   color = '#9fe8ff',
   glowColor = '#4bb7ff'
 ) {
-  if (!hasParticleCapacity(particles)) return;
-  const p = createParticle(x1, y1, color, 0, 0.16, 3, {
-    type: 'beam',
-    minSpeed: 0,
-    maxSpeed: 0,
-    glow: true,
-    glowRadius: 14,
-    glowColor,
-    rotSpeed: 0,
-  });
+  if (!reserveParticleCapacity(particles)) return;
+  const p = createResolvedParticle(
+    x1,
+    y1,
+    color,
+    0.16,
+    3,
+    'beam',
+    0,
+    0,
+    Math.random() * Math.PI * 2,
+    0,
+    true,
+    14,
+    glowColor
+  );
   p.endX = x2;
   p.endY = y2;
   p.rotation = Math.random() * Math.PI * 2;
@@ -86,17 +158,22 @@ export function spawnCrescentWaveParticle(
   color = '#d4a6ff',
   glowColor = '#925dff'
 ) {
-  if (!hasParticleCapacity(particles)) return;
-  const p = createParticle(x, y, color, 140, 0.28, 32, {
-    type: 'crescent',
-    minSpeed: 140,
-    maxSpeed: 140,
+  if (!reserveParticleCapacity(particles)) return;
+  const p = createResolvedParticle(
+    x,
+    y,
+    color,
+    0.28,
+    32,
+    'crescent',
     angle,
-    glow: true,
-    glowRadius: 20,
-    glowColor,
-    rotSpeed: 0,
-  });
+    140,
+    angle,
+    0,
+    true,
+    20,
+    glowColor
+  );
   p.rotation = angle;
   particles.push(p);
 }
@@ -134,12 +211,21 @@ export function spawnHitParticles(
   const glow = options.glow ?? false;
 
   for (let i = 0; i < count; i++) {
-    if (!hasParticleCapacity(particles)) break;
-    particles.push(createParticle(x, y, color, spd, lf, r + Math.random() * 2, {
+    if (!reserveParticleCapacity(particles)) break;
+    particles.push(createResolvedParticle(
+      x,
+      y,
+      color,
+      lf,
+      r + Math.random() * 2,
       type,
+      Math.random() * Math.PI * 2,
+      spd * (0.3 + Math.random() * 0.7),
+      Math.random() * Math.PI * 2,
+      -3 + Math.random() * 6,
       glow,
-      glowRadius: r * 4,
-    }));
+      r * 4
+    ));
   }
 }
 
@@ -163,13 +249,21 @@ export function spawnDeathParticles(
   const glow = options.glow ?? true;
 
   for (let i = 0; i < count; i++) {
-    if (!hasParticleCapacity(particles)) break;
-    particles.push(createParticle(x, y, color, spd, lf, r + Math.random() * 3, {
+    if (!reserveParticleCapacity(particles)) break;
+    particles.push(createResolvedParticle(
+      x,
+      y,
+      color,
+      lf,
+      r + Math.random() * 3,
       type,
+      Math.random() * Math.PI * 2,
+      spd * (0.3 + Math.random() * 0.7),
+      Math.random() * Math.PI * 2,
+      randFloat(-8, 8),
       glow,
-      glowRadius: r * 5,
-      rotSpeed: randFloat(-8, 8),
-    }));
+      r * 5
+    ));
   }
 }
 
@@ -192,12 +286,21 @@ export function spawnXPParticles(
   const glow = options.glow ?? true;
 
   for (let i = 0; i < count; i++) {
-    if (!hasParticleCapacity(particles)) break;
-    particles.push(createParticle(x, y, color, spd, lf, r, {
-      type: 'spark',
+    if (!reserveParticleCapacity(particles)) break;
+    particles.push(createResolvedParticle(
+      x,
+      y,
+      color,
+      lf,
+      r,
+      'spark',
+      Math.random() * Math.PI * 2,
+      spd * (0.3 + Math.random() * 0.7),
+      Math.random() * Math.PI * 2,
+      -3 + Math.random() * 6,
       glow,
-      glowRadius: r * 6,
-    }));
+      r * 6
+    ));
   }
 }
 
@@ -225,24 +328,40 @@ export function spawnExplosionParticles(
   const ringCount = options.ringCount ?? 8;
 
   for (let i = 0; i < ringCount; i++) {
-    if (!hasParticleCapacity(particles)) break;
+    if (!reserveParticleCapacity(particles)) break;
     const angle = (i / ringCount) * Math.PI * 2;
-    particles.push(createParticle(x, y, innerColor, spd * 0.7, lf * 0.6, r * 1.5, {
-      type: 'spark',
-      glow: true,
-      glowRadius: r * 8,
+    particles.push(createResolvedParticle(
+      x,
+      y,
+      innerColor,
+      lf * 0.6,
+      r * 1.5,
+      'spark',
       angle,
-      rotSpeed: 0,
-    }));
+      spd * 0.7,
+      Math.random() * Math.PI * 2,
+      0,
+      true,
+      r * 8
+    ));
   }
 
   for (let i = 0; i < count - ringCount; i++) {
-    if (!hasParticleCapacity(particles)) break;
-    particles.push(createParticle(x, y, color, spd, lf, r, {
+    if (!reserveParticleCapacity(particles)) break;
+    particles.push(createResolvedParticle(
+      x,
+      y,
+      color,
+      lf,
+      r,
       type,
+      Math.random() * Math.PI * 2,
+      spd * (0.3 + Math.random() * 0.7),
+      Math.random() * Math.PI * 2,
+      -3 + Math.random() * 6,
       glow,
-      glowRadius: r * 5,
-    }));
+      r * 5
+    ));
   }
 }
 
@@ -263,18 +382,27 @@ export function spawnTrailParticles(
   const lf = options.life ?? 0.2;
   const r = options.radius ?? 1.5;
   const glow = options.glow ?? true;
+  const spread = options.spread ?? 0.5;
+  const minSpeed = spd * (1 - spread);
+  const maxSpeed = spd * (1 + spread);
 
   for (let i = 0; i < count; i++) {
-    if (!hasParticleCapacity(particles)) break;
+    if (!reserveParticleCapacity(particles)) break;
     const angle = Math.random() * Math.PI * 2;
-    particles.push(createParticle(x, y, color, spd, lf, r, {
-      type: 'circle',
-      glow,
-      glowRadius: r * 4,
+    particles.push(createResolvedParticle(
+      x,
+      y,
+      color,
+      lf,
+      r,
+      'circle',
       angle,
-      minSpeed: spd * (1 - (options.spread ?? 0.5)),
-      maxSpeed: spd * (1 + (options.spread ?? 0.5)),
-    }));
+      minSpeed + Math.random() * (maxSpeed - minSpeed),
+      Math.random() * Math.PI * 2,
+      -3 + Math.random() * 6,
+      glow,
+      r * 4
+    ));
   }
 }
 
@@ -285,16 +413,23 @@ export function spawnLevelUpParticles(
   count: number = 30
 ) {
   for (let i = 0; i < count; i++) {
-    if (!hasParticleCapacity(particles)) break;
+    if (!reserveParticleCapacity(particles)) break;
     const angle = (i / count) * Math.PI * 2;
     const speed = randFloat(100, 200);
     const life = randFloat(0.6, 1.2);
-    particles.push(createParticle(x, y, '#ffd700', speed, life, 4, {
-      type: i % 3 === 0 ? 'star' : 'spark',
-      glow: true,
-      glowRadius: 16,
+    particles.push(createResolvedParticle(
+      x,
+      y,
+      '#ffd700',
+      life,
+      4,
+      i % 3 === 0 ? 'star' : 'spark',
       angle,
-      rotSpeed: randFloat(-5, 5),
-    }));
+      speed,
+      Math.random() * Math.PI * 2,
+      randFloat(-5, 5),
+      true,
+      16
+    ));
   }
 }

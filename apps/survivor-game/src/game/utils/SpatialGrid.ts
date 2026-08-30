@@ -1,5 +1,13 @@
 import { sweptCircleCircleHitFraction } from './collision';
 
+export interface SpatialGridMetrics {
+  queries: number;
+  candidateChecks: number;
+  matches: number;
+  sweptCollisionTests: number;
+  earlyExits: number;
+}
+
 export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: number }> {
   private buckets = new Map<number, Map<number, T[]>>();
   private readonly recycledRows: Map<number, T[]>[] = [];
@@ -7,6 +15,18 @@ export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: 
   private maximumItemRadius = 0;
   private activeBuckets = 0;
   private allocatedBuckets = 0;
+  private activeCollection?: T[];
+  private readonly collectItem = (item: T): void => {
+    this.activeCollection!.push(item);
+  };
+  private metricsEnabled = false;
+  private readonly frameMetrics: SpatialGridMetrics = {
+    queries: 0,
+    candidateChecks: 0,
+    matches: 0,
+    sweptCollisionTests: 0,
+    earlyExits: 0,
+  };
 
   constructor(private readonly cellSize: number) {}
 
@@ -37,7 +57,43 @@ export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: 
     }
   }
 
-  forNearby(x: number, y: number, radius: number, visit: (item: T) => void) {
+  setMetricsEnabled(enabled: boolean): void {
+    this.metricsEnabled = enabled;
+  }
+
+  resetMetrics(): void {
+    this.frameMetrics.queries = 0;
+    this.frameMetrics.candidateChecks = 0;
+    this.frameMetrics.matches = 0;
+    this.frameMetrics.sweptCollisionTests = 0;
+    this.frameMetrics.earlyExits = 0;
+  }
+
+  get metrics(): Readonly<SpatialGridMetrics> {
+    return this.frameMetrics;
+  }
+
+  forNearby(x: number, y: number, radius: number, visit: (item: T) => void): void {
+    this.scanNearby(x, y, radius, visit, false);
+  }
+
+  forNearbyUntil(
+    x: number,
+    y: number,
+    radius: number,
+    visit: (item: T) => boolean
+  ): boolean {
+    return this.scanNearby(x, y, radius, visit, true);
+  }
+
+  private scanNearby(
+    x: number,
+    y: number,
+    radius: number,
+    visit: (item: T) => void | boolean,
+    stopOnFalse: boolean
+  ): boolean {
+    if (this.metricsEnabled) this.frameMetrics.queries++;
     const lookupRadius = radius + this.maximumItemRadius;
     const minX = Math.floor((x - lookupRadius) / this.cellSize);
     const maxX = Math.floor((x + lookupRadius) / this.cellSize);
@@ -52,20 +108,28 @@ export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: 
         if (!bucket) continue;
         for (const item of bucket) {
           if ((item.hp ?? 1) <= 0) continue;
+          if (this.metricsEnabled) this.frameMetrics.candidateChecks++;
           const dx = item.x - x;
           const dy = item.y - y;
           const hitRadius = radius + item.radius;
-          if (dx * dx + dy * dy <= hitRadius * hitRadius) visit(item);
+          if (dx * dx + dy * dy > hitRadius * hitRadius) continue;
+          if (this.metricsEnabled) this.frameMetrics.matches++;
+          if (stopOnFalse && visit(item) === false) {
+            if (this.metricsEnabled) this.frameMetrics.earlyExits++;
+            return false;
+          }
+          if (!stopOnFalse) visit(item);
         }
       }
     }
+    return true;
   }
 
   collectNearby(x: number, y: number, radius: number, out: T[]): number {
     out.length = 0;
-    this.forNearby(x, y, radius, (item) => {
-      out.push(item);
-    });
+    this.activeCollection = out;
+    this.forNearby(x, y, radius, this.collectItem);
+    this.activeCollection = undefined;
     return out.length;
   }
 
@@ -77,6 +141,7 @@ export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: 
     radius: number,
     visit: (item: T, hitFraction: number) => void
   ): void {
+    if (this.metricsEnabled) this.frameMetrics.queries++;
     const padding = radius + this.maximumItemRadius;
     const minX = Math.floor((Math.min(startX, endX) - padding) / this.cellSize);
     const maxX = Math.floor((Math.max(startX, endX) + padding) / this.cellSize);
@@ -91,6 +156,10 @@ export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: 
         if (!bucket) continue;
         for (const item of bucket) {
           if ((item.hp ?? 1) <= 0) continue;
+          if (this.metricsEnabled) {
+            this.frameMetrics.candidateChecks++;
+            this.frameMetrics.sweptCollisionTests++;
+          }
           const hitFraction = sweptCircleCircleHitFraction(
             startX,
             startY,
@@ -101,7 +170,10 @@ export class SpatialGrid<T extends { x: number; y: number; radius: number; hp?: 
             item.y,
             item.radius
           );
-          if (hitFraction !== undefined) visit(item, hitFraction);
+          if (hitFraction !== undefined) {
+            if (this.metricsEnabled) this.frameMetrics.matches++;
+            visit(item, hitFraction);
+          }
         }
       }
     }
