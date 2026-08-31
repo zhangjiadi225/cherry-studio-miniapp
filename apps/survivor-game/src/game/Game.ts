@@ -1496,7 +1496,8 @@ export class Game {
 
     const visibleObstacles = this.mapSystem.collectVisible(
       this.camera.x, this.camera.y,
-      this.renderer.getWidth(), this.renderer.getHeight(),
+      this.renderer.getWorldViewWidth(this.camera),
+      this.renderer.getWorldViewHeight(this.camera),
       this.visibleObstacles
     );
     this.renderer.drawObstacles(visibleObstacles);

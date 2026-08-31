@@ -10,7 +10,8 @@ export { WEAPON_DATA, STARTING_WEAPON_TYPES, getWeaponMetadataLabel } from './da
 // ===== Game =====
 export const GAME_DURATION = 9 * 60; // 9 minutes
 export const ARENA_SIZE = 4800;
-export const MAP_GRID_SIZE = 96;
+export const MAP_GRID_SIZE = 31.2;
+export const CAMERA_ZOOM = 1.55;
 export const DIFFICULTY_INTERVAL = 30; // seconds
 export const DIFFICULTY_STEP = 0.03;
 export const SPAWN_INTERVAL_BASE = 1.5; // seconds
@@ -31,6 +32,7 @@ export const MAX_SIMULATION_FRAME_DELTA = 0.25;
 
 // ===== Player =====
 export const PLAYER_RADIUS = 14;
+export const PLAYER_VISUAL_SCALE = 1.5;
 export const PLAYER_BASE_HP = 100;
 export const PLAYER_BASE_SPEED = 200;
 export const PLAYER_BASE_PICKUP_RANGE = 60;

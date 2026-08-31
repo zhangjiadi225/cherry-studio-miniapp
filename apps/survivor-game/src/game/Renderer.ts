@@ -93,6 +93,8 @@ export class Renderer {
   getWidth() { return this.w; }
   getHeight() { return this.h; }
   getDpr() { return this.dpr; }
+  getWorldViewWidth(cam: Camera) { return this.w / cam.zoom; }
+  getWorldViewHeight(cam: Camera) { return this.h / cam.zoom; }
 
   beginFrame(timeSeconds: number) {
     spriteRegistry.beginFrame(timeSeconds);
@@ -105,10 +107,9 @@ export class Renderer {
 
   beginWorld(cam: Camera) {
     this.ctx.save();
-    this.ctx.translate(
-      this.w / 2 - cam.x - cam.shakeX,
-      this.h / 2 - cam.y - cam.shakeY
-    );
+    this.ctx.translate(this.w / 2 - cam.shakeX, this.h / 2 - cam.shakeY);
+    this.ctx.scale(cam.zoom, cam.zoom);
+    this.ctx.translate(-cam.x, -cam.y);
   }
 
   endWorld() {
@@ -119,7 +120,8 @@ export class Renderer {
   isOnScreen(wx: number, wy: number, cam: Camera, margin: number = 80): boolean {
     const dx = Math.abs(wx - cam.x);
     const dy = Math.abs(wy - cam.y);
-    return dx < this.w / 2 + margin && dy < this.h / 2 + margin;
+    return dx < this.getWorldViewWidth(cam) / 2 + margin
+      && dy < this.getWorldViewHeight(cam) / 2 + margin;
   }
 
   getPauseButtonRect() { return getPauseRect(this.w); }

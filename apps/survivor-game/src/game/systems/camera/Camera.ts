@@ -1,4 +1,5 @@
 import type { Camera, Vec2 } from '../../types';
+import { CAMERA_ZOOM } from '../../constants';
 
 export function createCamera(): Camera {
   return {
@@ -6,6 +7,7 @@ export function createCamera(): Camera {
     y: 0,
     targetX: 0,
     targetY: 0,
+    zoom: CAMERA_ZOOM,
     shakeX: 0,
     shakeY: 0,
     shakeDuration: 0,

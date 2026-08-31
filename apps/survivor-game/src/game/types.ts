@@ -23,6 +23,7 @@ export interface Camera {
   y: number;
   targetX: number;
   targetY: number;
+  zoom: number;
   shakeX: number;
   shakeY: number;
   shakeDuration: number;

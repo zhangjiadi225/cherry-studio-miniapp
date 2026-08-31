@@ -26,10 +26,12 @@ export class WorldRenderer {
   drawGround(rc: RenderContext, cam: Camera) {
     const { ctx, w, h } = rc;
     const overscan = 32;
-    const viewL = cam.x - w / 2 - overscan;
-    const viewR = cam.x + w / 2 + overscan;
-    const viewT = cam.y - h / 2 - overscan;
-    const viewB = cam.y + h / 2 + overscan;
+    const halfViewW = w / cam.zoom / 2;
+    const halfViewH = h / cam.zoom / 2;
+    const viewL = cam.x - halfViewW - overscan;
+    const viewR = cam.x + halfViewW + overscan;
+    const viewT = cam.y - halfViewH - overscan;
+    const viewB = cam.y + halfViewH + overscan;
     const mapL = Math.max(viewL, -ARENA_HALF);
     const mapR = Math.min(viewR, ARENA_HALF);
     const mapT = Math.max(viewT, -ARENA_HALF);
@@ -290,10 +292,12 @@ export class WorldRenderer {
     const { ctx, w, h } = rc;
     const time = Date.now() * 0.001;
     const ah = ARENA_HALF;
-    const viewL = cam.x - w / 2;
-    const viewR = cam.x + w / 2;
-    const viewT = cam.y - h / 2;
-    const viewB = cam.y + h / 2;
+    const halfViewW = w / cam.zoom / 2;
+    const halfViewH = h / cam.zoom / 2;
+    const viewL = cam.x - halfViewW;
+    const viewR = cam.x + halfViewW;
+    const viewT = cam.y - halfViewH;
+    const viewB = cam.y + halfViewH;
     const pulse = 0.15 + Math.sin(time * 2) * 0.05;
 
     ctx.lineWidth = 3;

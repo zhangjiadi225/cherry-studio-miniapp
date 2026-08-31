@@ -1,7 +1,7 @@
 import type { RenderContext } from './WorldRenderer';
 import type { Player, Enemy, Projectile, XPGem, EnemyProjectile, WeaponDisplayMode, WeaponEvolutionId } from '../types';
 import { WeaponType, EnemyType } from '../types';
-import { COLORS, ENEMY_DATA, WEAPON_DATA } from '../constants';
+import { COLORS, ENEMY_DATA, PLAYER_VISUAL_SCALE, WEAPON_DATA } from '../constants';
 import { getSkinById } from '../systems/meta/MetaProgression';
 import { getWeaponEvolutionIds } from '../data/weaponEvolutions';
 import { spriteRegistry } from './SpriteRegistry';
@@ -528,6 +528,12 @@ export function drawPlayer(rc: RenderContext, p: Player) {
   const outlineColor = skin?.outline ?? COLORS.playerOutline;
   const glowColor = skin?.glow ?? 'rgba(74,158,255,';
 
+  // 只放大角色表现，不改碰撞半径与战斗数值。
+  ctx.save();
+  ctx.translate(p.x, p.y + bob);
+  ctx.scale(PLAYER_VISUAL_SCALE, PLAYER_VISUAL_SCALE);
+  ctx.translate(-p.x, -(p.y + bob));
+
   const glowSize = isMoving ? p.radius * 3 : p.radius * 2.5;
   const gradient = ctx.createRadialGradient(p.x, p.y + bob, 0, p.x, p.y + bob, glowSize);
   gradient.addColorStop(0, `${glowColor}0.22)`);
@@ -570,7 +576,10 @@ export function drawPlayer(rc: RenderContext, p: Player) {
   }
 
   drawWeaponBodyMarks(ctx, p, bob);
-  drawHPBar(rc, p.x, p.y - p.radius - 14, p.radius * 2.5, p.hp, p.maxHp, 5);
+  ctx.restore();
+
+  const visualRadius = p.radius * PLAYER_VISUAL_SCALE;
+  drawHPBar(rc, p.x, p.y - visualRadius - 14, visualRadius * 2.5, p.hp, p.maxHp, 5);
 }
 
 function drawPlayerSprite(
