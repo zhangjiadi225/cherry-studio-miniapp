@@ -6,11 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "package:miniapp:dev": "sh scripts/package-miniapp-dev.sh",
+    "miniapp:validate": "cherry-miniapp validate",
+    "miniapp:pack": "cherry-miniapp pack",
     "preview": "vite preview",
     "test": "vitest"
   },
   "devDependencies": {
+    "@cherry-miniapp/cli": "link:/Users/jd/cherry-studio-miniapp/foundation/packages/cli",
     "typescript": "~6.0.2",
     "vite": "^8.0.12",
     "vitest": "^4.1.9"

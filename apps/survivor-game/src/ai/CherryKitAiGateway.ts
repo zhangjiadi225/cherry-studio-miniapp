@@ -13,10 +13,12 @@ export const cherryKitAiGateway: AiGateway = {
       permissions: snapshot.permissions,
       capabilities: snapshot.capabilities.available
         ? {
+            available: true,
             reasoning: snapshot.capabilities.reasoning,
             contextWindow: snapshot.capabilities.contextWindow,
           }
         : {
+            available: false,
             reasoning: false,
             contextWindow: null,
           },

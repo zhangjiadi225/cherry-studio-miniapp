@@ -8,6 +8,7 @@ export type AiModelSlot = 'default' | 'quick';
 export interface AiRuntimeSnapshot {
   readonly permissions: Readonly<Record<string, boolean>>;
   readonly capabilities: {
+    readonly available: boolean;
     readonly reasoning: boolean;
     readonly contextWindow: number | null;
   };

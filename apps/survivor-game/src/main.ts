@@ -96,7 +96,11 @@ async function bootstrap() {
   eventBus.on(GameEvent.STATE_CHANGE, syncProductUi);
   eventBus.on(GameEvent.DESKTOP_TAB_CHANGE, syncProductUi);
   void cherryKitAiGateway.getRuntimeSnapshot('default').then((runtime) => {
-    homeScreen.setAiStatus(runtime.permissions['ai.chat'] === false ? 'denied' : 'connected');
+    if (runtime.permissions['ai.chat'] === false) {
+      homeScreen.setAiStatus('denied');
+    } else {
+      homeScreen.setAiStatus(runtime.capabilities.available ? 'connected' : 'unavailable');
+    }
   }).catch((error) => {
     console.warn('Cherry AI capability check failed', error);
     homeScreen.setAiStatus('unavailable');

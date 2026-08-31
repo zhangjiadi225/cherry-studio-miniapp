@@ -2,23 +2,23 @@
 
 > 状态：Draft Spec
 >
-> 规范版本：0.1
+> 规范版本：0.2
 >
-> 更新日期：2026-08-27
+> 更新日期：2026-08-31
 
 ## 1. 合同状态
 
 本项目目标是 Cherry Studio Local MiniApp，不是普通网页产品。
 
-当前运行合同来自 Cherry Studio PR [#19475](https://github.com/CherryHQ/cherry-studio/pull/19475)。截至 2026-08-27，该 PR 尚未合并，因此：
+当前运行合同来自 Cherry Studio `main` 在 PR [#19475](https://github.com/CherryHQ/cherry-studio/pull/19475) 合并后的基线，并通过 `@cherry-miniapp/kit@0.2.0` 隔离宿主变化：
 
 - 所有 Host 调用必须隔离在 `@cherry-miniapp/kit`。
 - App 不得复制 foundation 的 Bridge 类型或实现作为长期方案。
 - 启动时必须探测宿主、版本、权限和模型能力。
 - Host 合同变化时先升级 foundation 包，再显式升级本 App 的依赖。
-- 当前只制作 development 构建和本地安装包；发布流程需要用户单独授权。
+- 默认只制作 development 构建和本地安装包；发布流程需要用户单独授权。
 
-当前实现说明：经当前本地联合开发方案确认，本仓库使用 `link:/Users/jd/cherry-studio-miniapp/foundation/packages/runtime` 接入 `@cherry-miniapp/kit@0.1.0`。Storage、Visibility、运行时能力探测与 AI 流式调用均经过 kit；manifest 已申请 `ai.chat`、`storage.get` 和 `storage.set`，产品已提供 Forge UI。该绝对 link 只适用于当前本机开发环境，foundation 发布后再升级为可在独立 clone 中解析的正式依赖。
+当前实现说明：本仓库通过明确的本机 `link:` 接入 `@cherry-miniapp/kit@0.2.0` 与 `@cherry-miniapp/cli@0.2.0`。Storage、Visibility、运行时能力探测与 AI 流式调用均经过 kit；构建后的 `dist/` 由共享 CLI 校验和打包。manifest 已申请 `ai.chat`、`storage.get` 和 `storage.set`，产品已提供 Forge UI。两个 foundation 包尚未发布到 registry，因此这些 link 只用于当前本机联合开发；发布后必须替换为 `^0.2.0` semver 依赖并生成可在独立 clone 中解析的 lockfile。
 
 ## 2. 运行环境
 
@@ -193,7 +193,7 @@ Host 没有可靠 shutdown 事件，因此任何有意义的状态变化都不�
 
 ## 11. Manifest
 
-目标 manifest 位于 `public/manifest.json`，由 Vite 原样复制到 `dist/manifest.json` 根目录。
+manifest 位于 `public/manifest.json`，由 Vite 原样复制到 `dist/manifest.json` 根目录。
 
 要求：
 

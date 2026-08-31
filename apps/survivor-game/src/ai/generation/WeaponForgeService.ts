@@ -287,6 +287,9 @@ export class WeaponForgeService {
       if (runtime.permissions['ai.chat'] === false) {
         throw { name: 'PermissionDenied', message: 'Cherry AI permission is not granted' };
       }
+      if (!runtime.capabilities.available) {
+        throw { name: 'Unavailable', message: 'No usable Cherry AI model is configured' };
+      }
 
       setStage('planning');
       const fallbackPlan = createFallbackWeaponGenerationPlan(userIntent, this.catalog);
@@ -401,6 +404,7 @@ export class WeaponForgeService {
           const quickRuntime = await this.gateway.getRuntimeSnapshot('quick');
           if (
             quickRuntime.permissions['ai.chat'] !== false &&
+            quickRuntime.capabilities.available &&
             messagesFit(repairMessages, quickRuntime, WEAPON_OUTPUT_TOKEN_RESERVE)
           ) {
             repairModelSlot = 'quick';

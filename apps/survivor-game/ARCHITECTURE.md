@@ -33,12 +33,10 @@ survivor-game/
 │   ├── product/                    # 产品方向
 │   ├── architecture/               # 目标架构
 │   └── specs/                      # 内容、AI、Cherry 协议
-├── miniapp/
-│   └── manifest.json               # 当前过渡 manifest
-├── scripts/
-│   └── package-miniapp-dev.sh      # 当前过渡打包脚本
 ├── public/
+│   ├── manifest.json               # Cherry MiniApp manifest
 │   └── sprites/                    # 包内单位与武器图片
+├── vite.config.ts                  # 相对资源路径与静态构建配置
 └── src/
     ├── main.ts                     # 启动、读取 AppState、装配内容、创建 Game
     ├── application/
@@ -276,15 +274,13 @@ menu ↔ playing ↔ paused
 
 ## 14. 当前 MiniApp 打包
 
-当前仓库通过 `scripts/package-miniapp-dev.sh`：
+当前仓库使用统一流水线：
 
-1. 运行 TypeScript 检查。
-2. 用 Vite development mode 构建到临时目录。
-3. 复制 `miniapp/manifest.json`。
-4. 校验 icon hash。
-5. 直接 ZIP 为 `.miniapp`。
+1. Vite 从 `public/manifest.json` 构建静态 `dist/`，并通过 `base: './'` 生成包内相对资源路径。
+2. `pnpm miniapp:validate` 使用共享 `cherry-miniapp` CLI 校验 manifest、入口、权限、icon hash、文件数量、体积和不安全文件。
+3. `pnpm miniapp:pack` 使用同一 CLI 生成 development `.miniapp` 与可复现 metadata；CLI 不隐式运行 build。
 
-这是早期接入的过渡流程，不是目标合同。目标是让 manifest 进入 `public/`，构建标准 `dist/`，再使用共享 `cherry-miniapp` CLI 校验和打包。
+Runtime 与 CLI 当前通过明确的本机 `link:` 联合开发。foundation 发布后改为 `^0.2.0` semver 依赖，打包合同和脚本名称保持不变。
 
 ## 15. 当前扩展方式
 
@@ -302,11 +298,10 @@ menu ↔ playing ↔ paused
 
 | 当前状态 | 目标 |
 | --- | --- |
-| Cherry Host、Storage、Visibility 与 AI 已经统一经过本机链接的 `@cherry-miniapp/kit` | foundation 发布后把本地 link 升级为可独立解析的正式依赖 |
+| Cherry Host、Storage、Visibility 与 AI 已经统一经过本机链接的 `@cherry-miniapp/kit@0.2.0` | foundation 发布后把 Runtime 与 CLI 的本地 link 升级为 `^0.2.0` |
 | v1 AppStateEnvelope 已接入，旧 Key 仅用于首次迁移 | 后续逐版本迁移、恢复 UI 与 RunCheckpoint |
 | 魔法法器与动态 AI 武器已进入原子 Projectile Recipe/Compiler；其余武器与部分展示仍有类型兼容分支 | 全部投射物复用原子 RuntimePlan + 完整 Lifecycle Registry + 声明式 ContentPack |
 | 内置武器/怪物快照已冻结；多数系统仍直接导入旧表 | 系统统一依赖已解析 Registry Snapshot |
 | AI Forge 已能两阶段调用 Cherry、流式取消、容错提取、单次定向修复、校验、预览、接受并安装动态武器 | 增加启动恢复管理和内容包禁用/归档 UI |
-| 自定义 ZIP 脚本 | 共享 `cherry-miniapp` CLI |
 
 迁移顺序和依赖规则以 [`TARGET_ARCHITECTURE.md`](./docs/architecture/TARGET_ARCHITECTURE.md) 为准。

@@ -12,6 +12,9 @@ importers:
         specifier: link:/Users/jd/cherry-studio-miniapp/foundation/packages/runtime
         version: link:../../../../cherry-studio-miniapp/foundation/packages/runtime
     devDependencies:
+      '@cherry-miniapp/cli':
+        specifier: link:/Users/jd/cherry-studio-miniapp/foundation/packages/cli
+        version: link:../../../../cherry-studio-miniapp/foundation/packages/cli
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
