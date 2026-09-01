@@ -1,0 +1,163 @@
+import { EnemyType, type EnemyEnhancement } from '../types';
+
+export interface EnemyData {
+  name: string;
+  baseHp: number;
+  baseSpeed: number;
+  baseDamage: number;
+  radius: number;
+  xpValue: number;
+  color: string;
+  spawnAfter: number;
+  enhancement?: EnemyEnhancement;
+}
+
+export function getBuiltinEnemyContentId(type: EnemyType): string {
+  return `builtin.enemy.${type.replaceAll('_', '-')}`;
+}
+
+export const ENEMY_DATA: Record<EnemyType, EnemyData> = {
+  [EnemyType.ZOMBIE]: {
+    name: '僵尸',
+    baseHp: 20,
+    baseSpeed: 60,
+    baseDamage: 8,
+    radius: 17,
+    xpValue: 1,
+    color: '#6b8e23',
+    spawnAfter: 0,
+    enhancement: {
+      unlockAfter: 210,
+      name: '腐潮僵尸',
+      desc: '中后期出现的耐打僵尸，移速略高。',
+      trait: 'none',
+      hpMult: 1.25,
+      speedMult: 1.08,
+    },
+  },
+  [EnemyType.BAT]: {
+    name: '蝙蝠',
+    baseHp: 10,
+    baseSpeed: 120,
+    baseDamage: 5,
+    radius: 12,
+    xpValue: 1,
+    color: '#8b4513',
+    spawnAfter: 0,
+    enhancement: {
+      unlockAfter: 75,
+      name: '掠影蝙蝠',
+      desc: '会短暂蓄力后突进，逼迫玩家走位。',
+      trait: 'dash',
+      hpMult: 1.12,
+      speedMult: 1.06,
+    },
+  },
+  [EnemyType.SKELETON]: {
+    name: '骷髅',
+    baseHp: 35,
+    baseSpeed: 80,
+    baseDamage: 12,
+    radius: 17,
+    xpValue: 2,
+    color: '#d4c5a9',
+    spawnAfter: 30,
+    enhancement: {
+      unlockAfter: 135,
+      name: '盾骨骷髅',
+      desc: '骨盾降低受到的伤害和击退。',
+      trait: 'shield',
+      hpMult: 1.18,
+      speedMult: 0.96,
+    },
+  },
+  [EnemyType.CULTIST]: {
+    name: '邪教徒',
+    baseHp: 28,
+    baseSpeed: 70,
+    baseDamage: 8,
+    radius: 16,
+    xpValue: 2,
+    color: '#6f4bb2',
+    spawnAfter: 90,
+    enhancement: {
+      unlockAfter: 210,
+      name: '秘仪邪教徒',
+      desc: '普通弹幕升级为三连短 burst。',
+      trait: 'burstCaster',
+      hpMult: 1.15,
+    },
+  },
+  [EnemyType.GHOST]: {
+    name: '幽灵',
+    baseHp: 25,
+    baseSpeed: 90,
+    baseDamage: 10,
+    radius: 18,
+    xpValue: 3,
+    color: '#b0c4de',
+    spawnAfter: 60,
+    enhancement: {
+      unlockAfter: 165,
+      name: '相位幽灵',
+      desc: '周期性进入相位状态，穿过地形并加速靠近。',
+      trait: 'phase',
+      hpMult: 1.12,
+      speedMult: 1.04,
+    },
+  },
+  [EnemyType.MUMMY]: {
+    name: '木乃伊',
+    baseHp: 80,
+    baseSpeed: 45,
+    baseDamage: 15,
+    radius: 22,
+    xpValue: 5,
+    color: '#deb887',
+    spawnAfter: 120,
+    enhancement: {
+      unlockAfter: 255,
+      name: '虫巢木乃伊',
+      desc: '死亡后裂变出两只蝙蝠。',
+      trait: 'split',
+      hpMult: 1.2,
+      damageMult: 1.08,
+    },
+  },
+  [EnemyType.DEMON]: {
+    name: '恶魔',
+    baseHp: 60,
+    baseSpeed: 100,
+    baseDamage: 20,
+    radius: 21,
+    xpValue: 5,
+    color: '#dc143c',
+    spawnAfter: 180,
+    enhancement: {
+      unlockAfter: 300,
+      name: '狂焰恶魔',
+      desc: '会蓄力冲锋，近身压迫更强。',
+      trait: 'charge',
+      hpMult: 1.18,
+      speedMult: 1.05,
+      damageMult: 1.1,
+    },
+  },
+  [EnemyType.WRAITH]: {
+    name: '亡灵',
+    baseHp: 150,
+    baseSpeed: 70,
+    baseDamage: 25,
+    radius: 24,
+    xpValue: 10,
+    color: '#4a0e4e',
+    spawnAfter: 300,
+    enhancement: {
+      unlockAfter: 390,
+      name: '影弹亡灵',
+      desc: '普通个体也会保持距离发射暗影弹。',
+      trait: 'shadowCaster',
+      hpMult: 1.15,
+    },
+  },
+};

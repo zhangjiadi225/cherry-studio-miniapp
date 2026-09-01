@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <filter id="glow" x="-45%" y="-45%" width="190%" height="190%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <linearGradient id="leather" x1="10" y1="116" x2="116" y2="18">
+      <stop offset="0" stop-color="#5b2c16"/>
+      <stop offset="0.45" stop-color="#d27a28"/>
+      <stop offset="1" stop-color="#ffd37a"/>
+    </linearGradient>
+  </defs>
+  <path d="M24 99 C53 101 38 61 69 60 C96 59 88 28 110 20" fill="none" stroke="#2a1209" stroke-width="18" stroke-linecap="round"/>
+  <path d="M24 99 C53 101 38 61 69 60 C96 59 88 28 110 20" fill="none" stroke="url(#leather)" stroke-width="12" stroke-linecap="round" filter="url(#glow)"/>
+  <path d="M29 96 C53 94 45 67 70 66" fill="none" stroke="#ffe4a6" stroke-width="3" stroke-linecap="round"/>
+  <path d="M109 20 L118 12" stroke="#fff2b8" stroke-width="4" stroke-linecap="round" filter="url(#glow)"/>
+  <circle cx="24" cy="99" r="12" fill="#6f3519" stroke="#ffd37a" stroke-width="3"/>
+  <circle cx="24" cy="99" r="5" fill="#ffe4a6"/>
+</svg>

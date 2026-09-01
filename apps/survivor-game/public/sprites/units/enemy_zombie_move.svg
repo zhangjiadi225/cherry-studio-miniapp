@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <defs>
+    <radialGradient id="zombie-aura" cx="50%" cy="46%" r="70%">
+      <stop offset="0" stop-color="#b4ff5c" stop-opacity=".32"/>
+      <stop offset=".5" stop-color="#487a2c" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#061006" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="zombie-skin" cx="35%" cy="25%" r="74%">
+      <stop offset="0" stop-color="#c9e968"/>
+      <stop offset=".45" stop-color="#6f9a35"/>
+      <stop offset="1" stop-color="#223b17"/>
+    </radialGradient>
+    <linearGradient id="zombie-rags" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#463f30"/>
+      <stop offset=".55" stop-color="#25291f"/>
+      <stop offset="1" stop-color="#10140e"/>
+    </linearGradient>
+    <filter id="zombie-eye-glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1.7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <g id="zombie">
+      <ellipse cx="0" cy="29" rx="27" ry="8" fill="#020502" opacity=".52"/>
+      <circle cx="0" cy="2" r="34" fill="url(#zombie-aura)"/>
+      <path d="M-23 2 C-37 5-45 16-50 27" fill="none" stroke="#5f8c31" stroke-width="6" stroke-linecap="round"/>
+      <path d="M24 0 C38 3 45 13 49 24" fill="none" stroke="#719d39" stroke-width="6" stroke-linecap="round"/>
+      <path d="M-31 23 L-40 31 M36 20 L45 29" stroke="#c1e46a" stroke-width="3" stroke-linecap="round"/>
+      <path d="M-20-10 C-17-26-5-35 8-31 C23-27 29-10 24 5 C32 20 20 35 1 35 C-19 35-32 20-24 4 C-27-1-26-6-20-10Z" fill="url(#zombie-skin)" stroke="#111b0c" stroke-width="3"/>
+      <path d="M-20 8 C-12 17 12 17 22 8 L17 31 L4 37 L-8 33 L-17 30Z" fill="url(#zombie-rags)" stroke="#111b0c" stroke-width="2"/>
+      <path d="M-18 11 L-7 19 L5 12 L18 18" fill="none" stroke="#8f7d50" stroke-width="2" opacity=".72"/>
+      <path d="M-12-19 C-5-23 10-22 18-15" fill="none" stroke="#d4ff7a" stroke-width="3" opacity=".35"/>
+      <ellipse cx="-8" cy="-6" rx="4" ry="3.4" fill="#ff3047" filter="url(#zombie-eye-glow)"/>
+      <ellipse cx="8" cy="-5" rx="4" ry="3.4" fill="#ff3047" filter="url(#zombie-eye-glow)"/>
+      <path d="M-12 4 C-6 1-2 4 0 7 C3 3 9 2 14 6" fill="none" stroke="#10160d" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="-16" cy="2" r="4" fill="#355d25" opacity=".74"/>
+      <circle cx="15" cy="12" r="3" fill="#97bd47" opacity=".54"/>
+      <path d="M-4 20 L0 30 L5 20 M-13 21 L-9 29 M12 20 L8 30" stroke="#c0d76b" stroke-width="1.3" opacity=".55"/>
+    </g>
+  </defs>
+  <rect width="192" height="192" fill="none"/>
+  <g transform="translate(48 48)"><use href="#zombie"/></g>
+  <g transform="translate(144 48) rotate(-8)"><use href="#zombie" transform="translate(-5 1)"/></g>
+  <g transform="translate(48 144) scale(1.04 .96)"><use href="#zombie" transform="translate(0 4)"/></g>
+  <g transform="translate(144 144) rotate(8)"><use href="#zombie" transform="translate(5 1)"/></g>
+</svg>

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <radialGradient id="aura" cx="50%" cy="50%" r="55%">
+      <stop offset="0" stop-color="#f8f1ff" stop-opacity="0.92"/>
+      <stop offset="0.42" stop-color="#b78cff" stop-opacity="0.58"/>
+      <stop offset="1" stop-color="#5d32c8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="blade" x1="24" y1="92" x2="104" y2="24">
+      <stop offset="0" stop-color="#6f4add"/>
+      <stop offset="0.48" stop-color="#e8ddff"/>
+      <stop offset="1" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="48" fill="url(#aura)" filter="url(#glow)"/>
+  <path d="M101 25 C70 28 44 48 35 78 C48 58 73 48 101 55 C89 75 65 91 32 93 C62 113 103 95 113 58 C118 42 113 31 101 25Z" fill="url(#blade)" stroke="#efe8ff" stroke-width="4" stroke-linejoin="round" filter="url(#glow)"/>
+  <path d="M92 39 C67 45 52 58 45 76 C60 62 78 57 99 61" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.78"/>
+  <path d="M37 93 C60 101 89 89 101 65" fill="none" stroke="#9b7cff" stroke-width="5" stroke-linecap="round" opacity="0.45"/>
+  <circle cx="96" cy="29" r="4" fill="#ffffff"/>
+  <circle cx="34" cy="91" r="4" fill="#f5edff"/>
+</svg>

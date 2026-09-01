@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="288" height="192" viewBox="0 0 288 192">
+  <defs>
+    <radialGradient id="wraith-aura" cx="50%" cy="45%" r="65%">
+      <stop offset="0" stop-color="#ff4cff" stop-opacity=".3"/>
+      <stop offset=".48" stop-color="#6b2689" stop-opacity=".2"/>
+      <stop offset="1" stop-color="#09020d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="wraith-body" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#5d1e78"/>
+      <stop offset=".58" stop-color="#2a0c36"/>
+      <stop offset="1" stop-color="#0b0712"/>
+    </linearGradient>
+    <filter id="wraith-glow" x="-75%" y="-75%" width="250%" height="250%">
+      <feGaussianBlur stdDeviation="3.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <g id="wraith">
+      <ellipse cx="0" cy="25" rx="23" ry="7" fill="#010104" opacity=".46"/>
+      <circle cx="0" cy="0" r="31" fill="url(#wraith-aura)" filter="url(#wraith-glow)"/>
+      <path d="M-17-17 L-11-34 L-5-18 L0-38 L6-18 L13-35 L18-16" fill="#22052f" stroke="#631c82" stroke-width="2"/>
+      <path d="M-24-5 C-21-24-9-30 0-27 C14-29 23-18 23-1 C25 14 14 26 8 30 L2 20 L-5 32 L-10 20 L-19 29 C-24 21-28 7-24-5Z" fill="url(#wraith-body)" stroke="#7e2aa4" stroke-width="2.4"/>
+      <circle cx="-8" cy="-4" r="3.4" fill="#ff44e6"/>
+      <circle cx="8" cy="-4" r="3.4" fill="#ff44e6"/>
+      <path d="M-12 9 C-4 12 4 12 12 9" fill="none" stroke="#14031d" stroke-width="3" stroke-linecap="round"/>
+      <path d="M-22 12 C-12 7-7 16 0 11 C7 16 12 7 22 12" fill="none" stroke="#b64cff" stroke-width="1.4" opacity=".45"/>
+    </g>
+  </defs>
+  <g transform="translate(48 48)"><use href="#wraith"/></g>
+  <g transform="translate(144 48) rotate(-4)"><use href="#wraith" transform="translate(-2 1)"/></g>
+  <g transform="translate(240 48) scale(1.04)"><use href="#wraith" transform="translate(0 -1)"/></g>
+  <g transform="translate(48 144)"><use href="#wraith" transform="translate(0 -4)"/></g>
+  <g transform="translate(144 144) rotate(4)"><use href="#wraith" transform="translate(2 1)"/></g>
+  <g transform="translate(240 144)"><use href="#wraith" transform="translate(0 1)"/></g>
+</svg>

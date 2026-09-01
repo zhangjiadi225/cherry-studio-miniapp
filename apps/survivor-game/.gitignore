@@ -1,0 +1,41 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.vercel
+
+# Local generated previews
+output/
+artifacts/
+
+# Local player sprite experiments
+public/sprites/units/.gitkeep
+public/sprites/units/player_ember_move.svg
+public/sprites/units/player_oracle_move.svg
+public/sprites/units/player_wanderer_move.svg
+
+# WorkBuddy project memory (not source)
+.workbuddy/
+
+# Playwright CLI cache
+.playwright-cli/
