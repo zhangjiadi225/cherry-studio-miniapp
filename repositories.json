@@ -12,10 +12,5 @@
   "workspaceMembers": {
     "foundation": "foundation",
     "apps": ["apps/epoch-weaver", "apps/model-stage"]
-  },
-  "legacyRepositories": [
-    "zhangjiadi225/cherry-miniapp-foundation",
-    "zhangjiadi225/cherry-miniapp-epoch-weaver",
-    "zhangjiadi225/cherry-miniapp-model-stage"
-  ]
+  }
 }

@@ -54,7 +54,7 @@ CLI 只接受已经构建完成的静态目录，校验 manifest 和入口、拒
 
 本 monorepo 的 Private 远端为 [zhangjiadi225/cherry-studio-miniapp](https://github.com/zhangjiadi225/cherry-studio-miniapp)。Cherry 宿主联调以现有 fork [zhangjiadi225/cherry-studio](https://github.com/zhangjiadi225/cherry-studio) 为准，并持续对照上游 [CherryHQ/cherry-studio](https://github.com/CherryHQ/cherry-studio)。
 
-历史独立仓库只作为迁移备份，不再是代码真源；所有后续 foundation 与 miniapp 开发都进入本 monorepo。
+本 monorepo 是 foundation 与所有 miniapp 的唯一代码真源。
 
 ## 当前产品线
 
