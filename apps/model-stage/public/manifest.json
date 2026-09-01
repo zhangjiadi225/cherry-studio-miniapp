@@ -1,0 +1,18 @@
+{
+  "id": "dev.cherrymini.model-stage",
+  "name": {
+    "en": "Model Stage",
+    "zh": "模型布景"
+  },
+  "description": {
+    "en": "Import a local 3D model into a clean grid workspace and stage it with Cherry AI.",
+    "zh": "把本地 3D 模型导入干净的网格工作区，再用 Cherry AI 完成布景。"
+  },
+  "version": "0.3.11",
+  "entry": "index.html",
+  "releaseNotes": {
+    "en": "Adds a right-panel switch between the default AI chat and the scene tree with node properties.",
+    "zh": "右侧面板新增对话与场景切换，默认显示 AI 对话，场景页展示场景树和节点属性。"
+  },
+  "permissions": ["ai.chat", "storage.*", "file.save", "file.export"]
+}

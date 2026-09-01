@@ -1,0 +1,27 @@
+{
+  "name": "@cherry-miniapp/kit",
+  "version": "0.2.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "development": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./dev-mock": {
+      "types": "./src/devMock.ts",
+      "development": "./src/devMock.ts",
+      "import": "./dist/devMock.js",
+      "default": "./dist/devMock.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json"
+  }
+}

@@ -1,0 +1,10 @@
+node_modules/
+.pnpm-store/
+dist/
+artifacts/
+.DS_Store
+*.log
+
+# Third-party source kept only as a local reference.
+/external/
+/apps/isaac-webgame/

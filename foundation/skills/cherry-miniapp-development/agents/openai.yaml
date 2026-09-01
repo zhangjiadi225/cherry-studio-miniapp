@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cherry Miniapp Development"
+  short_description: "Build sandboxed Cherry AI miniapps across independent repos"
+  default_prompt: "Use $cherry-miniapp-development to create or update a Cherry miniapp with the shared runtime and packaging contract."

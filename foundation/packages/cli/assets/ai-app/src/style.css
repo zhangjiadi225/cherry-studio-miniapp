@@ -1,0 +1,145 @@
+:root {
+  color-scheme: light dark;
+  font-family: var(--cs-font-family-body, Inter, ui-sans-serif, system-ui, sans-serif);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 15% 0%, color-mix(in oklch, var(--primary) 12%, transparent), transparent 34rem),
+    var(--background);
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.shell {
+  width: min(760px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 72px 0;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(36px, 7vw, 68px);
+  letter-spacing: -0.055em;
+}
+
+.lede {
+  max-width: 580px;
+  margin: 18px 0 36px;
+  color: var(--muted-foreground);
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.composer,
+.result {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.5);
+  background: color-mix(in oklch, var(--card) 94%, transparent);
+  box-shadow: 0 18px 60px color-mix(in oklch, var(--foreground) 7%, transparent);
+}
+
+.composer label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: 650;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 14px 16px;
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  outline: none;
+  background: var(--background-subtle, var(--background));
+  color: var(--foreground);
+  line-height: 1.6;
+}
+
+textarea:focus {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 20%, transparent);
+}
+
+.actions,
+.result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.actions {
+  margin-top: 16px;
+}
+
+#status {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+button {
+  cursor: pointer;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 650;
+}
+
+button.secondary {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+.result {
+  margin-top: 18px;
+}
+
+.result h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.output {
+  min-height: 100px;
+  margin: 20px 0 0;
+  color: var(--foreground);
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 560px) {
+  .shell {
+    padding: 36px 0;
+  }
+
+  .composer,
+  .result {
+    padding: 18px;
+  }
+}

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/__cherry/theme.css" />
+    <title>模型布景</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="app-header">
+        <strong>模型布景</strong>
+        <div class="header-actions">
+          <button id="undo-button" class="icon-button" type="button" title="撤销" aria-label="撤销" disabled>↶</button>
+          <button id="redo-button" class="icon-button" type="button" title="重做" aria-label="重做" disabled>↷</button>
+          <button id="import-button" class="secondary-button" type="button">导入模型目录</button>
+          <button id="export-button" class="text-button" type="button">导出</button>
+          <input
+            id="model-input"
+            type="file"
+            webkitdirectory
+            directory
+            multiple
+            hidden
+          />
+        </div>
+      </header>
+
+      <main class="workspace">
+        <section class="viewport-frame" aria-label="3D 场景">
+          <canvas id="scene-canvas" aria-label="Skenora 3D 场景"></canvas>
+
+          <div id="scene-status" class="scene-status" data-kind="busy" role="status">
+            <span id="model-label">启动中…</span>
+          </div>
+
+          <div class="viewport-tools">
+            <button id="frame-button" class="canvas-button" type="button" title="适配主体">取景</button>
+            <button id="reset-view-button" class="canvas-button" type="button" title="重置视角">重置</button>
+          </div>
+        </section>
+
+        <aside class="inspector-panel" aria-label="工作面板">
+          <nav
+            id="inspector-tablist"
+            class="inspector-tabs"
+            role="tablist"
+            aria-label="右侧面板"
+            aria-orientation="horizontal"
+          >
+            <button
+              id="chat-tab"
+              class="inspector-tab"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="chat-panel"
+              data-inspector-tab="chat"
+            >
+              对话
+            </button>
+            <button
+              id="scene-tab"
+              class="inspector-tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="scene-panel"
+              data-inspector-tab="scene"
+              tabindex="-1"
+            >
+              场景
+            </button>
+          </nav>
+
+          <section
+            id="chat-panel"
+            class="inspector-view chat-panel"
+            role="tabpanel"
+            aria-labelledby="chat-tab"
+            data-inspector-panel="chat"
+          >
+            <header class="chat-panel-heading">
+              <div class="chat-title-group">
+                <span class="chat-mark" aria-hidden="true">AI</span>
+                <div class="heading-copy">
+                  <h2 id="chat-heading">场景对话</h2>
+                  <span id="model-capability" class="ai-state">连接中</span>
+                </div>
+              </div>
+            </header>
+
+            <div class="chat-panel-body">
+              <div id="conversation" class="conversation" aria-live="polite"></div>
+
+              <div class="last-change">
+                <span id="change-summary">AI 修改会在校验后自动应用</span>
+                <button id="json-button" class="text-button" type="button" disabled>查看修改</button>
+              </div>
+
+              <form id="composer" class="composer">
+                <div class="composer-row">
+                  <label class="sr-only" for="prompt-input">询问场景或描述调整</label>
+                  <textarea
+                    id="prompt-input"
+                    rows="1"
+                    placeholder="输入消息，或描述想要的场景调整…"
+                  ></textarea>
+                  <button
+                    id="apply-button"
+                    class="primary-button"
+                    type="button"
+                    aria-label="发送；场景修改将在校验后自动应用"
+                    disabled
+                  >
+                    发送
+                  </button>
+                </div>
+                <footer class="composer-meta">
+                  <span id="ai-status">正在连接 Cherry AI</span>
+                  <span class="composer-hint">Enter 发送 · Shift + Enter 换行</span>
+                  <button id="cancel-button" class="text-button" type="button" hidden>停止</button>
+                </footer>
+              </form>
+            </div>
+          </section>
+
+          <section
+            id="scene-panel"
+            class="inspector-view scene-panel"
+            role="tabpanel"
+            aria-labelledby="scene-tab"
+            data-inspector-panel="scene"
+            hidden
+          >
+            <section class="resource-pane" aria-labelledby="resources-heading">
+              <header class="panel-heading resource-heading">
+                <div class="heading-copy">
+                  <h1 id="resources-heading">场景树</h1>
+                  <span id="resource-revision" class="panel-meta">正在读取</span>
+                </div>
+                <span id="resource-count" class="count-badge">0 节点</span>
+              </header>
+              <div id="resource-list" class="resource-list" aria-live="polite">
+                <p class="resource-empty">正在读取场景…</p>
+              </div>
+            </section>
+
+            <section class="node-json-pane" aria-labelledby="node-json-heading">
+              <header class="panel-heading node-json-heading">
+                <div class="heading-copy">
+                  <h2 id="node-json-heading">节点属性</h2>
+                  <span id="selected-node-label" class="panel-meta">等待选择节点</span>
+                </div>
+                <span class="code-badge">JSON</span>
+              </header>
+              <pre id="selected-node-json" class="selected-node-json">场景就绪后显示节点数据</pre>
+            </section>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <dialog id="json-dialog" class="json-dialog">
+      <header>
+        <h2>最近修改</h2>
+        <button id="close-dialog-button" class="icon-button" type="button" aria-label="关闭">×</button>
+      </header>
+      <pre id="json-output"></pre>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" hidden></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

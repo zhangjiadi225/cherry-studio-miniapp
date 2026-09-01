@@ -1,0 +1,12 @@
+{
+  "name": "cherry-studio-miniapp",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "build:all": "pnpm --recursive --filter './apps/*' build",
+    "create:app": "node foundation/packages/cli/src/cli.mjs create",
+    "pack:all": "node foundation/packages/cli/src/cli.mjs pack-all apps",
+    "apps:list": "node foundation/packages/cli/src/cli.mjs repos apps"
+  }
+}

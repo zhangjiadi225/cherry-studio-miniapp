@@ -1,0 +1,18 @@
+{
+  "id": "dev.cherrymini.epoch-weaver",
+  "name": {
+    "en": "Epoch Weaver",
+    "zh": "纪元织造者"
+  },
+  "description": {
+    "en": "Guide an emerging civilization while AI narrates the world that answers your choices.",
+    "zh": "引导一个新生文明，让 AI 讲述世界如何回应你的每次选择。"
+  },
+  "version": "0.1.1",
+  "entry": "index.html",
+  "releaseNotes": {
+    "en": "Adds reliable handling when no default AI model is configured.",
+    "zh": "增加默认 AI 模型未配置时的可靠降级处理。"
+  },
+  "permissions": ["ai.chat", "storage.*"]
+}

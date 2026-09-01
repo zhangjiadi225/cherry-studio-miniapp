@@ -1,0 +1,14 @@
+{
+  "id": "__APP_ID__",
+  "name": {
+    "en": "__APP_NAME__",
+    "zh": "__APP_NAME__"
+  },
+  "description": {
+    "en": "An AI experience built for Cherry Studio.",
+    "zh": "一个运行在 Cherry Studio 中的 AI 产品。"
+  },
+  "version": "0.1.0",
+  "entry": "index.html",
+  "permissions": ["ai.chat", "storage.*"]
+}

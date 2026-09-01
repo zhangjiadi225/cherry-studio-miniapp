@@ -1,0 +1,17 @@
+packages:
+  - foundation
+  - foundation/packages/*
+  - apps/*
+
+linkWorkspacePackages: true
+preferWorkspacePackages: true
+sharedWorkspaceLockfile: true
+excludeLinksFromLockfile: true
+verifyDepsBeforeRun: false
+
+allowBuilds:
+  esbuild: true
+
+overrides:
+  '@skenora/scene-plan': link:../skenora/packages/scene-plan
+  '@skenora/sdk': link:../skenora/packages/sdk

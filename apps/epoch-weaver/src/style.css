@@ -1,0 +1,491 @@
+:root {
+  color-scheme: light dark;
+  font-family: var(--cs-font-family-body, Inter, ui-sans-serif, system-ui, sans-serif);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    radial-gradient(
+      circle at 50% -20%,
+      color-mix(in oklch, var(--primary) 17%, transparent),
+      transparent 45rem
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in oklch, var(--background) 86%, var(--primary)),
+      var(--background) 32rem
+    );
+}
+
+button,
+a {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+#ambient {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
+}
+
+.shell {
+  position: relative;
+  z-index: 1;
+  width: min(1120px, calc(100% - 40px));
+  min-height: 100vh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 0;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 72%, transparent);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid color-mix(in oklch, var(--primary) 50%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+}
+
+.brand strong,
+.brand small {
+  display: block;
+}
+
+.brand strong {
+  font-size: 14px;
+  letter-spacing: 0.04em;
+}
+
+.brand small {
+  margin-top: 2px;
+  color: var(--muted-foreground);
+  font-size: 8px;
+  letter-spacing: 0.18em;
+}
+
+.host-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success, var(--primary));
+  box-shadow: 0 0 0 5px color-mix(in oklch, var(--success, var(--primary)) 12%, transparent);
+}
+
+main {
+  flex: 1;
+}
+
+.setup-panel {
+  padding: clamp(68px, 12vh, 132px) 0 80px;
+}
+
+.eyebrow {
+  margin: 0 0 18px;
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.22em;
+}
+
+h1,
+h2,
+p {
+  text-wrap: pretty;
+}
+
+.setup-panel h1 {
+  max-width: 760px;
+  margin: 0;
+  font-size: clamp(48px, 8vw, 92px);
+  font-weight: 620;
+  line-height: 0.98;
+  letter-spacing: -0.065em;
+}
+
+.setup-panel h1 em {
+  color: var(--primary);
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 500;
+}
+
+.intro {
+  max-width: 590px;
+  margin: 30px 0 50px;
+  color: var(--muted-foreground);
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+.seed-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.seed-card {
+  position: relative;
+  display: flex;
+  min-height: 250px;
+  cursor: pointer;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 22px;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+  border-radius: calc(var(--radius) * 1.5);
+  background: color-mix(in oklch, var(--card) 82%, transparent);
+  text-align: left;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.seed-card::after {
+  position: absolute;
+  right: -30px;
+  bottom: -55px;
+  width: 150px;
+  height: 150px;
+  border: 1px solid color-mix(in oklch, var(--primary) 20%, transparent);
+  border-radius: 50%;
+  content: "";
+}
+
+.seed-card:hover {
+  transform: translateY(-4px);
+  border-color: color-mix(in oklch, var(--primary) 55%, var(--border));
+  background: color-mix(in oklch, var(--card) 88%, var(--primary));
+}
+
+.seed-index {
+  margin-bottom: auto;
+  color: var(--muted-foreground);
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.seed-card strong {
+  margin-bottom: 9px;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+
+.seed-card > span:not(.seed-index) {
+  max-width: 240px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.seed-card i {
+  margin-top: 18px;
+  color: var(--primary);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+}
+
+.game-panel {
+  padding: 56px 0 70px;
+}
+
+.game-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.game-heading h1 {
+  margin: 0;
+  font-size: clamp(40px, 6vw, 68px);
+  letter-spacing: -0.055em;
+}
+
+.ghost-button,
+.resume-button {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--card) 72%, transparent);
+}
+
+.ghost-button {
+  padding: 9px 13px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin: 36px 0 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.25);
+  background: var(--border);
+}
+
+.metric {
+  padding: 18px 20px;
+  background: color-mix(in oklch, var(--card) 92%, transparent);
+}
+
+.metric span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.metric strong {
+  display: block;
+  margin: 5px 0 12px;
+  font-family: ui-monospace, monospace;
+  font-size: 24px;
+  font-weight: 540;
+}
+
+.meter {
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in oklch, var(--foreground) 10%, transparent);
+}
+
+.meter i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--primary);
+  transition: width 500ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.chronicle-card {
+  position: relative;
+  min-height: 250px;
+  padding: clamp(28px, 5vw, 54px);
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--primary) 28%, var(--border));
+  border-radius: calc(var(--radius) * 1.75);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--primary) 8%, var(--card)), var(--card)), var(--card);
+  box-shadow: 0 28px 80px color-mix(in oklch, var(--foreground) 8%, transparent);
+}
+
+.chronicle-card::before {
+  position: absolute;
+  top: -90px;
+  right: -70px;
+  width: 260px;
+  height: 260px;
+  border: 1px solid color-mix(in oklch, var(--primary) 18%, transparent);
+  border-radius: 50%;
+  content: "";
+}
+
+.chronicle-meta {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted-foreground);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+#narrative {
+  position: relative;
+  max-width: 820px;
+  min-height: 96px;
+  margin: 34px 0 0;
+  font-family: Georgia, "Noto Serif SC", serif;
+  font-size: clamp(20px, 2.8vw, 29px);
+  line-height: 1.72;
+  letter-spacing: 0.01em;
+}
+
+.resume-button {
+  position: relative;
+  margin-top: 28px;
+  padding: 10px 14px;
+  color: var(--primary);
+  font-size: 12px;
+}
+
+.decision-panel {
+  display: grid;
+  grid-template-columns: 0.85fr 1.7fr;
+  gap: 36px;
+  padding: 42px 4px 0;
+}
+
+.decision-copy h2 {
+  max-width: 300px;
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.35;
+  letter-spacing: -0.035em;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.action-grid button {
+  cursor: pointer;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--card) 74%, transparent);
+  text-align: left;
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.action-grid button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+
+.action-grid button:disabled,
+.resume-button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}
+
+.action-grid span,
+.action-grid small {
+  display: block;
+}
+
+.action-grid span {
+  font-weight: 680;
+}
+
+.action-grid small {
+  margin-top: 7px;
+  color: var(--muted-foreground);
+  font-size: 10px;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 0 26px;
+  border-top: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+  color: var(--muted-foreground);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+}
+
+@media (max-width: 800px) {
+  .seed-grid,
+  .action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .seed-card {
+    min-height: 200px;
+  }
+
+  .seed-index {
+    margin-bottom: 42px;
+  }
+
+  .decision-panel {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .shell {
+    width: min(100% - 24px, 1120px);
+  }
+
+  .host-status {
+    max-width: 130px;
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  .setup-panel {
+    padding-top: 52px;
+  }
+
+  .setup-panel h1 {
+    font-size: 48px;
+  }
+
+  .game-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .chronicle-meta,
+  footer {
+    gap: 12px;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms;
+  }
+}

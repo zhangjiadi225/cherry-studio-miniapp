@@ -1,0 +1,23 @@
+{
+  "name": "@miniapps/model-stage",
+  "version": "0.3.11",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "miniapp:pack": "cherry-miniapp pack",
+    "miniapp:validate": "cherry-miniapp validate",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cherry-miniapp/kit": "^0.2.0",
+    "@skenora/scene-plan": "0.1.2",
+    "@skenora/sdk": "0.1.2"
+  },
+  "devDependencies": {
+    "@cherry-miniapp/cli": "^0.2.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.6"
+  }
+}
