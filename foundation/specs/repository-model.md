@@ -15,9 +15,11 @@ cherry-studio-miniapp              one Git repository
     specs
   apps
     <slug>                         one workspace package per product
+  examples
+    <slug>                         runnable capability example, not a released product
 ```
 
-The repository root owns the pnpm workspace and the only committed `pnpm-lock.yaml`. `foundation/` and `apps/*/` are ownership boundaries inside the repository, not nested repositories. They must not contain `.git` directories or independent remotes.
+The repository root owns the pnpm workspace and the only committed `pnpm-lock.yaml`. `foundation/`, `apps/*/`, and `examples/*/` are ownership boundaries inside the repository, not nested repositories. They must not contain `.git` directories or independent remotes. Only `apps/*/` entries are registered products and participate in batch app builds and packaging; `examples/*/` entries remain runnable references.
 
 ## Ownership test
 

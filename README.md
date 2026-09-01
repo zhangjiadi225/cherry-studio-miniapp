@@ -9,16 +9,18 @@ cherry-studio-miniapp/
 │   ├── packages/cli/           # @cherry-miniapp/cli
 │   ├── skills/                 # 可复用 Codex Skills
 │   └── specs/                  # 宿主、产品、仓库和打包规范
-└── apps/
-    ├── epoch-weaver/           # 纪元织造者
-    ├── model-stage/            # 模型布景
-    └── survivor-game/          # 暗夜幸存者
+├── apps/
+│   ├── model-stage/            # 模型布景
+│   └── survivor-game/          # 暗夜幸存者
+└── examples/
+    └── epoch-weaver/           # 纪元织造者（AI 能力与架构示例）
 ```
 
 ## 目录边界
 
 - `foundation/` 负责宿主适配、共享 runtime、打包 CLI、Skills、模板与跨产品规范。
 - `apps/<slug>/` 负责对应产品的 UI、玩法、提示词、资产、manifest 和发布配置。
+- `examples/<slug>/` 放置可运行的能力示例，不注册为正式产品，也不参与批量构建和打包。
 - 产品只能通过 `@cherry-miniapp/kit`、`@cherry-miniapp/cli` 等公开包入口消费共享能力，不跨目录深层导入源码。
 - 跨共享层与产品层的契约变更可以在同一个分支和提交中完成，但仍需维护公开包版本和迁移说明。
 - 第三方参考项目放在被忽略的 `external/`，不进入 workspace、Git 历史、构建或发布。
@@ -29,9 +31,9 @@ cherry-studio-miniapp/
 
 ```bash
 pnpm install
-pnpm --filter @miniapps/epoch-weaver dev
 pnpm --filter @miniapps/model-stage dev
 pnpm --filter @miniapps/survivor-game dev
+pnpm --filter @examples/epoch-weaver dev
 pnpm build:all
 pnpm pack:all
 pnpm apps:list
@@ -44,8 +46,8 @@ workspace 会把版本兼容的 foundation 包链接给 app；CI 和本地开发
 每个 app 都通过 `@cherry-miniapp/cli` 执行同一流水线：
 
 ```bash
-pnpm --filter @miniapps/epoch-weaver build
-pnpm --filter @miniapps/epoch-weaver miniapp:pack
+pnpm --filter @miniapps/model-stage build
+pnpm --filter @miniapps/model-stage miniapp:pack
 ```
 
 CLI 只接受已经构建完成的静态目录，校验 manifest 和入口、拒绝 symlink、生成 `.miniapp`、SHA-256、体积与元数据。HTTPS 发布需要显式生成 distribution manifest；批量打包只是逐 app 调用同一 CLI，不产生第二套格式。
@@ -60,6 +62,9 @@ CLI 只接受已经构建完成的静态目录，校验 manifest 和入口、拒
 
 ## 当前产品线
 
-- `epoch-weaver`（纪元织造者）：AI 能力与架构样板。
 - `model-stage`（模型布景）：Cherry AI 驱动的 3D 模型工作区。
 - `survivor-game`（暗夜幸存者）：支持 Cherry AI 武器锻造的确定性 2D 生存游戏引擎。
+
+## 能力示例
+
+- `epoch-weaver`（纪元织造者）：AI 能力与架构样板，位于 `examples/`，不作为独立产品发布。

@@ -12,7 +12,7 @@ importers:
 
   .: {}
 
-  apps/epoch-weaver:
+  examples/epoch-weaver:
     devDependencies:
       typescript:
         specifier: 5.9.3
