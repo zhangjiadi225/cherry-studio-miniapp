@@ -4,7 +4,7 @@
 >
 > 规范版本：0.2
 >
-> 更新日期：2026-08-31
+> 更新日期：2026-09-01
 
 ## 1. 合同状态
 
@@ -18,7 +18,7 @@
 - Host 合同变化时先升级 foundation 包，再显式升级本 App 的依赖。
 - 默认只制作 development 构建和本地安装包；发布流程需要用户单独授权。
 
-当前实现说明：本仓库通过明确的本机 `link:` 接入 `@cherry-miniapp/kit@0.2.0` 与 `@cherry-miniapp/cli@0.2.0`。Storage、Visibility、运行时能力探测与 AI 流式调用均经过 kit；构建后的 `dist/` 由共享 CLI 校验和打包。manifest 已申请 `ai.chat`、`storage.get` 和 `storage.set`，产品已提供 Forge UI。两个 foundation 包尚未发布到 registry，因此这些 link 只用于当前本机联合开发；发布后必须替换为 `^0.2.0` semver 依赖并生成可在独立 clone 中解析的 lockfile。
+当前实现说明：本 App 声明 `@cherry-miniapp/kit@^0.2.0` 与 `@cherry-miniapp/cli@^0.2.0`，由 monorepo 根 pnpm workspace 解析，并由根 `pnpm-lock.yaml` 锁定外部依赖。Storage、Visibility、运行时能力探测与 AI 流式调用均经过 kit；构建后的 `dist/` 由共享 CLI 校验和打包。manifest 已申请 `ai.chat`、`storage.get` 和 `storage.set`，产品已提供 Forge UI。
 
 ## 2. 运行环境
 
@@ -223,7 +223,7 @@ source + public/manifest.json
 - 使用发布的 `@cherry-miniapp/cli` / `cherry-miniapp`，不自行维护 ZIP 格式。
 - CLI 必须验证 manifest、entry、icon hash、文件数量、体积、symlink 和权限。
 - 默认只生成 development 构建。release/production、上传、分发清单和发布都需要当前任务的用户明确授权。
-- 当前用户已确认本机 Cherry 与 MiniApp 联合开发使用 workspace `link:`；它只能用于当前开发环境，发布或要求独立 clone 前必须替换为 foundation 的可解析正式版本。
+- App 只声明 foundation 包的 semver 范围，并通过 monorepo 根 workspace 解析；不得加入机器相关的绝对 `link:` 或子项目 lockfile。
 
 ## 13. 发布前 Host 验证
 

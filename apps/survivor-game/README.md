@@ -1,6 +1,6 @@
 # 暗夜幸存者 / Night Survivor
 
-面向 Cherry Studio Local MiniApp 的 2D 生存 Roguelike。游戏使用 TypeScript、Canvas 2D 和 Vite；长期方向是让玩家通过 Cherry 的 AI 能力锻造武器、创造怪物和组合受控招式，同时由本地确定性引擎维护战斗、公平性和存档真值。
+Cherry Mini App monorepo 中面向 Cherry Studio Local MiniApp 的独立 2D 生存 Roguelike workspace。游戏使用 TypeScript、Canvas 2D 和 Vite；长期方向是让玩家通过 Cherry 的 AI 能力锻造武器、创造怪物和组合受控招式，同时由本地确定性引擎维护战斗、公平性和存档真值。
 
 ## 当前状态
 
@@ -23,11 +23,13 @@
 
 ## 当前开发命令
 
+从 monorepo 根目录运行：
+
 ```bash
-pnpm dev
-pnpm build
-pnpm miniapp:validate
-pnpm miniapp:pack
+pnpm --filter @miniapps/survivor-game dev
+pnpm --filter @miniapps/survivor-game build
+pnpm --filter @miniapps/survivor-game miniapp:validate
+pnpm --filter @miniapps/survivor-game miniapp:pack
 ```
 
-`pnpm dev` 会安装显式浏览器开发 mock；正式构建必须运行在 Cherry Host 中。`miniapp:validate` 和 `miniapp:pack` 只消费已经构建好的 `dist/`，不会隐式运行 build。当前 foundation 包尚未发布到 registry，因此本机联合开发暂时使用明确的 `link:`；发布后改用 `@cherry-miniapp/kit@^0.2.0` 与 `@cherry-miniapp/cli@^0.2.0`。
+`dev` 会安装显式浏览器开发 mock；正式构建必须运行在 Cherry Host 中。`miniapp:validate` 和 `miniapp:pack` 只消费已经构建好的 `dist/`，不会隐式运行 build。`@cherry-miniapp/kit@^0.2.0` 与 `@cherry-miniapp/cli@^0.2.0` 通过根 pnpm workspace 解析，外部依赖由仓库根 `pnpm-lock.yaml` 锁定。

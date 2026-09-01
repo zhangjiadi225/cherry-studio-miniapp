@@ -4,7 +4,7 @@
 >
 > 规范版本：0.4
 >
-> 更新日期：2026-08-27
+> 更新日期：2026-09-01
 
 ## 1. 目的
 
@@ -12,7 +12,7 @@
 
 AI 输出始终是候选 Draft。游戏规则只接受经过本地校验且被玩家明确接受的 ContentPack。
 
-当前实现进度：武器任务已经通过本机链接的 `@cherry-miniapp/kit` 接入真实 Cherry Host。AI 引擎首页可收集玩家意图并进入同一个受控 Forge；`weapon-plan.v1` 先选择家族和最多 12 个核心原语，`weapon.v5` 只发送该家族需要的参数、兼容与预算目录，`weapon-repair.v1` 最多执行一次定向修复。Forge UI 显示当前阶段、稳定错误码、请求 ID、流式结果、一级/满级数值、Delivery 与全部原语引用，并明确接受或拒绝。单请求状态机、取消、唯一 JSON 对象提取、无歧义草案归一化、Draft 持久化、完整本地校验以及“接受 Job + 安装并启用 ContentPack”的原子写入已经落地。启动恢复管理 UI 和内容包管理 UI 尚未接入。
+当前实现进度：武器任务已经通过 monorepo workspace 解析的 `@cherry-miniapp/kit` 接入真实 Cherry Host。AI 引擎首页可收集玩家意图并进入同一个受控 Forge；`weapon-plan.v1` 先选择家族和最多 12 个核心原语，`weapon.v5` 只发送该家族需要的参数、兼容与预算目录，`weapon-repair.v1` 最多执行一次定向修复。Forge UI 显示当前阶段、稳定错误码、请求 ID、流式结果、一级/满级数值、Delivery 与全部原语引用，并明确接受或拒绝。单请求状态机、取消、唯一 JSON 对象提取、无歧义草案归一化、Draft 持久化、完整本地校验以及“接受 Job + 安装并启用 ContentPack”的原子写入已经落地。启动恢复管理 UI 和内容包管理 UI 尚未接入。
 
 ## 2. 支持的任务
 

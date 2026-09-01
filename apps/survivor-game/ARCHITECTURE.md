@@ -2,7 +2,7 @@
 
 > 状态：Current
 >
-> 更新日期：2026-08-28
+> 更新日期：2026-09-01
 > 本文只描述已实现代码；未来方向见 [`docs/architecture/TARGET_ARCHITECTURE.md`](./docs/architecture/TARGET_ARCHITECTURE.md)。
 
 ## 1. 项目概览
@@ -25,7 +25,7 @@
 ## 2. 当前目录
 
 ```text
-survivor-game/
+apps/survivor-game/
 ├── AGENTS.md
 ├── README.md
 ├── ARCHITECTURE.md
@@ -110,7 +110,7 @@ main.ts
 8. 将 Host 可见性事件同时转发给 Game 和 Forge，暂停游戏并取消在途 AI。
 9. 启动失败时显示可点击重试提示。
 
-`AppHost` 只通过 `@cherry-miniapp/kit` 获取 Cherry Storage 与 Visibility；生产不再回退到 `localStorage`。普通浏览器仅在 Vite DEV 模式安装 kit 的显式 mock。`CherryKitAiGateway` 同样只委托 kit 的能力快照、流式调用、取消和错误识别，不让 Game Kernel 接触 Host API。当前依赖按用户确认链接到本机 foundation workspace，属于本地联合开发配置。目标约束见 [`docs/specs/CHERRY_RUNTIME.md`](./docs/specs/CHERRY_RUNTIME.md)。
+`AppHost` 只通过 `@cherry-miniapp/kit` 获取 Cherry Storage 与 Visibility；生产不再回退到 `localStorage`。普通浏览器仅在 Vite DEV 模式安装 kit 的显式 mock。`CherryKitAiGateway` 同样只委托 kit 的能力快照、流式调用、取消和错误识别，不让 Game Kernel 接触 Host API。Runtime 与 CLI 通过 monorepo 根 pnpm workspace 按 `^0.2.0` 版本范围解析。目标约束见 [`docs/specs/CHERRY_RUNTIME.md`](./docs/specs/CHERRY_RUNTIME.md)。
 
 ## 5. Game 编排器
 
@@ -280,7 +280,7 @@ menu ↔ playing ↔ paused
 2. `pnpm miniapp:validate` 使用共享 `cherry-miniapp` CLI 校验 manifest、入口、权限、icon hash、文件数量、体积和不安全文件。
 3. `pnpm miniapp:pack` 使用同一 CLI 生成 development `.miniapp` 与可复现 metadata；CLI 不隐式运行 build。
 
-Runtime 与 CLI 当前通过明确的本机 `link:` 联合开发。foundation 发布后改为 `^0.2.0` semver 依赖，打包合同和脚本名称保持不变。
+Runtime 与 CLI 当前声明 `^0.2.0` semver 依赖，并由 monorepo 根 pnpm workspace 解析；打包合同和脚本名称保持不变。
 
 ## 15. 当前扩展方式
 
@@ -298,7 +298,7 @@ Runtime 与 CLI 当前通过明确的本机 `link:` 联合开发。foundation �
 
 | 当前状态 | 目标 |
 | --- | --- |
-| Cherry Host、Storage、Visibility 与 AI 已经统一经过本机链接的 `@cherry-miniapp/kit@0.2.0` | foundation 发布后把 Runtime 与 CLI 的本地 link 升级为 `^0.2.0` |
+| Cherry Host、Storage、Visibility 与 AI 已统一经过 workspace 解析的 `@cherry-miniapp/kit@^0.2.0` | foundation 公共合同变化时同步更新包版本、规范与 App 依赖范围 |
 | v1 AppStateEnvelope 已接入，旧 Key 仅用于首次迁移 | 后续逐版本迁移、恢复 UI 与 RunCheckpoint |
 | 魔法法器与动态 AI 武器已进入原子 Projectile Recipe/Compiler；其余武器与部分展示仍有类型兼容分支 | 全部投射物复用原子 RuntimePlan + 完整 Lifecycle Registry + 声明式 ContentPack |
 | 内置武器/怪物快照已冻结；多数系统仍直接导入旧表 | 系统统一依赖已解析 Registry Snapshot |

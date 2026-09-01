@@ -1,7 +1,7 @@
 {
-  "name": "survivor-game",
+  "name": "@miniapps/survivor-game",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0-dev.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,12 +12,12 @@
     "test": "vitest"
   },
   "devDependencies": {
-    "@cherry-miniapp/cli": "link:/Users/jd/cherry-studio-miniapp/foundation/packages/cli",
-    "typescript": "~6.0.2",
-    "vite": "^8.0.12",
-    "vitest": "^4.1.9"
+    "@cherry-miniapp/cli": "^0.2.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vitest": "4.1.11"
   },
   "dependencies": {
-    "@cherry-miniapp/kit": "link:/Users/jd/cherry-studio-miniapp/foundation/packages/runtime"
+    "@cherry-miniapp/kit": "^0.2.0"
   }
 }

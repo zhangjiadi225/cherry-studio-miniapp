@@ -11,6 +11,6 @@
   },
   "workspaceMembers": {
     "foundation": "foundation",
-    "apps": ["apps/epoch-weaver", "apps/model-stage"]
+    "apps": ["apps/epoch-weaver", "apps/model-stage", "apps/survivor-game"]
   }
 }

@@ -7,8 +7,8 @@
 
 ## Product boundaries
 
-- This repository owns the Night Survivor product: gameplay, product UI, product prompts, packaged assets, manifest, and release configuration.
-- Shared Cherry host adapters, packaging behavior, and cross-product contracts belong in the separate MiniApp foundation repository. Consume them through released packages; do not copy their source into this app.
+- This workspace area owns the Night Survivor product: gameplay, product UI, product prompts, packaged assets, manifest, and release configuration.
+- Shared Cherry host adapters, packaging behavior, and cross-product contracts belong in the monorepo's `foundation/` workspace. Consume them through public package entry points; do not copy their source into this app.
 - Production is a Cherry Studio local MiniApp. A normal browser is only a development environment and must use an explicit development mock.
 
 ## Game and AI rules

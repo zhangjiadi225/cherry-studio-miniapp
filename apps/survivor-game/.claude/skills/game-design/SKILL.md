@@ -44,4 +44,4 @@ In-run currency unified into shards. Base reward = enemy `xpValue`; `getExpected
 
 ## Validate every change
 Run the existing balance suites — do not ship tuning without them:
-`pnpm exec vitest run` (or target `src/game/systems/weapon/WeaponBalance.test.ts`, `src/game/data/economy.test.ts`, `src/game/data/difficulty.test.ts`). Then `pnpm dev` to feel the change. See `web-game-dev` skill for adding the code behind new content.
+`pnpm --filter @miniapps/survivor-game exec vitest run` (or target `src/game/systems/weapon/WeaponBalance.test.ts`, `src/game/data/economy.test.ts`, `src/game/data/difficulty.test.ts`). Then `pnpm --filter @miniapps/survivor-game dev` to feel the change. See `web-game-dev` skill for adding the code behind new content.

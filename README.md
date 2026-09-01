@@ -11,7 +11,8 @@ cherry-studio-miniapp/
 │   └── specs/                  # 宿主、产品、仓库和打包规范
 └── apps/
     ├── epoch-weaver/           # 纪元织造者
-    └── model-stage/            # 模型布景
+    ├── model-stage/            # 模型布景
+    └── survivor-game/          # 暗夜幸存者
 ```
 
 ## 目录边界
@@ -30,6 +31,7 @@ cherry-studio-miniapp/
 pnpm install
 pnpm --filter @miniapps/epoch-weaver dev
 pnpm --filter @miniapps/model-stage dev
+pnpm --filter @miniapps/survivor-game dev
 pnpm build:all
 pnpm pack:all
 pnpm apps:list
@@ -60,3 +62,4 @@ CLI 只接受已经构建完成的静态目录，校验 manifest 和入口、拒
 
 - `epoch-weaver`（纪元织造者）：AI 能力与架构样板。
 - `model-stage`（模型布景）：Cherry AI 驱动的 3D 模型工作区。
+- `survivor-game`（暗夜幸存者）：支持 Cherry AI 武器锻造的确定性 2D 生存游戏引擎。
