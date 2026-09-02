@@ -39,7 +39,7 @@ pnpm pack:all
 pnpm apps:list
 ```
 
-workspace 会把版本兼容的 foundation 包链接给 app；CI 和本地开发都以根 `pnpm-lock.yaml` 为依赖真源。当前模型布景使用的 Skenora 0.1.2 尚通过相邻本地目录覆盖，发布或独立 CI 前仍需将该版本发布到 registry，或把 Skenora 纳入明确的版本化依赖方案。
+workspace 会把版本兼容的 foundation 包链接给 app；CI 和本地开发都以根 `pnpm-lock.yaml` 为依赖真源。模型布景固定使用 npm registry 中发布的 Skenora 0.1.2，不依赖仓库外的本地目录。
 
 ## 打包模型
 

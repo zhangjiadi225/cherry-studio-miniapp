@@ -17,4 +17,4 @@ pnpm --filter @miniapps/model-stage build
 pnpm --filter @miniapps/model-stage miniapp:pack
 ```
 
-源码只通过公开包入口使用 foundation 或 Skenora。`@cherry-miniapp/*` 依赖由根 workspace 解析；当前开发环境仍通过相邻本地目录覆盖 Skenora 0.1.2，发布或独立 CI 前需先将对应版本发布到 registry，或采用明确的版本化依赖方案。
+源码只通过公开包入口使用 foundation 或 Skenora。`@cherry-miniapp/*` 依赖由根 workspace 解析；`@skenora/sdk` 与 `@skenora/scene-plan` 固定使用 npm registry 中发布的 0.1.2。

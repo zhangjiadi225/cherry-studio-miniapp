@@ -124,7 +124,7 @@ src/
 - `@skenora/sdk`：Editor/Renderer 产品入口与模型导入。
 - `@skenora/scene-plan`：AI-facing Blueprint/Patch 信息、校验和编译。
 
-Skenora 当前已经产生 0.1.0 tarball，但尚未发布到 registry。正式写入根 `pnpm-lock.yaml` 前必须先解决可复现的包来源：优先发布带固定版本的 Skenora 包；本机 tarball 只可用于明确的临时兼容性原型，不得成为应用的发布依赖。
+Skenora 0.1.2 已发布到 npm registry。应用固定依赖该版本，并由根 `pnpm-lock.yaml` 锁定完整依赖图；本地相邻仓库和 tarball 不作为应用的安装来源。
 
 ## 5. AI 数据闭环
 
@@ -214,7 +214,7 @@ Cherry `file.save` 当前是字符串接口并受 10 MB/文件、20 MB/应用限
 
 ### 阶段 0：依赖与沙箱探针
 
-- 确定 Skenora 0.1.x 的可复现包来源。
+- 从 npm registry 安装锁定的 Skenora 0.1.2。
 - 在最小页面加载 Skenora 浏览器 bundle。
 - 在 Cherry 沙箱确认 Canvas/WebGL、动态模块图、GLB File 输入和销毁流程。
 - 记录 bundle 体积和首次加载失败模式。
@@ -266,7 +266,7 @@ Cherry `file.save` 当前是字符串接口并受 10 MB/文件、20 MB/应用限
 
 | 项目 | 当前判断 | 进入实现前的处理 |
 | --- | --- | --- |
-| Skenora 未发布 | 阻断可复现正式依赖 | 先发布固定版本，或仅为探针明确使用本地 tarball |
+| Skenora 包版本与应用不兼容 | 可能阻断安装或运行 | 固定使用已发布的 0.1.2，并在升级时同步更新根 lockfile |
 | 浏览器 bundle 约 8.55 MiB（非 map） | 可用于原型，但需关注启动和包体 | 阶段 0 记录真实 Cherry 加载表现，再决定拆包或裁剪入口 |
 | Cherry AI 没有强制 JSON 模式 | 可处理，但必须防御性解析 | 严格 schema、一次修复、失败不提交 |
 | 用户模型无法无条件持久化 | MVP 可接受 | 明示会话范围；恢复时重新选择模型 |

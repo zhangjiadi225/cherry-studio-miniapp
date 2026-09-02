@@ -4,24 +4,18 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: true
 
-overrides:
-  '@skenora/scene-plan': link:../skenora/packages/scene-plan
-  '@skenora/sdk': link:../skenora/packages/sdk
-
 importers:
 
   .: {}
 
-  examples/epoch-weaver:
-    devDependencies:
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vite:
-        specifier: 7.3.6
-        version: 7.3.6(lightningcss@1.33.0)
-
   apps/model-stage:
+    dependencies:
+      '@skenora/scene-plan':
+        specifier: 0.1.2
+        version: 0.1.2
+      '@skenora/sdk':
+        specifier: 0.1.2
+        version: 0.1.2
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -41,6 +35,15 @@ importers:
       vitest:
         specifier: 4.1.11
         version: 4.1.11(vite@7.3.6(lightningcss@1.33.0))
+
+  examples/epoch-weaver:
+    devDependencies:
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vite:
+        specifier: 7.3.6
+        version: 7.3.6(lightningcss@1.33.0)
 
   foundation:
     devDependencies:
@@ -63,6 +66,20 @@ importers:
   foundation/packages/runtime: {}
 
 packages:
+
+  '@babylonjs/core@9.23.0':
+    resolution: {integrity: sha512-FpDaTPx485J1H0AEJpoJ785Z1CwCkEPNnZFu7WzHTy0ByGCy75bkZZILh4QFU4LLnzK1iuHwUfecCguATIeKSA==}
+
+  '@babylonjs/loaders@9.23.0':
+    resolution: {integrity: sha512-4qNxiHmi2udyZmTsVL3iUUfVF4BKecgmFpp1//wBoZ6RhTWlkbBT4CIJLVPeibXZeJliZ5vII8rvZqDPgGiotw==}
+    peerDependencies:
+      '@babylonjs/core': ^9.0.0
+      babylonjs-gltf2interface: ^9.0.0
+
+  '@babylonjs/materials@9.23.0':
+    resolution: {integrity: sha512-Iye09X2iTqxz/oq3xA0+C3SDHmPN9IUid7R5FEeCBikVGLeIqdNNK68otX/Q3nxbtzDEzDO20a+e8SZYNriYjg==}
+    peerDependencies:
+      '@babylonjs/core': ^9.0.0
 
   '@biomejs/biome@2.5.10':
     resolution: {integrity: sha512-WRKXARA3kTuiV5sxqTpobJ/I0MVd4vk3pOL6wnp5az4LntFIhWTj1RWZq3DI9PCEN3lXcqy7p5aqUHzvq8AXyQ==}
@@ -433,6 +450,51 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@skenora/babylon-editor@0.1.2':
+    resolution: {integrity: sha512-nfzJQtVRJ73FdVtqYlViB3w+0DJvzpa+7qUkiUtb6JNwai+9LwaKms25J8meoqqGHq4eq5NbplQIxDI8ZAC7Yg==}
+
+  '@skenora/contracts@0.1.2':
+    resolution: {integrity: sha512-vLsibZ0cjVn40z1A8lulgAlAZu43lhPqIeCGwodKgPLSAivHtLmTzwiD4y3bdDMXBqNmB2spnjnXBdAYQxKEcw==}
+
+  '@skenora/document@0.1.2':
+    resolution: {integrity: sha512-TuL4F82whN33ZhFj69klFpl2XJqb8rdJAOmWHqx7zfrx82WdmLB6nMUXgN9ij6CGSRsx5+j2LSxPXeN4yBt4FA==}
+
+  '@skenora/editor@0.1.2':
+    resolution: {integrity: sha512-BzgHDXleE1GSrTulI5GKlwYafguqS8sYy+F7yENBOHcTpVeYe7AvVh17/a+SPXUyn/VTpfdb5ObgEH5aTrCmpQ==}
+
+  '@skenora/events@0.1.2':
+    resolution: {integrity: sha512-rsjZTOq8eqlQFcj0C+qozEI8Yr+ZRPueOXB651NFTEQa0XBrnQW8jjDL9H4YTY+rfyS+OdzDBdN6VhrMqCt5PQ==}
+
+  '@skenora/flow@0.1.2':
+    resolution: {integrity: sha512-RqzVmaE8kusycl+5Px1VDrjOIN1ZMla3S1p1DrpUZh70/iGH2/mVoXD3j1LvXi4MOe4LJzCtgYzWY9t75vIxxw==}
+
+  '@skenora/geometry@0.1.2':
+    resolution: {integrity: sha512-O/sX/Z0dmt50LwBf7L0qjlWpBebBQW+qPkKa6gNL5vUti+efVxT0Bg2c0uCCHoW+3HCbn34FQORdNaHApzDr/Q==}
+
+  '@skenora/lightbox@0.1.2':
+    resolution: {integrity: sha512-VkIfpVTOfsRIRLx6UlJDrYIlv2YnBhm5uD4VMzv4TtvSNhm4nxAIodjxMXOeIwRfdWuwV5X8kKBKrrTTdWJ5xg==}
+
+  '@skenora/plugins@0.1.2':
+    resolution: {integrity: sha512-9dtJ7FrKEdXbO9otaWBg+MNwJgG04ChHBTri18/Tc2c/nGIZZgkIq0wGo9JyQWjTer6p9j/BbFbLi9iibi2FUA==}
+
+  '@skenora/procedural@0.1.2':
+    resolution: {integrity: sha512-PPFRhVZay2QpzuKwMwvdIvI3fOvYN1Zn9pQUABL2/6dy6oeHDwee2RDvAbl7Ri58fHnnlPVUez6WekAZBdm5hw==}
+
+  '@skenora/resources@0.1.2':
+    resolution: {integrity: sha512-fQ/fDTHUmLBLdTPzu4rZlG6ftAdQYrReWMnHVd3e6oI8K91alvdEN08uvIZ5rjw5pBZUA5pZTOyKkv8LBuQcMg==}
+
+  '@skenora/runtime@0.1.2':
+    resolution: {integrity: sha512-zlKurrJp/4siy7xtvVXS124uwdG0LKkMPimdVrWxeQTed0eLclTkzmoeTRD14Ics9RAstiKuK4r0VgFif5EevA==}
+
+  '@skenora/scene-plan@0.1.2':
+    resolution: {integrity: sha512-Tcy4Fzzx87Zjb6RrVgweO/UWClviwpdHUTIbnu4LZcN0pW9/zTyzIGiQ7lCsGNJR/I2SxB7Ez08iuPHXk4Rqug==}
+
+  '@skenora/sdk@0.1.2':
+    resolution: {integrity: sha512-A1Aj9yN+GE10WEjYO2aJcCI9wFjN5u+lAEtT+6lMqg4X8SrgOVZv0DxCDpFFyHry4QRu0CU5AZVC2zIaym5z5Q==}
+
+  '@skenora/workspace@0.1.2':
+    resolution: {integrity: sha512-WLkzHvizaSGbxSbarF1XiJreetTnfdmIQP7gDOeFEbHuNblv5NgbLLLKQDuukzme/U+duJWyB2tLuWBfamh9Ew==}
+
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
@@ -516,6 +578,9 @@ packages:
     peerDependenciesMeta:
       react-native-b4a:
         optional: true
+
+  babylonjs-gltf2interface@9.23.0:
+    resolution: {integrity: sha512-oD9rkfCafvGACikVWhVVl1Iy9bDuBVlI7zmeiDXI8y5gw7UOmQMffpvrl/ujoiw5agcsEAaQuF6Dbjfb+Cpaiw==}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -607,6 +672,9 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  earcut@3.2.3:
+    resolution: {integrity: sha512-vnS4AVwp1KHAF13i1vp1/2D5evWy3k5u/iW/B81QVsUZtV8cv2tU0b2VNFlqvh4kYwrFMDdjPCfAmfyJW9y14Q==}
 
   eastasianwidth@0.2.0:
     resolution: {integrity: sha512-I88TYZWc9XiYHRQ4/3c5rjjfgkjhLyW2luGIheGERbNQ6OY7yTybanSpDXZa8y7VUP9YmDcYa+eyq4ca7iLqWA==}
@@ -1052,6 +1120,17 @@ packages:
 
 snapshots:
 
+  '@babylonjs/core@9.23.0': {}
+
+  '@babylonjs/loaders@9.23.0(@babylonjs/core@9.23.0)(babylonjs-gltf2interface@9.23.0)':
+    dependencies:
+      '@babylonjs/core': 9.23.0
+      babylonjs-gltf2interface: 9.23.0
+
+  '@babylonjs/materials@9.23.0(@babylonjs/core@9.23.0)':
+    dependencies:
+      '@babylonjs/core': 9.23.0
+
   '@biomejs/biome@2.5.10':
     optionalDependencies:
       '@biomejs/cli-darwin-arm64': 2.5.10
@@ -1257,6 +1336,99 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.63.1':
     optional: true
 
+  '@skenora/babylon-editor@0.1.2':
+    dependencies:
+      '@babylonjs/core': 9.23.0
+      '@skenora/contracts': 0.1.2
+      '@skenora/document': 0.1.2
+      '@skenora/editor': 0.1.2
+      '@skenora/events': 0.1.2
+      '@skenora/flow': 0.1.2
+      '@skenora/resources': 0.1.2
+      '@skenora/runtime': 0.1.2
+
+  '@skenora/contracts@0.1.2': {}
+
+  '@skenora/document@0.1.2':
+    dependencies:
+      '@skenora/contracts': 0.1.2
+
+  '@skenora/editor@0.1.2':
+    dependencies:
+      '@skenora/contracts': 0.1.2
+      '@skenora/document': 0.1.2
+      '@skenora/events': 0.1.2
+      '@skenora/geometry': 0.1.2
+      '@skenora/plugins': 0.1.2
+
+  '@skenora/events@0.1.2': {}
+
+  '@skenora/flow@0.1.2':
+    dependencies:
+      '@skenora/contracts': 0.1.2
+      '@skenora/events': 0.1.2
+
+  '@skenora/geometry@0.1.2':
+    dependencies:
+      '@skenora/contracts': 0.1.2
+
+  '@skenora/lightbox@0.1.2':
+    dependencies:
+      '@skenora/contracts': 0.1.2
+      '@skenora/resources': 0.1.2
+      '@skenora/runtime': 0.1.2
+      '@skenora/workspace': 0.1.2
+
+  '@skenora/plugins@0.1.2': {}
+
+  '@skenora/procedural@0.1.2':
+    dependencies:
+      '@skenora/contracts': 0.1.2
+
+  '@skenora/resources@0.1.2':
+    dependencies:
+      '@skenora/contracts': 0.1.2
+      '@skenora/events': 0.1.2
+      '@skenora/workspace': 0.1.2
+
+  '@skenora/runtime@0.1.2':
+    dependencies:
+      '@babylonjs/core': 9.23.0
+      '@babylonjs/loaders': 9.23.0(@babylonjs/core@9.23.0)(babylonjs-gltf2interface@9.23.0)
+      '@babylonjs/materials': 9.23.0(@babylonjs/core@9.23.0)
+      '@skenora/contracts': 0.1.2
+      '@skenora/events': 0.1.2
+      '@skenora/geometry': 0.1.2
+      '@skenora/plugins': 0.1.2
+      '@skenora/procedural': 0.1.2
+      '@skenora/resources': 0.1.2
+      babylonjs-gltf2interface: 9.23.0
+      earcut: 3.2.3
+
+  '@skenora/scene-plan@0.1.2':
+    dependencies:
+      '@skenora/contracts': 0.1.2
+      '@skenora/flow': 0.1.2
+
+  '@skenora/sdk@0.1.2':
+    dependencies:
+      '@skenora/babylon-editor': 0.1.2
+      '@skenora/contracts': 0.1.2
+      '@skenora/document': 0.1.2
+      '@skenora/editor': 0.1.2
+      '@skenora/events': 0.1.2
+      '@skenora/lightbox': 0.1.2
+      '@skenora/procedural': 0.1.2
+      '@skenora/resources': 0.1.2
+      '@skenora/runtime': 0.1.2
+      '@skenora/scene-plan': 0.1.2
+      '@skenora/workspace': 0.1.2
+
+  '@skenora/workspace@0.1.2':
+    dependencies:
+      '@skenora/contracts': 0.1.2
+      '@skenora/events': 0.1.2
+
   '@standard-schema/spec@1.1.0': {}
 
   '@types/chai@5.2.3':
@@ -1353,6 +1525,8 @@ snapshots:
 
   b4a@1.8.1: {}
 
+  babylonjs-gltf2interface@9.23.0: {}
+
   balanced-match@1.0.2: {}
 
   bare-events@2.9.2: {}
@@ -1432,6 +1606,8 @@ snapshots:
 
   detect-libc@2.1.2:
     optional: true
+
+  earcut@3.2.3: {}
 
   eastasianwidth@0.2.0: {}
 

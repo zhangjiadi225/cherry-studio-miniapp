@@ -13,6 +13,19 @@ verifyDepsBeforeRun: false
 allowBuilds:
   esbuild: true
 
-overrides:
-  '@skenora/scene-plan': link:../skenora/packages/scene-plan
-  '@skenora/sdk': link:../skenora/packages/sdk
+minimumReleaseAgeExclude:
+  - '@skenora/babylon-editor@0.1.2'
+  - '@skenora/contracts@0.1.2'
+  - '@skenora/document@0.1.2'
+  - '@skenora/editor@0.1.2'
+  - '@skenora/events@0.1.2'
+  - '@skenora/flow@0.1.2'
+  - '@skenora/geometry@0.1.2'
+  - '@skenora/lightbox@0.1.2'
+  - '@skenora/plugins@0.1.2'
+  - '@skenora/procedural@0.1.2'
+  - '@skenora/resources@0.1.2'
+  - '@skenora/runtime@0.1.2'
+  - '@skenora/scene-plan@0.1.2'
+  - '@skenora/sdk@0.1.2'
+  - '@skenora/workspace@0.1.2'
