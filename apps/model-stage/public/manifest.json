@@ -5,14 +5,14 @@
     "zh": "模型布景"
   },
   "description": {
-    "en": "Import a local 3D model into a clean grid workspace and stage it with Cherry AI.",
-    "zh": "把本地 3D 模型导入干净的网格工作区，再用 Cherry AI 完成布景。"
+    "en": "Stage local 3D models with ready-to-use lighting presets, camera views and manual controls. Cherry AI is optional.",
+    "zh": "用现成灯光方案、快捷机位和手动微调为本地 3D 模型布景，无需配置 AI。"
   },
-  "version": "0.3.11",
+  "version": "0.5.0",
   "entry": "index.html",
   "releaseNotes": {
-    "en": "Adds a right-panel switch between the default AI chat and the scene tree with node properties.",
-    "zh": "右侧面板新增对话与场景切换，默认显示 AI 对话，场景页展示场景树和节点属性。"
+    "en": "Adds five local staging presets, four camera views, background choices and light controls, with validated, undoable scene changes and saved operation results.",
+    "zh": "新增五套本地布景方案、四个快捷机位、背景与灯光微调；修改经过校验、可撤销，并保存真实提交结果。"
   },
   "permissions": ["ai.chat", "storage.*", "file.save", "file.export"]
 }

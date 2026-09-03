@@ -42,17 +42,20 @@ export function createDevelopmentScenePatch(messages: CherryChatMessage[]): stri
   }
 
   if (requestsChange && /镜头|视角|靠近|左前方|右前方/u.test(command)) {
+    const position = /右/u.test(command)
+      ? { x: -3.1, y: 2.05, z: -4.2 }
+      : { x: 3.1, y: 2.05, z: -4.2 }
+    const target = { x: 0, y: 0.82, z: 0 }
+    const radius = Math.hypot(position.x, position.y - target.y, position.z)
     operations.push({
       op: 'update',
       target: { kind: 'setting', id: 'camera' },
       changes: [
-        {
-          path: ['position'],
-          value: /右/u.test(command)
-            ? { x: -3.1, y: 2.05, z: -4.2 }
-            : { x: 3.1, y: 2.05, z: -4.2 }
-        },
-        { path: ['target'], value: { x: 0, y: 0.82, z: 0 } }
+        { path: ['position'], value: position },
+        { path: ['target'], value: target },
+        { path: ['alpha'], value: Math.atan2(position.z, position.x) },
+        { path: ['beta'], value: Math.acos((position.y - target.y) / radius) },
+        { path: ['radius'], value: radius }
       ]
     })
   }
@@ -60,8 +63,7 @@ export function createDevelopmentScenePatch(messages: CherryChatMessage[]): stri
   const subjectEntityId =
     typeof context.subjectEntityId === 'string' ? context.subjectEntityId : null
   if (requestsChange && subjectEntityId && /旋转|转动|换个角度/u.test(command)) {
-    const entities = isRecord(document.entities) ? document.entities : {}
-    const subject = isRecord(entities[subjectEntityId]) ? entities[subjectEntityId] : {}
+    const subject = isRecord(document.subjectEntity) ? document.subjectEntity : {}
     const transform = isRecord(subject.transform) ? subject.transform : {}
     const rotation = isRecord(transform.rotation) ? transform.rotation : {}
     const currentY = typeof rotation.y === 'number' ? rotation.y : 0
@@ -104,12 +106,13 @@ function createReply(
       /镜头|视角|靠近|左前方|右前方/u.test(command) ? '镜头' : '',
       /旋转|转动|换个角度/u.test(command) ? '主体角度' : ''
     ].filter(Boolean)
-    return `已按你的描述调整${domains.join('、') || '场景'}，结果已经应用到画面。`
+    return `准备按你的描述调整${domains.join('、') || '场景'}。`
   }
 
   if (/有什么|哪些|多少|资源|对象/u.test(command)) {
-    const entities = isRecord(document.entities) ? Object.keys(document.entities).length : 0
-    const lights = Array.isArray(document.lights) ? document.lights.length : 0
+    const counts = isRecord(document.counts) ? document.counts : {}
+    const entities = typeof counts.entities === 'number' ? counts.entities : 0
+    const lights = typeof counts.lights === 'number' ? counts.lights : 0
     return `当前场景有 ${entities} 个模型或对象和 ${lights} 盏灯；切换右侧“场景”页签可查看天空、地面、镜头及对象父子关系。`
   }
 

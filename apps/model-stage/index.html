@@ -14,7 +14,7 @@
           <button id="undo-button" class="icon-button" type="button" title="撤销" aria-label="撤销" disabled>↶</button>
           <button id="redo-button" class="icon-button" type="button" title="重做" aria-label="重做" disabled>↷</button>
           <button id="import-button" class="secondary-button" type="button">导入模型目录</button>
-          <button id="export-button" class="text-button" type="button">导出</button>
+          <button id="export-button" class="text-button" type="button" title="导出场景 JSON，不包含本地模型文件">导出场景</button>
           <input
             id="model-input"
             type="file"
@@ -35,6 +35,7 @@
           </div>
 
           <div class="viewport-tools">
+            <button id="preview-button" class="canvas-button" type="button" title="显式启动或停止动态预览">预览</button>
             <button id="frame-button" class="canvas-button" type="button" title="适配主体">取景</button>
             <button id="reset-view-button" class="canvas-button" type="button" title="重置视角">重置</button>
           </div>
@@ -49,13 +50,25 @@
             aria-orientation="horizontal"
           >
             <button
-              id="chat-tab"
+              id="effects-tab"
               class="inspector-tab"
               type="button"
               role="tab"
               aria-selected="true"
+              aria-controls="effects-panel"
+              data-inspector-tab="effects"
+            >
+              方案
+            </button>
+            <button
+              id="chat-tab"
+              class="inspector-tab"
+              type="button"
+              role="tab"
+              aria-selected="false"
               aria-controls="chat-panel"
               data-inspector-tab="chat"
+              tabindex="-1"
             >
               对话
             </button>
@@ -74,11 +87,66 @@
           </nav>
 
           <section
+            id="effects-panel"
+            class="inspector-view effects-panel"
+            role="tabpanel"
+            aria-labelledby="effects-tab"
+            data-inspector-panel="effects"
+          >
+            <header class="effects-heading">
+              <h2>一键布景</h2>
+              <span class="local-badge">本地 · 无需 AI</span>
+            </header>
+            <p id="effects-guard" class="effects-guard" role="status" hidden></p>
+            <div class="effects-body">
+              <p class="effects-intro">导入模型，选一套光。也可以先布置空场景。</p>
+              <div id="effects-grid" class="effects-grid" role="group" aria-label="效果方案"></div>
+              <p class="effects-note">卡片为风格示意，并非模型实拍。方案会重设背景、地面、三点灯光、镜头与后期，关闭雾和天气；保留模型、材质、自定义灯光与动态行为。</p>
+
+              <section class="effect-section" aria-labelledby="camera-heading">
+                <h3 id="camera-heading">快捷机位</h3>
+                <div id="camera-shortcuts" class="camera-shortcuts" role="group" aria-label="快捷机位"></div>
+              </section>
+
+              <section class="effect-section" aria-labelledby="background-heading">
+                <h3 id="background-heading">背景</h3>
+                <div id="background-choices" class="background-choices" role="group" aria-label="背景颜色"></div>
+                <p class="effects-note">透明仅设置场景背景；当前导出为场景 JSON，不是 PNG。</p>
+              </section>
+
+              <section class="effect-section" aria-labelledby="lights-heading">
+                <h3 id="lights-heading">灯光微调 <span>松开后应用</span></h3>
+                <div class="light-control">
+                  <label for="key-intensity">主光</label>
+                  <input id="key-intensity" type="range" min="0" max="2.5" step="0.05" value="1.45" data-light-id="workspace-key" disabled />
+                  <output for="key-intensity">1.45</output>
+                </div>
+                <div class="light-control">
+                  <label for="fill-intensity">补光</label>
+                  <input id="fill-intensity" type="range" min="0" max="2.5" step="0.05" value="0.7" data-light-id="workspace-fill" disabled />
+                  <output for="fill-intensity">0.70</output>
+                </div>
+                <div class="light-control">
+                  <label for="rim-intensity">轮廓光</label>
+                  <input id="rim-intensity" type="range" min="0" max="2.5" step="0.05" value="0.6" data-light-id="workspace-rim" disabled />
+                  <output for="rim-intensity">0.60</output>
+                </div>
+                <p class="effects-note">缺失或禁用的灯不可调；选择方案可恢复三点灯光。</p>
+              </section>
+            </div>
+            <footer class="effect-result">
+              <span id="effect-status" role="status">场景启动后即可使用本地方案</span>
+              <button id="effect-json-button" class="text-button" type="button" disabled>查看修改</button>
+            </footer>
+          </section>
+
+          <section
             id="chat-panel"
             class="inspector-view chat-panel"
             role="tabpanel"
             aria-labelledby="chat-tab"
             data-inspector-panel="chat"
+            hidden
           >
             <header class="chat-panel-heading">
               <div class="chat-title-group">
@@ -93,8 +161,21 @@
             <div class="chat-panel-body">
               <div id="conversation" class="conversation" aria-live="polite"></div>
 
+              <section id="plan-review" class="plan-review" aria-live="polite" hidden>
+                <div class="plan-review-heading">
+                  <span id="plan-risk" class="risk-badge">需要确认</span>
+                  <strong id="plan-review-title">AI 修改提案</strong>
+                </div>
+                <p id="plan-review-summary"></p>
+                <ul id="plan-review-reasons"></ul>
+                <div class="plan-review-actions">
+                  <button id="discard-plan-button" class="secondary-button" type="button">取消</button>
+                  <button id="confirm-plan-button" class="primary-button" type="button">应用修改</button>
+                </div>
+              </section>
+
               <div class="last-change">
-                <span id="change-summary">AI 修改会在校验后自动应用</span>
+                <span id="change-summary">AI 修改会先校验并按风险确认</span>
                 <button id="json-button" class="text-button" type="button" disabled>查看修改</button>
               </div>
 
@@ -110,7 +191,7 @@
                     id="apply-button"
                     class="primary-button"
                     type="button"
-                    aria-label="发送；场景修改将在校验后自动应用"
+                    aria-label="发送；场景修改会先校验并按风险确认"
                     disabled
                   >
                     发送

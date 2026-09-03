@@ -8,16 +8,40 @@ import {
 } from '@cherry-miniapp/kit'
 import { installCherryDevMock } from '@cherry-miniapp/kit/dev-mock'
 import type { EntityRecord, SceneDocumentData } from '@skenora/sdk/editor'
-import { AiPlanner, AiPlannerError } from './ai-planner'
+import {
+  AiPlanner,
+  AiPlannerError,
+  type AiApplyResult,
+  type AiPlanProposal,
+  type PlanRiskLevel
+} from './ai-planner'
 import { createDevelopmentScenePatch } from './dev-mock'
 import { SceneController } from './scene-controller'
-import { emptyState, loadState, persistState, type ModelStageState } from './state'
+import {
+  BACKGROUND_CHOICES,
+  CAMERA_VIEWS,
+  EFFECT_PRESETS,
+  LocalScenePlanError,
+  applyLocalScenePlan,
+  createBackgroundPlan,
+  createCameraViewPlan,
+  createEffectPresetPlan,
+  createLightIntensityPlan,
+  type LocalScenePlan
+} from './scene-recipes'
+import {
+  emptyState,
+  loadState,
+  persistState,
+  type AppliedPlanRecord,
+  type ModelStageState
+} from './state'
 import './style.css'
 
 if (import.meta.env.DEV) {
   installCherryDevMock({
     appId: 'dev.cherrymini.model-stage',
-    version: '0.3.11',
+    version: '0.5.0',
     permissions: {
       'ai.chat': true,
       'storage.get': true,
@@ -71,8 +95,26 @@ const undoButton = element<HTMLButtonElement>('#undo-button')
 const redoButton = element<HTMLButtonElement>('#redo-button')
 const frameButton = element<HTMLButtonElement>('#frame-button')
 const resetViewButton = element<HTMLButtonElement>('#reset-view-button')
+const previewButton = element<HTMLButtonElement>('#preview-button')
 const exportButton = element<HTMLButtonElement>('#export-button')
+const planReview = element<HTMLElement>('#plan-review')
+const planRisk = element<HTMLElement>('#plan-risk')
+const planReviewTitle = element<HTMLElement>('#plan-review-title')
+const planReviewSummary = element<HTMLElement>('#plan-review-summary')
+const planReviewReasons = element<HTMLUListElement>('#plan-review-reasons')
+const confirmPlanButton = element<HTMLButtonElement>('#confirm-plan-button')
+const discardPlanButton = element<HTMLButtonElement>('#discard-plan-button')
 const toast = element<HTMLElement>('#toast')
+const effectsPanel = element<HTMLElement>('#effects-panel')
+const effectsGrid = element<HTMLElement>('#effects-grid')
+const effectStatus = element<HTMLElement>('#effect-status')
+const effectsGuard = element<HTMLElement>('#effects-guard')
+const effectJsonButton = element<HTMLButtonElement>('#effect-json-button')
+const cameraShortcuts = element<HTMLElement>('#camera-shortcuts')
+const backgroundChoices = element<HTMLElement>('#background-choices')
+const lightInputs = Array.from(
+  effectsPanel.querySelectorAll<HTMLInputElement>('[data-light-id]')
+)
 
 const scene = new SceneController()
 const planner = new AiPlanner(scene)
@@ -80,6 +122,8 @@ let state: ModelStageState = structuredClone(emptyState)
 let aiAvailable = false
 let sceneReady = false
 let activeController: AbortController | null = null
+let sceneOperationBusy = false
+let pendingProposal: AiPlanProposal | null = null
 let toastTimer: number | null = null
 let selectedTreeNodeId = 'scene-sky'
 const expandedTreeNodes = new Set(['scene-root', 'scene-objects', 'scene-lights'])
@@ -99,21 +143,264 @@ function isKnownCherryError(error: unknown): error is CherryError {
 }
 
 function updateControls(): void {
-  const busy = activeController !== null
-  applyButton.disabled = !sceneReady || !aiAvailable || busy || !promptInput.value.trim()
-  promptInput.disabled = !sceneReady || !aiAvailable
-  importButton.disabled = !sceneReady || busy
-  undoButton.disabled = !sceneReady || busy || !scene.canUndo
-  redoButton.disabled = !sceneReady || busy || !scene.canRedo
-  frameButton.disabled = !sceneReady || !scene.hasSubject
-  resetViewButton.disabled = !sceneReady || busy
-  exportButton.disabled = !sceneReady || busy
-  cancelButton.hidden = !busy
+  const busy = isSceneBusy()
+  const awaitingReview = pendingProposal !== null
+  applyButton.disabled =
+    !sceneReady || !aiAvailable || busy || awaitingReview || !promptInput.value.trim()
+  promptInput.disabled = !sceneReady || !aiAvailable || busy || awaitingReview
+  importButton.disabled = !sceneReady || busy || awaitingReview
+  undoButton.disabled = !sceneReady || busy || awaitingReview || !scene.canUndo
+  redoButton.disabled = !sceneReady || busy || awaitingReview || !scene.canRedo
+  frameButton.disabled = !sceneReady || busy || awaitingReview || !scene.hasSubject
+  resetViewButton.disabled = !sceneReady || busy || awaitingReview
+  previewButton.disabled = !sceneReady || busy || awaitingReview
+  exportButton.disabled = !sceneReady || busy || awaitingReview
+  confirmPlanButton.disabled = busy || !awaitingReview
+  discardPlanButton.disabled = busy || !awaitingReview
+  cancelButton.hidden = activeController === null
+  for (const button of effectsPanel.querySelectorAll<HTMLButtonElement>('[data-local-action]')) {
+    button.disabled = !sceneReady || busy || awaitingReview
+  }
+  for (const input of lightInputs) {
+    input.disabled = !sceneReady || busy || awaitingReview || input.dataset.available !== 'true'
+  }
+  effectsPanel.setAttribute('aria-busy', String(busy))
+  effectsGuard.hidden = !busy && !awaitingReview
+  effectsGuard.textContent = awaitingReview
+    ? '有 AI 修改待确认，请到「对话」应用或取消。'
+    : busy
+      ? '正在执行场景操作，请稍候。'
+      : ''
+  effectJsonButton.disabled = !state.lastLocalOperation
+  updatePreviewControl()
+}
+
+function isSceneBusy(): boolean {
+  return activeController !== null || sceneOperationBusy
+}
+
+function setEffectStatus(
+  message: string,
+  kind: 'ready' | 'busy' | 'warning' | 'error' = 'ready'
+): void {
+  effectStatus.textContent = message
+  effectStatus.dataset.kind = kind
+}
+
+function renderEffectCatalog(): void {
+  effectsGrid.replaceChildren()
+  for (const preset of EFFECT_PRESETS) {
+    const card = document.createElement('button')
+    card.type = 'button'
+    card.className = 'effect-card'
+    card.dataset.presetId = preset.id
+    card.dataset.localAction = 'preset'
+    card.setAttribute('aria-pressed', 'false')
+    card.setAttribute('aria-label', `应用${preset.name}：${preset.description}`)
+    const preview = document.createElement('span')
+    preview.className = 'effect-preview'
+    preview.setAttribute('aria-hidden', 'true')
+    preview.dataset.transparent = String(preset.preview.background === 'transparent')
+    for (const [key, value] of Object.entries(preset.preview)) {
+      preview.style.setProperty(`--preview-${key}`, value)
+    }
+    const copy = document.createElement('span')
+    copy.className = 'effect-card-copy'
+    const title = document.createElement('span')
+    title.className = 'effect-card-title'
+    title.append(document.createTextNode(preset.name))
+    const badge = document.createElement('span')
+    badge.className = 'effect-card-badge'
+    badge.textContent = preset.badge
+    badge.setAttribute('aria-hidden', 'true')
+    title.append(badge)
+    const description = document.createElement('span')
+    description.className = 'effect-card-description'
+    description.textContent = preset.description
+    copy.append(title, description)
+    card.append(preview, copy)
+    card.addEventListener('click', () => {
+      void applyLocalChange(({ document: current, revisionToken }) =>
+        createEffectPresetPlan(preset.id, current, revisionToken)
+      )
+    })
+    effectsGrid.append(card)
+  }
+
+  cameraShortcuts.replaceChildren()
+  for (const view of CAMERA_VIEWS) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'secondary-button'
+    button.dataset.localAction = 'camera'
+    button.textContent = view.shortLabel
+    button.title = view.label
+    button.setAttribute('aria-label', view.label)
+    button.addEventListener('click', () => {
+      void applyLocalChange(({ document: current, revisionToken }) =>
+        createCameraViewPlan(view.id, current, revisionToken)
+      )
+    })
+    cameraShortcuts.append(button)
+  }
+
+  backgroundChoices.replaceChildren()
+  for (const choice of BACKGROUND_CHOICES) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'background-swatch'
+    button.dataset.localAction = 'background'
+    button.dataset.backgroundId = choice.id
+    button.dataset.transparent = String(choice.mode === 'transparent')
+    button.style.setProperty('--swatch-color', choice.color)
+    button.title = choice.label
+    button.setAttribute('aria-label', `${choice.label}背景`)
+    button.setAttribute('aria-pressed', 'false')
+    button.addEventListener('click', () => {
+      void applyLocalChange(({ revisionToken }) => createBackgroundPlan(choice.id, revisionToken))
+    })
+    backgroundChoices.append(button)
+  }
+  updateControls()
+}
+
+function renderEffectControls(): void {
+  for (const card of effectsGrid.querySelectorAll<HTMLButtonElement>('[data-preset-id]')) {
+    const preset = EFFECT_PRESETS.find((item) => item.id === card.dataset.presetId)
+    const selected = preset?.id === state.activeRecipeId
+    card.setAttribute('aria-pressed', String(selected))
+    const badge = card.querySelector<HTMLElement>('.effect-card-badge')
+    if (badge) badge.textContent = selected ? '已选' : (preset?.badge ?? '')
+  }
+  if (!sceneReady) return
+  const current = scene.getDocument()
+  for (const swatch of backgroundChoices.querySelectorAll<HTMLButtonElement>('[data-background-id]')) {
+    const choice = BACKGROUND_CHOICES.find((item) => item.id === swatch.dataset.backgroundId)
+    const background = current.environment.background
+    const selected = choice !== undefined && choice.mode === background.mode &&
+      (choice.mode === 'transparent' || choice.color.toLowerCase() === background.color.toLowerCase())
+    swatch.setAttribute('aria-pressed', String(selected))
+  }
+  for (const input of lightInputs) {
+    const light = current.lights.find((item) => item.id === input.dataset.lightId)
+    input.dataset.available = String(light !== undefined && light.enabled)
+    input.max = String(Math.max(2.5, light?.intensity ?? 0))
+    input.step = '0.01'
+    input.value = String(light?.intensity ?? 0)
+    const output = input.parentElement?.querySelector('output')
+    if (output) {
+      output.textContent = !light
+        ? '缺失'
+        : !light.enabled
+          ? '已关闭'
+          : light.intensity.toFixed(2)
+    }
+  }
+  canvas.parentElement?.classList.toggle(
+    'transparent-viewport', current.environment.background.mode === 'transparent'
+  )
+  updateControls()
+}
+
+async function applyLocalChange(
+  createPlan: (snapshot: ReturnType<SceneController['getPlanningSnapshot']>) => LocalScenePlan
+): Promise<void> {
+  if (!sceneReady || isSceneBusy() || pendingProposal) return
+  const controller = new AbortController()
+  activeController = controller
+  scene.stopPreview()
+  updateControls()
+  try {
+    const localPlan = createPlan(scene.getPlanningSnapshot())
+    setEffectStatus(`正在应用${localPlan.label}…`, 'busy')
+    setRenderStatus('busy', '本地布景中…')
+    const applied = await applyLocalScenePlan(scene, localPlan, controller.signal)
+    state.activeRecipeId =
+      localPlan.kind === 'preset'
+        ? (EFFECT_PRESETS.find((preset) => preset.id === localPlan.id)?.id ?? null)
+        : null
+    state.lastLocalOperation = {
+      ...applied,
+      id: localPlan.id,
+      label: localPlan.label,
+      kind: localPlan.kind,
+      at: Date.now(),
+      modelFailureEntityIds: [...applied.modelFailureEntityIds],
+      changes: {
+        created: [...applied.changes.created],
+        updated: [...applied.changes.updated],
+        removed: [...applied.changes.removed]
+      }
+    }
+    setEffectStatus(
+      applied.projectionWarning
+        ? `${localPlan.label}：${applied.projectionWarning}`
+        : `已应用${localPlan.label} · 可撤销`,
+      applied.projectionWarning ? 'warning' : 'ready'
+    )
+    // The document has committed. A framing/panel failure must not be reported
+    // as an unapplied plan or cause a retry of the transaction.
+    try {
+      if (localPlan.kind === 'preset' || localPlan.kind === 'camera') scene.frame()
+      renderSceneResources()
+      renderEffectControls()
+    } catch {
+      showToast('修改已提交，但取景或面板刷新失败；可点击取景或撤销')
+    }
+    await saveCurrentState()
+    if (applied.projectionWarning) showToast(applied.projectionWarning)
+  } catch (error) {
+    const message = describeError(error)
+    setEffectStatus(message, 'error')
+    showToast(message)
+  } finally {
+    activeController = null
+    setRenderStatus('ready', currentSceneLabel())
+    // Restore sliders to document truth after rejected or cancelled changes.
+    try {
+      renderEffectControls()
+    } catch {
+      showToast('场景面板刷新失败，请重新打开小程序恢复已保存的场景')
+    }
+    updateControls()
+  }
+}
+
+for (const input of lightInputs) {
+  input.addEventListener('input', () => {
+    const output = input.parentElement?.querySelector('output')
+    if (output) output.textContent = Number(input.value).toFixed(2)
+  })
+  input.addEventListener('change', () => {
+    const lightId = input.dataset.lightId
+    const intensity = Number(input.value)
+    if (!lightId) return
+    void applyLocalChange(({ document: current, revisionToken }) =>
+      createLightIntensityPlan(lightId, intensity, current, revisionToken)
+    )
+  })
+}
+
+effectJsonButton.addEventListener('click', () => {
+  if (!state.lastLocalOperation) return
+  jsonOutput.textContent = state.lastLocalOperation.planJson
+  jsonDialog.showModal()
+})
+
+function updatePreviewControl(): void {
+  const previewing = sceneReady && scene.previewing
+  previewButton.dataset.active = String(previewing)
+  previewButton.textContent = previewing ? '停止预览' : '预览'
+  previewButton.setAttribute('aria-pressed', String(previewing))
 }
 
 function setRenderStatus(kind: 'ready' | 'busy' | 'error', label: string): void {
   sceneStatus.dataset.kind = kind
   modelLabel.textContent = label
+}
+
+function currentSceneLabel(): string {
+  return scene.needsModelRebind ? `${scene.subjectName} · 待重新导入` : scene.subjectName
 }
 
 function setAiStatus(value: string): void {
@@ -520,7 +807,13 @@ resourceList.addEventListener('click', (event) => {
   }
   renderSelectedNodeJson()
 
-  if (row instanceof HTMLButtonElement && row.dataset.entityId && sceneReady) {
+  if (
+    row instanceof HTMLButtonElement &&
+    row.dataset.entityId &&
+    sceneReady &&
+    !isSceneBusy() &&
+    !pendingProposal
+  ) {
     scene.frameEntity(row.dataset.entityId)
   }
 })
@@ -564,13 +857,52 @@ function addConversation(role: 'user' | 'assistant', text: string): void {
   renderConversation()
 }
 
+function showPlanReview(proposal: AiPlanProposal): void {
+  pendingProposal = proposal
+  const domains = summarizeDomains(proposal.domains.map((domain) => domain.label))
+  planRisk.dataset.risk = proposal.risk
+  planRisk.textContent = riskLabel(proposal.risk)
+  planReviewTitle.textContent = `${domains}修改需要确认`
+  planReviewSummary.textContent = proposal.reply
+  planReviewReasons.replaceChildren()
+  for (const reason of proposal.riskReasons) {
+    const item = document.createElement('li')
+    item.textContent = reason
+    planReviewReasons.append(item)
+  }
+  planReview.hidden = false
+  changeSummary.textContent = `${domains}修改等待确认`
+  jsonOutput.textContent = proposal.planJson
+  jsonButton.disabled = false
+  updateControls()
+}
+
+function clearPlanReview(): void {
+  pendingProposal = null
+  planReview.hidden = true
+  planReviewReasons.replaceChildren()
+  jsonOutput.textContent = state.lastPlan
+  jsonButton.disabled = !state.lastPlan
+  updateControls()
+}
+
+function riskLabel(risk: PlanRiskLevel): string {
+  return risk === 'high' ? '高影响' : risk === 'medium' ? '需确认' : '低风险'
+}
+
 function summarizeDomains(labels: readonly string[]): string {
   return [...new Set(labels)].join('、') || '场景'
 }
 
+function summarizeLastApply(record: AppliedPlanRecord): string {
+  return record.projectionWarning
+    ? `最近已提交：${record.summary} · 画面有警告`
+    : `最近已应用：${record.summary}`
+}
+
 async function saveCurrentState(): Promise<void> {
-  if (sceneReady) state.sceneJson = scene.exportJson()
   try {
+    if (sceneReady) state.sceneJson = scene.exportJson()
     await persistState(state)
   } catch (error) {
     showToast(
@@ -594,7 +926,9 @@ async function refreshAiAvailability(): Promise<void> {
       !permissionGranted
         ? '请在 Cherry Studio 中授权 AI 对话'
         : aiAvailable
-          ? '可以提问，也可以直接修改场景'
+          ? pendingProposal
+            ? '请确认 AI 修改提案'
+            : '可以提问，也可以直接修改场景'
           : '请先配置默认模型'
     )
   } catch (error) {
@@ -607,14 +941,18 @@ async function refreshAiAvailability(): Promise<void> {
 }
 
 async function importSelectedFiles(files: readonly File[]): Promise<void> {
-  if (!sceneReady || files.length === 0) return
-  activeController?.abort()
+  if (!sceneReady || isSceneBusy() || pendingProposal || files.length === 0) return
+  sceneOperationBusy = true
+  scene.stopPreview()
+  updatePreviewControl()
   setRenderStatus('busy', '导入中…')
   setAiStatus('正在读取模型…')
   updateControls()
   try {
     const model = await scene.importModel(files)
     state.model = {
+      entityId: model.entityId,
+      assetId: model.assetId,
       name: model.name,
       size: model.size,
       lastModified: model.lastModified
@@ -625,12 +963,15 @@ async function importSelectedFiles(files: readonly File[]): Promise<void> {
     addConversation('assistant', `已替换为 ${model.name}。`)
     selectedTreeNodeId = `entity:${model.entityId}`
     renderSceneResources()
+    renderEffectControls()
+    setEffectStatus('模型已导入 · 选择方案即可布景')
     await saveCurrentState()
   } catch (error) {
-    setRenderStatus('ready', scene.subjectName)
+    setRenderStatus('ready', currentSceneLabel())
     setAiStatus(aiAvailable ? '可以继续调整' : '请先配置默认模型')
     showToast(describeError(error))
   } finally {
+    sceneOperationBusy = false
     modelInput.value = ''
     updateControls()
   }
@@ -648,6 +989,8 @@ async function applyPrompt(command: string): Promise<void> {
   const history = [...state.conversation]
   const controller = new AbortController()
   activeController = controller
+  scene.stopPreview()
+  updatePreviewControl()
   promptInput.value = ''
   promptInput.style.height = 'auto'
   addConversation('user', command)
@@ -658,35 +1001,37 @@ async function applyPrompt(command: string): Promise<void> {
 
   try {
     await saveCurrentState()
-    const result = await planner.applyConversation(
+    const result = await planner.planConversation(
       command,
       history,
       controller.signal,
       () => setAiStatus('AI 正在生成回复…')
     )
-    if (result.applied && result.planJson) {
-      state.lastPlan = result.planJson
-      jsonButton.disabled = false
-      jsonOutput.textContent = result.planJson
-      const changed = summarizeDomains(result.domains.map((domain) => domain.label))
-      changeSummary.textContent = `${changed}已由 AI 应用`
-      renderSceneResources()
-      try {
-        await scene.startPreview()
-      } catch {
-        showToast('修改已应用，但动态预览未能启动')
-      }
-    } else {
+    if (!result.proposal) {
       changeSummary.textContent = '本轮仅回复，场景未修改'
+      addConversation('assistant', result.reply)
+    } else if (result.proposal.risk === 'low') {
+      setAiStatus('正在应用低风险修改…')
+      const applied = await applyPlannedChange(result.proposal, controller.signal)
+      addConversation(
+        'assistant',
+        `${result.reply}\n\n${applied.projectionWarning ?? '修改已应用到场景。'}`
+      )
+    } else {
+      addConversation('assistant', result.reply)
+      showPlanReview(result.proposal)
     }
-    addConversation('assistant', result.reply)
-    setRenderStatus('ready', scene.subjectName)
-    setAiStatus('可以继续对话')
+    setRenderStatus('ready', currentSceneLabel())
+    setAiStatus(
+      result.proposal && result.proposal.risk !== 'low'
+        ? '请确认 AI 修改提案'
+        : '可以继续对话'
+    )
     await saveCurrentState()
   } catch (error) {
     const message = describeError(error)
     addConversation('assistant', message)
-    setRenderStatus('ready', scene.subjectName)
+    setRenderStatus('ready', currentSceneLabel())
     setAiStatus(message)
     await saveCurrentState()
   } finally {
@@ -696,15 +1041,69 @@ async function applyPrompt(command: string): Promise<void> {
   }
 }
 
+async function applyPlannedChange(
+  proposal: AiPlanProposal,
+  signal: AbortSignal
+): Promise<AiApplyResult> {
+  scene.stopPreview()
+  updatePreviewControl()
+  const applied = await planner.applyProposal(proposal, signal)
+  const changed = summarizeDomains(applied.domains.map((domain) => domain.label))
+  state.lastPlan = applied.planJson
+  state.lastApply = createAppliedPlanRecord(proposal, applied, changed)
+  state.activeRecipeId = null
+  setEffectStatus('场景已由 AI 调整 · 可重新选择本地方案')
+  jsonButton.disabled = false
+  jsonOutput.textContent = applied.planJson
+  changeSummary.textContent = applied.projectionWarning
+    ? `${changed}已提交，画面有警告`
+    : `${changed}已由 AI 应用`
+  try {
+    renderSceneResources()
+    renderEffectControls()
+  } catch {
+    showToast('修改已提交，但场景面板刷新失败')
+  }
+  if (applied.projectionWarning) showToast(applied.projectionWarning)
+  return applied
+}
+
+function createAppliedPlanRecord(
+  proposal: AiPlanProposal,
+  applied: AiApplyResult,
+  summary: string
+): AppliedPlanRecord {
+  return {
+    at: Date.now(),
+    summary,
+    risk: proposal.risk,
+    planHash: applied.planHash,
+    operationId: applied.operationId,
+    baseRevision: applied.baseRevision,
+    revision: applied.revision,
+    projectionStatus: applied.projectionStatus,
+    projectionWarning: applied.projectionWarning,
+    modelFailureEntityIds: [...applied.modelFailureEntityIds],
+    changes: {
+      created: [...applied.changes.created],
+      updated: [...applied.changes.updated],
+      removed: [...applied.changes.removed]
+    }
+  }
+}
+
 function getPromptBlockedReason(): string | null {
   if (!sceneReady) return '场景仍在启动，请稍后再发送。'
   if (!aiAvailable) return 'Cherry AI 尚未就绪，请检查授权和默认模型。'
-  if (activeController) return '请等待当前回复完成，或先停止它。'
+  if (isSceneBusy()) return '请等待当前场景操作完成。'
+  if (pendingProposal) return '请先应用或取消当前 AI 修改提案。'
   return null
 }
 
 function describeError(error: unknown): string {
-  if (error instanceof AiPlannerError) return error.message
+  if (error instanceof AiPlannerError || error instanceof LocalScenePlanError) {
+    return error.message
+  }
   const runtimeDetail = describeRuntimeProjectionError(error)
   if (runtimeDetail) return runtimeDetail
   if (isKnownCherryError(error)) {
@@ -775,7 +1174,73 @@ composer.addEventListener('submit', (event) => {
 
 cancelButton.addEventListener('click', () => activeController?.abort())
 
-type InspectorTabId = 'chat' | 'scene'
+confirmPlanButton.addEventListener('click', async () => {
+  const proposal = pendingProposal
+  if (!proposal || isSceneBusy()) return
+  const controller = new AbortController()
+  activeController = controller
+  setRenderStatus('busy', '正在应用…')
+  setAiStatus('正在提交已确认的修改…')
+  updateControls()
+  try {
+    const applied = await applyPlannedChange(proposal, controller.signal)
+    clearPlanReview()
+    const changed = summarizeDomains(applied.domains.map((domain) => domain.label))
+    addConversation(
+      'assistant',
+      applied.projectionWarning
+        ? `${changed}修改已经提交。${applied.projectionWarning}`
+        : `${changed}修改已应用到场景。`
+    )
+    setRenderStatus('ready', currentSceneLabel())
+    setAiStatus('可以继续对话')
+    await saveCurrentState()
+  } catch (error) {
+    const message = describeError(error)
+    clearPlanReview()
+    changeSummary.textContent = '提案未应用'
+    addConversation('assistant', message)
+    setRenderStatus('ready', currentSceneLabel())
+    setAiStatus(message)
+    await saveCurrentState()
+  } finally {
+    activeController = null
+    updateControls()
+  }
+})
+
+discardPlanButton.addEventListener('click', () => {
+  if (!pendingProposal || isSceneBusy()) return
+  clearPlanReview()
+  changeSummary.textContent = state.lastApply
+    ? summarizeLastApply(state.lastApply)
+    : '已取消 AI 修改提案'
+  addConversation('assistant', '已取消这次场景修改。')
+  setAiStatus('可以继续对话')
+  void saveCurrentState()
+})
+
+previewButton.addEventListener('click', async () => {
+  if (!sceneReady || isSceneBusy() || pendingProposal) return
+  sceneOperationBusy = true
+  updateControls()
+  try {
+    if (scene.previewing) {
+      scene.stopPreview()
+      setAiStatus('动态预览已停止')
+    } else {
+      await scene.startPreview()
+      setAiStatus('动态预览中；再次点击可停止')
+    }
+  } catch (error) {
+    showToast(describeError(error))
+  } finally {
+    sceneOperationBusy = false
+    updateControls()
+  }
+})
+
+type InspectorTabId = 'effects' | 'chat' | 'scene'
 
 function setInspectorTab(tabId: InspectorTabId, focusTab = false): void {
   for (const tab of inspectorTabs) {
@@ -797,7 +1262,7 @@ function setInspectorTab(tabId: InspectorTabId, focusTab = false): void {
 for (const tab of inspectorTabs) {
   tab.addEventListener('click', () => {
     const tabId = tab.dataset.inspectorTab
-    if (tabId === 'chat' || tabId === 'scene') setInspectorTab(tabId)
+    if (tabId === 'effects' || tabId === 'chat' || tabId === 'scene') setInspectorTab(tabId)
   })
 }
 
@@ -818,55 +1283,82 @@ inspectorTablist.addEventListener('keydown', (event) => {
           ? (currentIndex + 1) % inspectorTabs.length
           : (currentIndex - 1 + inspectorTabs.length) % inspectorTabs.length
   const nextTabId = inspectorTabs[nextIndex]?.dataset.inspectorTab
-  if (nextTabId === 'chat' || nextTabId === 'scene') {
+  if (nextTabId === 'effects' || nextTabId === 'chat' || nextTabId === 'scene') {
     setInspectorTab(nextTabId, true)
   }
 })
 
 undoButton.addEventListener('click', async () => {
+  if (!sceneReady || isSceneBusy() || pendingProposal || !scene.canUndo) return
+  sceneOperationBusy = true
+  updateControls()
   try {
+    scene.stopPreview()
+    updatePreviewControl()
     await scene.undo()
+    state.activeRecipeId = null
+    setEffectStatus('已撤销 · 当前为自定义布景')
     changeSummary.textContent = '已撤销'
     setAiStatus('可以继续调整')
     renderSceneResources()
+    renderEffectControls()
     await saveCurrentState()
   } catch (error) {
     showToast(describeError(error))
   } finally {
+    sceneOperationBusy = false
     updateControls()
   }
 })
 
 redoButton.addEventListener('click', async () => {
+  if (!sceneReady || isSceneBusy() || pendingProposal || !scene.canRedo) return
+  sceneOperationBusy = true
+  updateControls()
   try {
+    scene.stopPreview()
+    updatePreviewControl()
     await scene.redo()
+    state.activeRecipeId = null
+    setEffectStatus('已重做 · 当前为自定义布景')
     changeSummary.textContent = '已重做'
     setAiStatus('可以继续调整')
     renderSceneResources()
+    renderEffectControls()
     await saveCurrentState()
   } catch (error) {
     showToast(describeError(error))
   } finally {
+    sceneOperationBusy = false
     updateControls()
   }
 })
 
 frameButton.addEventListener('click', () => {
-  if (scene.hasSubject) scene.frame()
+  if (sceneReady && !isSceneBusy() && !pendingProposal && scene.hasSubject) scene.frame()
 })
 resetViewButton.addEventListener('click', async () => {
+  if (!sceneReady || isSceneBusy() || pendingProposal) return
+  sceneOperationBusy = true
+  scene.stopPreview()
+  updateControls()
   try {
     await scene.resetView()
+    state.activeRecipeId = null
+    setEffectStatus('镜头已重置 · 当前为自定义布景')
+    renderSceneResources()
+    renderEffectControls()
     await saveCurrentState()
   } catch (error) {
     showToast(describeError(error))
   } finally {
+    sceneOperationBusy = false
     updateControls()
   }
 })
 
 jsonButton.addEventListener('click', () => {
-  jsonOutput.textContent = state.lastPlan
+  jsonOutput.textContent = pendingProposal?.planJson ?? state.lastPlan
   jsonDialog.showModal()
 })
 closeDialogButton.addEventListener('click', () => jsonDialog.close())
@@ -875,6 +1367,7 @@ jsonDialog.addEventListener('click', (event) => {
 })
 
 exportButton.addEventListener('click', async () => {
+  if (!sceneReady || isSceneBusy() || pendingProposal) return
   try {
     const name = 'model-stage.scene.json'
     const data = textToBase64(scene.exportJson())
@@ -889,6 +1382,7 @@ exportButton.addEventListener('click', async () => {
 onAppVisibility((visible) => {
   if (!visible) activeController?.abort()
   scene.setVisible(visible)
+  updatePreviewControl()
   if (visible) void refreshAiAvailability()
   else void saveCurrentState()
 })
@@ -903,6 +1397,7 @@ window.addEventListener(
 )
 
 async function start(): Promise<void> {
+  renderEffectCatalog()
   try {
     state = await loadState()
   } catch (error) {
@@ -915,25 +1410,55 @@ async function start(): Promise<void> {
   if (state.lastPlan) {
     jsonButton.disabled = false
     jsonOutput.textContent = state.lastPlan
-    changeSummary.textContent = '可查看最近一次 AI 修改'
+    changeSummary.textContent = state.lastApply
+      ? summarizeLastApply(state.lastApply)
+      : '可查看最近一次 AI 修改'
   }
 
   try {
     setRenderStatus('busy', '启动中…')
-    await scene.initialize(canvas)
+    const initialization = await scene.initialize(canvas, state.sceneJson, state.model)
     sceneReady = true
-    setRenderStatus('ready', scene.subjectName)
+    if (!initialization.restored) state.activeRecipeId = null
+    const restoredModel = scene.primaryModel
+    state.model = restoredModel
+      ? {
+          entityId: restoredModel.entityId,
+          assetId: restoredModel.assetId,
+          name: restoredModel.name,
+          size: restoredModel.size,
+          lastModified: restoredModel.lastModified
+        }
+      : null
+    setRenderStatus('ready', currentSceneLabel())
     selectedTreeNodeId = scene.subjectEntityId
       ? `entity:${scene.subjectEntityId}`
       : 'scene-sky'
     renderSceneResources()
+    renderEffectControls()
+    const activePreset = EFFECT_PRESETS.find((preset) => preset.id === state.activeRecipeId)
+    const recentOperation = state.lastLocalOperation
+    setEffectStatus(
+      activePreset
+        ? `已恢复${activePreset.name}${initialization.rebindRequired ? ' · 模型待重新导入' : ''}`
+        : initialization.restored && recentOperation
+          ? `已恢复场景 · 最近本地操作：${recentOperation.label}`
+          : '本地方案已就绪 · 无需配置 AI'
+    )
     await refreshAiAvailability()
-    if (state.model) showToast(`${state.model.name} 需要重新导入；空工作区仍可直接使用`)
+    await saveCurrentState()
+    if (initialization.warning) showToast(initialization.warning)
+    else if (initialization.rebindRequired && state.model) {
+      showToast(`${state.model.name} 的场景设置已恢复；重新导入模型目录即可继续`)
+    } else if (initialization.restored) {
+      showToast('上次场景已恢复')
+    }
   } catch (error) {
     sceneReady = false
     setRenderStatus('error', '场景启动失败')
     renderSceneResources()
     setAiStatus('场景未就绪，AI 操作暂不可用')
+    setEffectStatus('场景未就绪，本地方案暂不可用', 'error')
     showToast(describeError(error))
   } finally {
     updateControls()
