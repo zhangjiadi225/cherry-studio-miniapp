@@ -13,6 +13,7 @@ import {
   AiPlannerError,
   type AiApplyResult,
   type AiPlanProposal,
+  type ConversationEntry,
   type PlanRiskLevel
 } from './ai-planner'
 import { createDevelopmentScenePatch } from './dev-mock'
@@ -23,17 +24,21 @@ import {
   EFFECT_PRESETS,
   LocalScenePlanError,
   applyLocalScenePlan,
+  createAtmosphereDensityPlan,
+  createAtmospherePlan,
   createBackgroundPlan,
   createCameraViewPlan,
   createEffectPresetPlan,
   createLightIntensityPlan,
   type LocalScenePlan
 } from './scene-recipes'
+import { ATMOSPHERE_PRESETS, getAtmosphereState } from './scene-particles'
 import {
   emptyState,
   loadState,
   persistState,
   type AppliedPlanRecord,
+  type InspectorTabId,
   type ModelStageState
 } from './state'
 import './style.css'
@@ -41,7 +46,7 @@ import './style.css'
 if (import.meta.env.DEV) {
   installCherryDevMock({
     appId: 'dev.cherrymini.model-stage',
-    version: '0.5.0',
+    version: '0.6.0',
     permissions: {
       'ai.chat': true,
       'storage.get': true,
@@ -112,6 +117,11 @@ const effectsGuard = element<HTMLElement>('#effects-guard')
 const effectJsonButton = element<HTMLButtonElement>('#effect-json-button')
 const cameraShortcuts = element<HTMLElement>('#camera-shortcuts')
 const backgroundChoices = element<HTMLElement>('#background-choices')
+const atmosphereChoices = element<HTMLElement>('#atmosphere-choices')
+const atmosphereDensity = element<HTMLInputElement>('#atmosphere-density')
+const atmosphereDensityOutput = element<HTMLOutputElement>('#atmosphere-density-output')
+const atmosphereStatus = element<HTMLElement>('#atmosphere-status')
+const atmosphereResetButton = element<HTMLButtonElement>('#atmosphere-reset')
 const lightInputs = Array.from(
   effectsPanel.querySelectorAll<HTMLInputElement>('[data-light-id]')
 )
@@ -119,6 +129,10 @@ const lightInputs = Array.from(
 const scene = new SceneController()
 const planner = new AiPlanner(scene)
 let state: ModelStageState = structuredClone(emptyState)
+let sessionConversation: ConversationEntry[] = []
+let stateSaveTimer: number | null = null
+let stateSaveQueue: Promise<void> = Promise.resolve()
+let statePersistenceAvailable = false
 let aiAvailable = false
 let sceneReady = false
 let activeController: AbortController | null = null
@@ -164,6 +178,10 @@ function updateControls(): void {
   for (const input of lightInputs) {
     input.disabled = !sceneReady || busy || awaitingReview || input.dataset.available !== 'true'
   }
+  const atmosphere = sceneReady ? getAtmosphereState(scene.getDocument()) : null
+  const adjustable = atmosphere && atmosphere.presetId !== 'none' && atmosphere.presetId !== 'custom'
+  atmosphereDensity.disabled = !adjustable || busy || awaitingReview || (atmosphere?.density ?? 0) > 2
+  atmosphereResetButton.disabled = !adjustable || busy || awaitingReview
   effectsPanel.setAttribute('aria-busy', String(busy))
   effectsGuard.hidden = !busy && !awaitingReview
   effectsGuard.textContent = awaitingReview
@@ -261,6 +279,22 @@ function renderEffectCatalog(): void {
     })
     backgroundChoices.append(button)
   }
+  atmosphereChoices.replaceChildren()
+  for (const choice of ATMOSPHERE_PRESETS) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'secondary-button'
+    button.dataset.localAction = 'atmosphere'
+    button.dataset.atmosphereId = choice.id
+    button.textContent = choice.label
+    button.setAttribute('aria-pressed', 'false')
+    button.addEventListener('click', () => {
+      void applyLocalChange(({ document: current, revisionToken }) =>
+        createAtmospherePlan(choice.id, current, revisionToken)
+      )
+    })
+    atmosphereChoices.append(button)
+  }
   updateControls()
 }
 
@@ -274,6 +308,14 @@ function renderEffectControls(): void {
   }
   if (!sceneReady) return
   const current = scene.getDocument()
+  const atmosphere = getAtmosphereState(current)
+  for (const button of atmosphereChoices.querySelectorAll<HTMLButtonElement>('[data-atmosphere-id]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.atmosphereId === atmosphere.presetId))
+  }
+  atmosphereDensity.value = String(Math.min(2, Math.max(0, atmosphere.density)))
+  atmosphereDensityOutput.textContent = atmosphere.presetId === 'none' || atmosphere.presetId === 'custom'
+    ? '—'
+    : `${atmosphere.density.toFixed(2)}×`
   for (const swatch of backgroundChoices.querySelectorAll<HTMLButtonElement>('[data-background-id]')) {
     const choice = BACKGROUND_CHOICES.find((item) => item.id === swatch.dataset.backgroundId)
     const background = current.environment.background
@@ -381,6 +423,24 @@ for (const input of lightInputs) {
   })
 }
 
+atmosphereDensity.addEventListener('input', () => {
+  atmosphereDensityOutput.textContent = `${Number(atmosphereDensity.value).toFixed(2)}×`
+})
+atmosphereDensity.addEventListener('change', () => {
+  const density = Number(atmosphereDensity.value)
+  void applyLocalChange(({ document: current, revisionToken }) =>
+    createAtmosphereDensityPlan(density, current, revisionToken)
+  )
+})
+atmosphereResetButton.addEventListener('click', () => {
+  if (!sceneReady) return
+  const { presetId } = getAtmosphereState(scene.getDocument())
+  if (presetId === 'none' || presetId === 'custom') return
+  void applyLocalChange(({ document: current, revisionToken }) =>
+    createAtmospherePlan(presetId, current, revisionToken)
+  )
+})
+
 effectJsonButton.addEventListener('click', () => {
   if (!state.lastLocalOperation) return
   jsonOutput.textContent = state.lastLocalOperation.planJson
@@ -392,6 +452,18 @@ function updatePreviewControl(): void {
   previewButton.dataset.active = String(previewing)
   previewButton.textContent = previewing ? '停止预览' : '预览'
   previewButton.setAttribute('aria-pressed', String(previewing))
+  if (sceneReady) {
+    const atmosphere = getAtmosphereState(scene.getDocument())
+    atmosphereStatus.textContent = atmosphere.presetId === 'none'
+      ? '未启用环境氛围'
+      : atmosphere.presetId === 'custom'
+        ? '自定义或组合效果 · 可重新选择内置氛围；自定义粒子不跨会话保存'
+        : atmosphere.presetId === 'drift-v1'
+          ? previewing ? '漂浮光点 · 预览中' : '漂浮光点已配置 · 点击视口「预览」播放'
+          : atmosphere.density > 2
+            ? '当前密度超出本地调节范围 · 可恢复默认'
+            : '雨雪为即时环境效果 · 点击「关闭」结束，停止预览不会关闭雨雪'
+  }
 }
 
 function setRenderStatus(kind: 'ready' | 'busy' | 'error', label: string): void {
@@ -400,7 +472,7 @@ function setRenderStatus(kind: 'ready' | 'busy' | 'error', label: string): void 
 }
 
 function currentSceneLabel(): string {
-  return scene.needsModelRebind ? `${scene.subjectName} · 待重新导入` : scene.subjectName
+  return scene.subjectName
 }
 
 function setAiStatus(value: string): void {
@@ -639,9 +711,12 @@ function renderTreeNode(node: SceneTreeNode): HTMLLIElement {
     details.open = expandedTreeNodes.has(node.id)
     item.setAttribute('aria-expanded', String(details.open))
     details.addEventListener('toggle', () => {
+      if (!details.isConnected) return
+      const changed = details.open !== expandedTreeNodes.has(node.id)
       if (details.open) expandedTreeNodes.add(node.id)
       else expandedTreeNodes.delete(node.id)
       item.setAttribute('aria-expanded', String(details.open))
+      if (changed) scheduleStateSave()
     })
 
     const summary = document.createElement('summary')
@@ -816,6 +891,7 @@ resourceList.addEventListener('click', (event) => {
   ) {
     scene.frameEntity(row.dataset.entityId)
   }
+  scheduleStateSave()
 })
 
 function renderConversation(): void {
@@ -827,8 +903,22 @@ function renderConversation(): void {
     )
     return
   }
-  for (const entry of state.conversation) appendMessageElement(entry.role, entry.text)
+  const archivedCount = Math.max(0, state.conversation.length - sessionConversation.length)
+  if (archivedCount > 0) appendConversationNote('历史记录 · 仅供查看，不恢复旧模型或执行旧修改')
+  for (const [index, entry] of state.conversation.entries()) {
+    appendMessageElement(entry.role, entry.text)
+    if (index + 1 === archivedCount) {
+      appendConversationNote('本次会话 · AI 仅使用当前场景和本次对话')
+    }
+  }
   conversation.scrollTop = conversation.scrollHeight
+}
+
+function appendConversationNote(text: string): void {
+  const note = document.createElement('p')
+  note.className = 'conversation-history-note'
+  note.textContent = text
+  conversation.append(note)
 }
 
 function appendMessageElement(
@@ -854,6 +944,8 @@ function appendMessageElement(
 function addConversation(role: 'user' | 'assistant', text: string): void {
   state.conversation.push({ role, text })
   state.conversation = state.conversation.slice(-20)
+  sessionConversation.push({ role, text })
+  sessionConversation = sessionConversation.slice(-20)
   renderConversation()
 }
 
@@ -894,16 +986,29 @@ function summarizeDomains(labels: readonly string[]): string {
   return [...new Set(labels)].join('、') || '场景'
 }
 
-function summarizeLastApply(record: AppliedPlanRecord): string {
-  return record.projectionWarning
-    ? `最近已提交：${record.summary} · 画面有警告`
-    : `最近已应用：${record.summary}`
+function scheduleStateSave(): void {
+  if (!sceneReady || !statePersistenceAvailable) return
+  if (stateSaveTimer !== null) window.clearTimeout(stateSaveTimer)
+  stateSaveTimer = window.setTimeout(() => {
+    void saveCurrentState()
+  }, 250)
 }
 
 async function saveCurrentState(): Promise<void> {
+  // Do not overwrite an existing save while startup is still loading or has failed.
+  if (!sceneReady || !statePersistenceAvailable) return
+  if (stateSaveTimer !== null) window.clearTimeout(stateSaveTimer)
+  stateSaveTimer = null
   try {
-    if (sceneReady) state.sceneJson = scene.exportJson()
-    await persistState(state)
+    state.stageSettings = scene.getStageSettings()
+    state.ui.selectedTreeNodeId = selectedTreeNodeId
+    state.ui.expandedTreeNodeIds = [...expandedTreeNodes]
+    const snapshot = structuredClone(state)
+    // UI and scene saves can overlap. Keep host writes ordered so an older save
+    // cannot finish last and replace more recent settings.
+    const saving = stateSaveQueue.then(() => persistState(snapshot))
+    stateSaveQueue = saving.catch(() => {})
+    await saving
   } catch (error) {
     showToast(
       isKnownCherryError(error) ? `状态未保存：${error.name}` : '状态未保存，但仍可继续使用'
@@ -950,21 +1055,15 @@ async function importSelectedFiles(files: readonly File[]): Promise<void> {
   updateControls()
   try {
     const model = await scene.importModel(files)
-    state.model = {
-      entityId: model.entityId,
-      assetId: model.assetId,
-      name: model.name,
-      size: model.size,
-      lastModified: model.lastModified
-    }
+    sessionConversation = []
     setRenderStatus('ready', model.name)
     setAiStatus(aiAvailable ? '可以继续调整' : '请先配置默认模型')
     changeSummary.textContent = `已导入 ${model.name}`
-    addConversation('assistant', `已替换为 ${model.name}。`)
+    addConversation('assistant', `已导入 ${model.name}。模型仅在当前会话保留，布景设置会自动保存。`)
     selectedTreeNodeId = `entity:${model.entityId}`
     renderSceneResources()
     renderEffectControls()
-    setEffectStatus('模型已导入 · 选择方案即可布景')
+    setEffectStatus('模型已导入 · 沿用当前布景，仅本次会话有效')
     await saveCurrentState()
   } catch (error) {
     setRenderStatus('ready', currentSceneLabel())
@@ -986,7 +1085,7 @@ async function applyPrompt(command: string): Promise<void> {
     return
   }
 
-  const history = [...state.conversation]
+  const history = [...sessionConversation]
   const controller = new AbortController()
   activeController = controller
   scene.stopPreview()
@@ -1212,9 +1311,7 @@ confirmPlanButton.addEventListener('click', async () => {
 discardPlanButton.addEventListener('click', () => {
   if (!pendingProposal || isSceneBusy()) return
   clearPlanReview()
-  changeSummary.textContent = state.lastApply
-    ? summarizeLastApply(state.lastApply)
-    : '已取消 AI 修改提案'
+  changeSummary.textContent = '已取消 AI 修改提案'
   addConversation('assistant', '已取消这次场景修改。')
   setAiStatus('可以继续对话')
   void saveCurrentState()
@@ -1240,9 +1337,9 @@ previewButton.addEventListener('click', async () => {
   }
 })
 
-type InspectorTabId = 'effects' | 'chat' | 'scene'
-
 function setInspectorTab(tabId: InspectorTabId, focusTab = false): void {
+  const changed = state.ui.activeTab !== tabId
+  state.ui.activeTab = tabId
   for (const tab of inspectorTabs) {
     const selected = tab.dataset.inspectorTab === tabId
     tab.setAttribute('aria-selected', String(selected))
@@ -1257,6 +1354,7 @@ function setInspectorTab(tabId: InspectorTabId, focusTab = false): void {
       conversation.scrollTop = conversation.scrollHeight
     })
   }
+  if (changed) scheduleStateSave()
 }
 
 for (const tab of inspectorTabs) {
@@ -1391,6 +1489,9 @@ window.addEventListener(
   'beforeunload',
   () => {
     activeController?.abort()
+    // Best effort only; meaningful changes are saved before unload as well.
+    void saveCurrentState()
+    sceneReady = false
     scene.dispose()
   },
   { once: true }
@@ -1398,60 +1499,56 @@ window.addEventListener(
 
 async function start(): Promise<void> {
   renderEffectCatalog()
+  let restoreWarning: string | null = null
   try {
-    state = await loadState()
+    const loaded = await loadState()
+    state = loaded.state
+    restoreWarning = loaded.warning
+    statePersistenceAvailable = true
   } catch (error) {
     state = structuredClone(emptyState)
     showToast(
-      isKnownCherryError(error) ? `历史对话未恢复：${error.name}` : '历史对话未恢复'
+      isKnownCherryError(error)
+        ? `读取存档失败：${error.name}；本次不会覆盖旧存档`
+        : '读取存档失败；本次不会覆盖旧存档'
     )
   }
+  selectedTreeNodeId = state.ui.selectedTreeNodeId
+  expandedTreeNodes.clear()
+  for (const id of state.ui.expandedTreeNodeIds) expandedTreeNodes.add(id)
+  setInspectorTab(state.ui.activeTab)
   renderConversation()
   if (state.lastPlan) {
     jsonButton.disabled = false
     jsonOutput.textContent = state.lastPlan
     changeSummary.textContent = state.lastApply
-      ? summarizeLastApply(state.lastApply)
-      : '可查看最近一次 AI 修改'
+      ? `历史记录（仅查看）：${state.lastApply.summary}`
+      : '可查看历史 AI 修改，不会重新执行'
   }
 
   try {
     setRenderStatus('busy', '启动中…')
-    const initialization = await scene.initialize(canvas, state.sceneJson, state.model)
+    const restored = state.stageSettings !== null
+    await scene.initialize(canvas, state.stageSettings)
     sceneReady = true
-    if (!initialization.restored) state.activeRecipeId = null
-    const restoredModel = scene.primaryModel
-    state.model = restoredModel
-      ? {
-          entityId: restoredModel.entityId,
-          assetId: restoredModel.assetId,
-          name: restoredModel.name,
-          size: restoredModel.size,
-          lastModified: restoredModel.lastModified
-        }
-      : null
     setRenderStatus('ready', currentSceneLabel())
-    selectedTreeNodeId = scene.subjectEntityId
-      ? `entity:${scene.subjectEntityId}`
-      : 'scene-sky'
     renderSceneResources()
     renderEffectControls()
     const activePreset = EFFECT_PRESETS.find((preset) => preset.id === state.activeRecipeId)
-    const recentOperation = state.lastLocalOperation
     setEffectStatus(
-      activePreset
-        ? `已恢复${activePreset.name}${initialization.rebindRequired ? ' · 模型待重新导入' : ''}`
-        : initialization.restored && recentOperation
-          ? `已恢复场景 · 最近本地操作：${recentOperation.label}`
-          : '本地方案已就绪 · 无需配置 AI'
+      !statePersistenceAvailable
+        ? '临时工作区 · 本次不会覆盖旧存档'
+        : activePreset
+          ? `已恢复${activePreset.name} · 可导入本次模型`
+          : restored
+            ? '上次布景已恢复 · 可导入本次模型'
+            : '本地方案已就绪 · 无需配置 AI'
     )
     await refreshAiAvailability()
     await saveCurrentState()
-    if (initialization.warning) showToast(initialization.warning)
-    else if (initialization.rebindRequired && state.model) {
-      showToast(`${state.model.name} 的场景设置已恢复；重新导入模型目录即可继续`)
-    } else if (initialization.restored) {
-      showToast('上次场景已恢复')
+    if (restoreWarning) showToast(restoreWarning)
+    else if (restored) {
+      showToast('布景与界面设置已恢复；模型仅在当前会话保留')
     }
   } catch (error) {
     sceneReady = false

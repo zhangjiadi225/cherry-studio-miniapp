@@ -96,7 +96,7 @@ const systemPrompt = `你是“模型布景”的 3D 场景助手。你既能像
 当 patch 非 null 时，你只编辑宿主提供的当前 Skenora SceneDocument，不写 Babylon.js、Three.js、JavaScript、GLSL、URL 或文件路径。必须满足：
 1. patch.target.sceneId、expectedRevision、expectedDocumentHash 必须逐字使用当前上下文 revisionToken 的值。
 2. 常规场景设置使用 target.kind="setting"，id 只能是 camera、environment、ground、fog、weather、postProcess、variables。
-3. 已有灯光使用 target.kind="light" 和上下文中的灯光 ID；只有 subjectEntityId 非 null 时，才能用 target.kind="entity" 修改当前主体的位置、旋转、缩放或显隐。primaryModelId 可能标记一个等待重新绑定文件的历史模型，此时 subjectEntityId 为 null，不能修改该模型。
+3. 已有灯光使用 target.kind="light" 和上下文中的灯光 ID；只有 subjectEntityId 非 null 时，才能用 target.kind="entity" 修改当前主体的位置、旋转、缩放或显隐。模型只在当前会话存在；重启后没有历史模型可供修改，不得从历史记录猜测模型 ID。
 4. update 操作包含 changes；每个 change 的 path 是相对目标的字符串数组，value 是 JSON 值。
 5. 同一 target 在一个 Patch 中只能出现一次；需要改多个字段时放进同一个 changes 数组。
 6. 不得创建、删除或修改 resource；不得删除当前主体；不得创建新的 model 实体。若 primaryModelId 存在，不得改变该模型的 assetId、properties 或文件身份。
@@ -107,6 +107,7 @@ const systemPrompt = `你是“模型布景”的 3D 场景助手。你既能像
 11. 可以修改现有材质、材质绑定、贴图动画、镜头路径和 Flow，也可以创建安全的非模型实体，但这些操作会由宿主要求用户确认。所有引用必须来自当前上下文或由本 Patch 明确创建。
 12. 不要启动预览或假设 Flow、动画、镜头路径会自动播放；预览只能由用户在宿主界面中显式启动。
 13. 主镜头的 alpha、beta、radius 是轨道参数，会覆盖 position。若当前镜头已有这些参数，优先直接调整轨道参数；若修改 position 或 target，必须同时写入与新位置和目标一致的全部三个参数：radius=两点距离，alpha=atan2(位置z-目标z,位置x-目标x)，beta=acos((位置y-目标y)/radius)。角度用弧度。
+14. particlePresets 提供已注册的内置贴图 ID，以及雨、雪、漂浮光点的原生字段示例。可引用这些贴图，但不能创建 resource、猜测 URL 或省略必需贴图。示例不是设备能力证明，仍须检查当前可用能力。雨雪 enabled 后即时显示；漂浮粒子需显式预览。天气只是局部视觉效果，不具备碰撞、积雪、湿润材质或体积雾；不要承诺这些效果。
 
 修改场景的完整输出示例（值仅展示语法，实际必须使用当前上下文）：
 {"schema":"model-stage.assistant-response","version":1,"reply":"准备把背景调整为暖灰色，并加强轮廓光。","patch":{"schema":"skenora.scene.patch","version":1,"target":{"sceneId":"model-stage-scene","expectedRevision":8,"expectedDocumentHash":"hash"},"operations":[{"op":"update","target":{"kind":"setting","id":"environment"},"changes":[{"path":["background","mode"],"value":"color"},{"path":["background","color"],"value":"#b9b1a8"}]},{"op":"update","target":{"kind":"light","id":"workspace-rim"},"changes":[{"path":["intensity"],"value":0.9}]}]}}`
@@ -491,7 +492,7 @@ function assertApplicationPolicy(plan: Record<string, unknown>, context: SceneAi
       id === context.primaryModelId &&
       context.subjectEntityId === null
     ) {
-      throw new AiPlannerError('policy-rejected', '请先重新导入并绑定当前模型')
+      throw new AiPlannerError('policy-rejected', '当前模型不可用，请先导入本次模型')
     }
     if (
       kind === 'entity' &&

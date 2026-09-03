@@ -502,6 +502,24 @@ textarea:focus-visible {
   font-size: 11px;
 }
 
+.atmosphere-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.atmosphere-choices button {
+  min-width: 0;
+  min-height: 36px;
+  font-size: 11px;
+}
+
+.atmosphere-choices button[aria-pressed="true"] {
+  border-color: var(--stage-accent);
+  background: color-mix(in oklch, var(--stage-accent) 12%, var(--stage-raised));
+}
+
 .background-choices {
   display: flex;
   flex-wrap: wrap;
@@ -869,6 +887,15 @@ details[open] > summary .tree-caret::before {
   max-width: 88%;
   font-size: 12px;
   line-height: 1.55;
+}
+
+.conversation-history-note {
+  margin: 0;
+  padding-block: 6px;
+  border-block-end: 1px solid var(--stage-border);
+  color: var(--stage-muted);
+  font-size: 10px;
+  line-height: 1.65;
 }
 
 .message p {

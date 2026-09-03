@@ -1,7 +1,16 @@
 import { toPublicScenePlanDiagnostics } from '@skenora/scene-plan'
+import { createWeatherPreset } from '@skenora/sdk/particles'
 import type { SceneDocumentData, SceneRevisionToken } from '@skenora/sdk/editor'
 import type { SceneController } from './scene-controller'
 import { describeProjectionWarning } from './scene-result'
+import {
+  ATMOSPHERE_PRESETS,
+  DRIFT_ENTITY_ID,
+  createDriftEntity,
+  getAtmosphereState,
+  readDriftDensity,
+  type AtmospherePresetId
+} from './scene-particles'
 
 type LightConfig = SceneDocumentData['lights'][number]
 type PostProcessConfig = SceneDocumentData['postProcess']
@@ -46,7 +55,7 @@ export interface BackgroundChoice {
 export interface LocalScenePlan {
   id: string
   label: string
-  kind: 'preset' | 'camera' | 'background' | 'light'
+  kind: 'preset' | 'camera' | 'background' | 'light' | 'atmosphere'
   plan: Record<string, unknown>
   revisionToken: SceneRevisionToken
 }
@@ -284,6 +293,68 @@ export function createLightIntensityPlan(
         ]
       }
     ])
+  }
+}
+
+export function createAtmospherePlan(
+  id: AtmospherePresetId,
+  document: SceneDocumentData,
+  revisionToken: SceneRevisionToken
+): LocalScenePlan {
+  const choice = ATMOSPHERE_PRESETS.find((preset) => preset.id === id)
+  if (!choice) throw new LocalScenePlanError('未找到这个环境氛围')
+  const existing = document.entities[DRIFT_ENTITY_ID]
+  if (existing && existing.type !== 'particle') {
+    throw new LocalScenePlanError('漂浮粒子的专用 ID 已被其他对象占用，未修改场景')
+  }
+  const operations: PatchOperation[] = []
+  if (id === 'rain-v1' || id === 'snow-v1') {
+    operations.push(settingOperation('weather', createWeatherPreset(id).weather))
+  } else {
+    operations.push(settingOperation('weather', { enabled: false }))
+  }
+  if (id === 'drift-v1') {
+    const entity = createDriftEntity()
+    if (existing) {
+      const { id: _entityId, ...fields } = entity
+      operations.push({
+        op: 'update', target: { kind: 'entity', id: DRIFT_ENTITY_ID },
+        changes: Object.entries(fields).map(([key, value]) => ({ path: [key], value }))
+      })
+    } else {
+      operations.push({ op: 'create', target: { kind: 'entity', id: entity.id }, value: entity })
+    }
+  } else if (existing) {
+    operations.push({ op: 'remove', target: { kind: 'entity', id: DRIFT_ENTITY_ID } })
+  }
+  return {
+    id, label: id === 'none' ? '关闭环境氛围' : choice.label, kind: 'atmosphere',
+    revisionToken, plan: createPatch(revisionToken, operations)
+  }
+}
+
+export function createAtmosphereDensityPlan(
+  density: number,
+  document: SceneDocumentData,
+  revisionToken: SceneRevisionToken
+): LocalScenePlan {
+  if (readDriftDensity(density) === null) throw new LocalScenePlanError('密度范围为 0–2 倍')
+  const current = getAtmosphereState(document)
+  let operation: PatchOperation
+  if (current.presetId === 'rain-v1' || current.presetId === 'snow-v1') {
+    const preset = createWeatherPreset(current.presetId)
+    operation = settingOperation('weather', { intensity: preset.weather.intensity * density })
+  } else if (current.presetId === 'drift-v1') {
+    operation = {
+      op: 'update', target: { kind: 'entity', id: DRIFT_ENTITY_ID },
+      changes: [{ path: ['properties', 'emitRate'], value: createDriftEntity(density).properties.emitRate }]
+    }
+  } else {
+    throw new LocalScenePlanError('请先选择一个内置环境氛围')
+  }
+  return {
+    id: current.presetId, label: '氛围密度', kind: 'atmosphere',
+    revisionToken, plan: createPatch(revisionToken, [operation])
   }
 }
 

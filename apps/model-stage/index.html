@@ -99,7 +99,7 @@
             </header>
             <p id="effects-guard" class="effects-guard" role="status" hidden></p>
             <div class="effects-body">
-              <p class="effects-intro">导入模型，选一套光。也可以先布置空场景。</p>
+              <p class="effects-intro">导入模型，选一套光。模型仅本次会话有效，布景与界面设置自动保存。</p>
               <div id="effects-grid" class="effects-grid" role="group" aria-label="效果方案"></div>
               <p class="effects-note">卡片为风格示意，并非模型实拍。方案会重设背景、地面、三点灯光、镜头与后期，关闭雾和天气；保留模型、材质、自定义灯光与动态行为。</p>
 
@@ -132,6 +132,19 @@
                   <output for="rim-intensity">0.60</output>
                 </div>
                 <p class="effects-note">缺失或禁用的灯不可调；选择方案可恢复三点灯光。</p>
+              </section>
+
+              <section class="effect-section" aria-labelledby="atmosphere-heading">
+                <h3 id="atmosphere-heading">环境氛围 <span>本地贴图 · 无需 AI</span></h3>
+                <div id="atmosphere-choices" class="atmosphere-choices" role="group" aria-label="环境氛围"></div>
+                <div class="light-control">
+                  <label for="atmosphere-density">密度</label>
+                  <input id="atmosphere-density" type="range" min="0" max="2" step="0.05" value="1" aria-describedby="atmosphere-note" disabled />
+                  <output id="atmosphere-density-output" for="atmosphere-density">—</output>
+                </div>
+                <button id="atmosphere-reset" class="text-button" type="button" data-local-action="atmosphere" disabled>恢复当前氛围默认值</button>
+                <p id="atmosphere-status" class="effects-note" role="status">场景启动后可选择氛围</p>
+                <p id="atmosphere-note" class="effects-note">雨雪即时显示，漂浮光点需点击「预览」。密度松开后应用，0 倍停止发射但已有粒子会逐渐消失。天气无碰撞或积雪；预设适合常规米制场景。仅替换本应用氛围，不删除模型或其他自定义粒子。</p>
               </section>
             </div>
             <footer class="effect-result">
@@ -244,7 +257,7 @@
 
     <dialog id="json-dialog" class="json-dialog">
       <header>
-        <h2>最近修改</h2>
+        <h2>修改记录（仅查看）</h2>
         <button id="close-dialog-button" class="icon-button" type="button" aria-label="关闭">×</button>
       </header>
       <pre id="json-output"></pre>

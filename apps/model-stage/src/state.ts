@@ -1,13 +1,15 @@
 import { loadJson, saveJson } from '@cherry-miniapp/kit'
 import type { ConversationEntry } from './ai-planner'
 import { EFFECT_PRESETS, type EffectPresetId, type LocalScenePlan } from './scene-recipes'
+import { readStageSettings, type StageSettings } from './stage-settings'
+import { DRIFT_ENTITY_ID } from './scene-particles'
 
-export interface PersistedModelMeta {
-  entityId?: string
-  assetId?: string
-  name: string
-  size: number
-  lastModified: number
+export type InspectorTabId = 'effects' | 'chat' | 'scene'
+
+export interface ModelStageUiState {
+  activeTab: InspectorTabId
+  selectedTreeNodeId: string
+  expandedTreeNodeIds: string[]
 }
 
 export interface AppliedPlanRecord {
@@ -29,14 +31,14 @@ export interface AppliedPlanRecord {
 }
 
 export interface ModelStageState {
-  version: 4
+  version: 6
   conversation: ConversationEntry[]
   lastPlan: string
   lastApply: AppliedPlanRecord | null
   activeRecipeId: EffectPresetId | null
   lastLocalOperation: LocalOperationRecord | null
-  sceneJson: string
-  model: PersistedModelMeta | null
+  stageSettings: StageSettings | null
+  ui: ModelStageUiState
 }
 
 export interface LocalOperationRecord extends Omit<AppliedPlanRecord, 'summary' | 'risk'> {
@@ -46,31 +48,48 @@ export interface LocalOperationRecord extends Omit<AppliedPlanRecord, 'summary' 
   planJson: string
 }
 
-const stateKey = 'model-stage-state-v4'
-const previousStateKeys = ['model-stage-state-v3', 'model-stage-state-v2']
+const stateKey = 'model-stage-state-v6'
+const previousStateKeys = ['model-stage-state-v5', 'model-stage-state-v4', 'model-stage-state-v3', 'model-stage-state-v2']
 
 export const emptyState: ModelStageState = {
-  version: 4,
+  version: 6,
   conversation: [],
   lastPlan: '',
   lastApply: null,
   activeRecipeId: null,
   lastLocalOperation: null,
-  sceneJson: '',
-  model: null
+  stageSettings: null,
+  ui: {
+    activeTab: 'effects',
+    selectedTreeNodeId: 'scene-sky',
+    expandedTreeNodeIds: ['scene-root', 'scene-objects', 'scene-lights']
+  }
 }
 
-export async function loadState(): Promise<ModelStageState> {
+export async function loadState(): Promise<{
+  state: ModelStageState
+  warning: string | null
+}> {
   let value = await loadJson<unknown>(stateKey, null)
   for (const key of previousStateKeys) {
     if (isVersionedState(value)) break
     value = await loadJson<unknown>(key, null)
   }
   if (!isVersionedState(value)) {
-    return structuredClone(emptyState)
+    return { state: structuredClone(emptyState), warning: null }
   }
-  return {
-    version: 4,
+  let settingsValue: unknown = value.stageSettings
+  if ([2, 3, 4].includes(Number(value.version)) && typeof value.sceneJson === 'string' && value.sceneJson) {
+    try {
+      settingsValue = JSON.parse(value.sceneJson)
+    } catch {
+      settingsValue = false // Invalid legacy JSON must not block history/UI recovery.
+    }
+  }
+  const restored = settingsValue == null ? null : readStageSettings(settingsValue)
+  const stageSettings = restored?.settings ?? null
+  const state: ModelStageState = {
+    version: 6,
     conversation: Array.isArray(value.conversation)
       ? value.conversation
           .filter(isConversationEntry)
@@ -79,20 +98,52 @@ export async function loadState(): Promise<ModelStageState> {
       : [],
     lastPlan: typeof value.lastPlan === 'string' ? value.lastPlan : '',
     lastApply: isAppliedPlanRecord(value.lastApply) ? cloneAppliedPlanRecord(value.lastApply) : null,
-    activeRecipeId: isEffectPresetId(value.activeRecipeId) ? value.activeRecipeId : null,
+    activeRecipeId:
+      stageSettings && !restored?.warning && isEffectPresetId(value.activeRecipeId)
+        ? value.activeRecipeId
+        : null,
     lastLocalOperation: isLocalOperationRecord(value.lastLocalOperation)
       ? structuredClone(value.lastLocalOperation)
       : null,
-    sceneJson: typeof value.sceneJson === 'string' ? value.sceneJson : '',
-    model: isModelMeta(value.model) ? { ...value.model } : null
+    stageSettings,
+    ui: readUiState(value.ui, stageSettings)
   }
+  return { state, warning: restored?.warning ?? null }
 }
 
 export async function persistState(state: ModelStageState): Promise<void> {
+  const stageSettings = state.stageSettings ? readStageSettings(state.stageSettings).settings : null
   await saveJson(stateKey, {
-    ...state,
-    conversation: state.conversation.slice(-20)
+    version: 6,
+    stageSettings,
+    ui: readUiState(state.ui, stageSettings),
+    activeRecipeId: state.activeRecipeId,
+    conversation: state.conversation.slice(-20),
+    lastPlan: state.lastPlan,
+    lastApply: state.lastApply,
+    lastLocalOperation: state.lastLocalOperation
   })
+}
+
+function readUiState(value: unknown, settings: StageSettings | null): ModelStageUiState {
+  const source = isRecord(value) ? value : {}
+  const allowedNodes = new Set([
+    'scene-root', 'scene-sky', 'scene-ground', 'scene-objects', 'scene-lights',
+    'scene-camera', 'scene-fog', 'scene-weather', 'scene-post-process',
+    ...(settings?.lights.map((light) => `light:${light.id}`) ?? []),
+    ...(settings && settings.driftDensity !== null ? [`entity:${DRIFT_ENTITY_ID}`] : [])
+  ])
+  return {
+    activeTab:
+      source.activeTab === 'chat' || source.activeTab === 'scene' ? source.activeTab : 'effects',
+    selectedTreeNodeId:
+      typeof source.selectedTreeNodeId === 'string' && allowedNodes.has(source.selectedTreeNodeId)
+        ? source.selectedTreeNodeId
+        : 'scene-sky',
+    expandedTreeNodeIds: isStringArray(source.expandedTreeNodeIds)
+      ? [...new Set(source.expandedTreeNodeIds.filter((id) => allowedNodes.has(id)))]
+      : [...emptyState.ui.expandedTreeNodeIds]
+  }
 }
 
 function isConversationEntry(value: unknown): value is ConversationEntry {
@@ -100,17 +151,6 @@ function isConversationEntry(value: unknown): value is ConversationEntry {
     isRecord(value) &&
     (value.role === 'user' || value.role === 'assistant') &&
     typeof value.text === 'string'
-  )
-}
-
-function isModelMeta(value: unknown): value is PersistedModelMeta {
-  return (
-    isRecord(value) &&
-    (value.entityId === undefined || typeof value.entityId === 'string') &&
-    (value.assetId === undefined || typeof value.assetId === 'string') &&
-    typeof value.name === 'string' &&
-    typeof value.size === 'number' &&
-    typeof value.lastModified === 'number'
   )
 }
 
@@ -129,7 +169,7 @@ function isLocalOperationRecord(value: unknown): value is LocalOperationRecord {
     typeof value.id === 'string' &&
     typeof value.label === 'string' &&
     typeof value.kind === 'string' &&
-    ['preset', 'camera', 'background', 'light'].includes(value.kind) &&
+    ['preset', 'camera', 'background', 'light', 'atmosphere'].includes(value.kind) &&
     typeof value.planJson === 'string' &&
     isApplyOutcome(value)
   )
@@ -173,7 +213,7 @@ function isEffectPresetId(value: unknown): value is EffectPresetId {
 }
 
 function isVersionedState(value: unknown): value is Record<string, unknown> {
-  return isRecord(value) && (value.version === 2 || value.version === 3 || value.version === 4)
+  return isRecord(value) && typeof value.version === 'number' && [2, 3, 4, 5, 6].includes(value.version)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

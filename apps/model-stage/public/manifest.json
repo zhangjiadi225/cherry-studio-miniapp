@@ -8,11 +8,11 @@
     "en": "Stage local 3D models with ready-to-use lighting presets, camera views and manual controls. Cherry AI is optional.",
     "zh": "用现成灯光方案、快捷机位和手动微调为本地 3D 模型布景，无需配置 AI。"
   },
-  "version": "0.5.0",
+  "version": "0.6.0",
   "entry": "index.html",
   "releaseNotes": {
-    "en": "Adds five local staging presets, four camera views, background choices and light controls, with validated, undoable scene changes and saved operation results.",
-    "zh": "新增五套本地布景方案、四个快捷机位、背景与灯光微调；修改经过校验、可撤销，并保存真实提交结果。"
+    "en": "Upgrades Skenora to 0.1.3 with local rain, snow and drifting-particle presets, bundled textures, density controls and safe preset restoration. Imported models remain session-only.",
+    "zh": "升级 Skenora 0.1.3，接入雨幕、飘雪、漂浮光点与随包贴图，支持密度调节、撤销和安全恢复；导入模型仍仅当前会话保留。"
   },
   "permissions": ["ai.chat", "storage.*", "file.save", "file.export"]
 }

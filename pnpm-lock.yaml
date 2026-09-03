@@ -11,11 +11,11 @@ importers:
   apps/model-stage:
     dependencies:
       '@skenora/scene-plan':
-        specifier: 0.1.2
-        version: 0.1.2
+        specifier: 0.1.3
+        version: 0.1.3
       '@skenora/sdk':
-        specifier: 0.1.2
-        version: 0.1.2
+        specifier: 0.1.3
+        version: 0.1.3
     devDependencies:
       typescript:
         specifier: 5.9.3
@@ -450,50 +450,50 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@skenora/babylon-editor@0.1.2':
-    resolution: {integrity: sha512-nfzJQtVRJ73FdVtqYlViB3w+0DJvzpa+7qUkiUtb6JNwai+9LwaKms25J8meoqqGHq4eq5NbplQIxDI8ZAC7Yg==}
+  '@skenora/babylon-editor@0.1.3':
+    resolution: {integrity: sha512-5qHW1ZJQ6qMscxB7EkedL6ZHYEZqogIGb7w45QRjswvrAUpeu44g/mNidq0HYlrHtGPjiaal8EsbYL5+vnLMZg==}
 
-  '@skenora/contracts@0.1.2':
-    resolution: {integrity: sha512-vLsibZ0cjVn40z1A8lulgAlAZu43lhPqIeCGwodKgPLSAivHtLmTzwiD4y3bdDMXBqNmB2spnjnXBdAYQxKEcw==}
+  '@skenora/contracts@0.1.3':
+    resolution: {integrity: sha512-fqMbwy6+JIpWEcBoLOVkbk8FTn8DRYP8HOZksMwsCidZTpXfM0pQQKETrdORxo+yUGn0gQ+600Tp4wabjYcpuA==}
 
-  '@skenora/document@0.1.2':
-    resolution: {integrity: sha512-TuL4F82whN33ZhFj69klFpl2XJqb8rdJAOmWHqx7zfrx82WdmLB6nMUXgN9ij6CGSRsx5+j2LSxPXeN4yBt4FA==}
+  '@skenora/document@0.1.3':
+    resolution: {integrity: sha512-aP/uQ2q59BSOmufBpiV3PpqC2+xCt6hxWbvayOMYZMgv5oyjBm931RyQuy4Ph9zx88rTB+9skduNakQ4NiU1zg==}
 
-  '@skenora/editor@0.1.2':
-    resolution: {integrity: sha512-BzgHDXleE1GSrTulI5GKlwYafguqS8sYy+F7yENBOHcTpVeYe7AvVh17/a+SPXUyn/VTpfdb5ObgEH5aTrCmpQ==}
+  '@skenora/editor@0.1.3':
+    resolution: {integrity: sha512-+i6HMZNvhCJb+uGOq38XTXRaYZUYEZ2iBQg9X6ebq1qBOYT1QO7BTTwpZ/tcLT05ivkw0bKuwGu06pKVYrd0HA==}
 
-  '@skenora/events@0.1.2':
-    resolution: {integrity: sha512-rsjZTOq8eqlQFcj0C+qozEI8Yr+ZRPueOXB651NFTEQa0XBrnQW8jjDL9H4YTY+rfyS+OdzDBdN6VhrMqCt5PQ==}
+  '@skenora/events@0.1.3':
+    resolution: {integrity: sha512-DRdOOU4KS42lcM5KjiwdNA198OXt19K6TDEBwZv38mJjv+mtngwDf5z4W9A2cQf4fvonoHouiAqWVEx/2SMvVw==}
 
-  '@skenora/flow@0.1.2':
-    resolution: {integrity: sha512-RqzVmaE8kusycl+5Px1VDrjOIN1ZMla3S1p1DrpUZh70/iGH2/mVoXD3j1LvXi4MOe4LJzCtgYzWY9t75vIxxw==}
+  '@skenora/flow@0.1.3':
+    resolution: {integrity: sha512-6aO8l66lIZUqgn163hurqlnXE3j0HYS28W+XeVOKlEf+TcLoXG9ThcwK0RIlpkDlv3MnevZeC750ljpJG16WtQ==}
 
-  '@skenora/geometry@0.1.2':
-    resolution: {integrity: sha512-O/sX/Z0dmt50LwBf7L0qjlWpBebBQW+qPkKa6gNL5vUti+efVxT0Bg2c0uCCHoW+3HCbn34FQORdNaHApzDr/Q==}
+  '@skenora/geometry@0.1.3':
+    resolution: {integrity: sha512-RimZCQP0fRXw2fqdiZKm+jdw9P5LDtcKR0bFVWgI4ovvDb7Ufb3JseRfDlYis6QsxSLJUNAlWwzb5cbF2pQxXQ==}
 
-  '@skenora/lightbox@0.1.2':
-    resolution: {integrity: sha512-VkIfpVTOfsRIRLx6UlJDrYIlv2YnBhm5uD4VMzv4TtvSNhm4nxAIodjxMXOeIwRfdWuwV5X8kKBKrrTTdWJ5xg==}
+  '@skenora/lightbox@0.1.3':
+    resolution: {integrity: sha512-3rpptRE4UOHhNWZ2HX7VHsV6K3uEtacpWMsfuwuSV1wXrfXB9tTGsK2s2SdiQNiaBCVaRf8SHqYSwTRT1msZFA==}
 
-  '@skenora/plugins@0.1.2':
-    resolution: {integrity: sha512-9dtJ7FrKEdXbO9otaWBg+MNwJgG04ChHBTri18/Tc2c/nGIZZgkIq0wGo9JyQWjTer6p9j/BbFbLi9iibi2FUA==}
+  '@skenora/plugins@0.1.3':
+    resolution: {integrity: sha512-P2718xWPZGzLNACwtUiMDgDaQf8gR0QKaSWn6GpE2Rg1WFiI3zy2ehgr7DCPGt0kwekCojNen4UN3yFnZuhtCQ==}
 
-  '@skenora/procedural@0.1.2':
-    resolution: {integrity: sha512-PPFRhVZay2QpzuKwMwvdIvI3fOvYN1Zn9pQUABL2/6dy6oeHDwee2RDvAbl7Ri58fHnnlPVUez6WekAZBdm5hw==}
+  '@skenora/procedural@0.1.3':
+    resolution: {integrity: sha512-jigl5oHw2vZQMW/NVlVYihI6lCLPWQz50EHN1CkwMsdnG15D+mw4/kX5zUYdFvIuSihPSXQ6UZwSAMavtEtfPw==}
 
-  '@skenora/resources@0.1.2':
-    resolution: {integrity: sha512-fQ/fDTHUmLBLdTPzu4rZlG6ftAdQYrReWMnHVd3e6oI8K91alvdEN08uvIZ5rjw5pBZUA5pZTOyKkv8LBuQcMg==}
+  '@skenora/resources@0.1.3':
+    resolution: {integrity: sha512-OpMSYTmI4M4pkHJNhABTr47UO5rH7Y708e9GkEHMUD7N8313XEJiJAvQZlidNptBHNoP44yGqY+PFjmWfilgMw==}
 
-  '@skenora/runtime@0.1.2':
-    resolution: {integrity: sha512-zlKurrJp/4siy7xtvVXS124uwdG0LKkMPimdVrWxeQTed0eLclTkzmoeTRD14Ics9RAstiKuK4r0VgFif5EevA==}
+  '@skenora/runtime@0.1.3':
+    resolution: {integrity: sha512-7oZL414tBNaKDdq7uZpU2bJlVQ9USeu6AnrnttXnNNflMbOGtFCUhA9DIO61cnCaZdgR4TkAp6J0PJFm5hbKMw==}
 
-  '@skenora/scene-plan@0.1.2':
-    resolution: {integrity: sha512-Tcy4Fzzx87Zjb6RrVgweO/UWClviwpdHUTIbnu4LZcN0pW9/zTyzIGiQ7lCsGNJR/I2SxB7Ez08iuPHXk4Rqug==}
+  '@skenora/scene-plan@0.1.3':
+    resolution: {integrity: sha512-meQJIl7E2eIO/V6qwYgoL2Jjn/TczxfgAZcRpUE49poD1UhUcAJN3RU8u9FrkhvXCTaxYtL0iEHSjj32228XXw==}
 
-  '@skenora/sdk@0.1.2':
-    resolution: {integrity: sha512-A1Aj9yN+GE10WEjYO2aJcCI9wFjN5u+lAEtT+6lMqg4X8SrgOVZv0DxCDpFFyHry4QRu0CU5AZVC2zIaym5z5Q==}
+  '@skenora/sdk@0.1.3':
+    resolution: {integrity: sha512-2sL5hzFUsZP5KAD0UL2pUgztYx/8uaW+socbSFB97z+yEpj+O9M4xrCiLXw5qMAIZtOOiCAB4CuDCqV73SC17A==}
 
-  '@skenora/workspace@0.1.2':
-    resolution: {integrity: sha512-WLkzHvizaSGbxSbarF1XiJreetTnfdmIQP7gDOeFEbHuNblv5NgbLLLKQDuukzme/U+duJWyB2tLuWBfamh9Ew==}
+  '@skenora/workspace@0.1.3':
+    resolution: {integrity: sha512-msw11/mu8iKrHF+Ns90t7SqS+0KgFgkHAnAf3zdch/N93W7osJutuqpo2p1xbheEzRLZGuDVEGJjw40xeYxyjQ==}
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -1336,98 +1336,98 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.63.1':
     optional: true
 
-  '@skenora/babylon-editor@0.1.2':
+  '@skenora/babylon-editor@0.1.3':
     dependencies:
       '@babylonjs/core': 9.23.0
-      '@skenora/contracts': 0.1.2
-      '@skenora/document': 0.1.2
-      '@skenora/editor': 0.1.2
-      '@skenora/events': 0.1.2
-      '@skenora/flow': 0.1.2
-      '@skenora/resources': 0.1.2
-      '@skenora/runtime': 0.1.2
+      '@skenora/contracts': 0.1.3
+      '@skenora/document': 0.1.3
+      '@skenora/editor': 0.1.3
+      '@skenora/events': 0.1.3
+      '@skenora/flow': 0.1.3
+      '@skenora/resources': 0.1.3
+      '@skenora/runtime': 0.1.3
 
-  '@skenora/contracts@0.1.2': {}
+  '@skenora/contracts@0.1.3': {}
 
-  '@skenora/document@0.1.2':
+  '@skenora/document@0.1.3':
     dependencies:
-      '@skenora/contracts': 0.1.2
+      '@skenora/contracts': 0.1.3
 
-  '@skenora/editor@0.1.2':
+  '@skenora/editor@0.1.3':
     dependencies:
-      '@skenora/contracts': 0.1.2
-      '@skenora/document': 0.1.2
-      '@skenora/events': 0.1.2
-      '@skenora/geometry': 0.1.2
-      '@skenora/plugins': 0.1.2
+      '@skenora/contracts': 0.1.3
+      '@skenora/document': 0.1.3
+      '@skenora/events': 0.1.3
+      '@skenora/geometry': 0.1.3
+      '@skenora/plugins': 0.1.3
 
-  '@skenora/events@0.1.2': {}
+  '@skenora/events@0.1.3': {}
 
-  '@skenora/flow@0.1.2':
+  '@skenora/flow@0.1.3':
     dependencies:
-      '@skenora/contracts': 0.1.2
-      '@skenora/events': 0.1.2
+      '@skenora/contracts': 0.1.3
+      '@skenora/events': 0.1.3
 
-  '@skenora/geometry@0.1.2':
+  '@skenora/geometry@0.1.3':
     dependencies:
-      '@skenora/contracts': 0.1.2
+      '@skenora/contracts': 0.1.3
 
-  '@skenora/lightbox@0.1.2':
+  '@skenora/lightbox@0.1.3':
     dependencies:
-      '@skenora/contracts': 0.1.2
-      '@skenora/resources': 0.1.2
-      '@skenora/runtime': 0.1.2
-      '@skenora/workspace': 0.1.2
+      '@skenora/contracts': 0.1.3
+      '@skenora/resources': 0.1.3
+      '@skenora/runtime': 0.1.3
+      '@skenora/workspace': 0.1.3
 
-  '@skenora/plugins@0.1.2': {}
+  '@skenora/plugins@0.1.3': {}
 
-  '@skenora/procedural@0.1.2':
+  '@skenora/procedural@0.1.3':
     dependencies:
-      '@skenora/contracts': 0.1.2
+      '@skenora/contracts': 0.1.3
 
-  '@skenora/resources@0.1.2':
+  '@skenora/resources@0.1.3':
     dependencies:
-      '@skenora/contracts': 0.1.2
-      '@skenora/events': 0.1.2
-      '@skenora/workspace': 0.1.2
+      '@skenora/contracts': 0.1.3
+      '@skenora/events': 0.1.3
+      '@skenora/workspace': 0.1.3
 
-  '@skenora/runtime@0.1.2':
+  '@skenora/runtime@0.1.3':
     dependencies:
       '@babylonjs/core': 9.23.0
       '@babylonjs/loaders': 9.23.0(@babylonjs/core@9.23.0)(babylonjs-gltf2interface@9.23.0)
       '@babylonjs/materials': 9.23.0(@babylonjs/core@9.23.0)
-      '@skenora/contracts': 0.1.2
-      '@skenora/events': 0.1.2
-      '@skenora/geometry': 0.1.2
-      '@skenora/plugins': 0.1.2
-      '@skenora/procedural': 0.1.2
-      '@skenora/resources': 0.1.2
+      '@skenora/contracts': 0.1.3
+      '@skenora/events': 0.1.3
+      '@skenora/geometry': 0.1.3
+      '@skenora/plugins': 0.1.3
+      '@skenora/procedural': 0.1.3
+      '@skenora/resources': 0.1.3
       babylonjs-gltf2interface: 9.23.0
       earcut: 3.2.3
 
-  '@skenora/scene-plan@0.1.2':
+  '@skenora/scene-plan@0.1.3':
     dependencies:
-      '@skenora/contracts': 0.1.2
-      '@skenora/flow': 0.1.2
+      '@skenora/contracts': 0.1.3
+      '@skenora/flow': 0.1.3
 
-  '@skenora/sdk@0.1.2':
+  '@skenora/sdk@0.1.3':
     dependencies:
-      '@skenora/babylon-editor': 0.1.2
-      '@skenora/contracts': 0.1.2
-      '@skenora/document': 0.1.2
-      '@skenora/editor': 0.1.2
-      '@skenora/events': 0.1.2
-      '@skenora/lightbox': 0.1.2
-      '@skenora/procedural': 0.1.2
-      '@skenora/resources': 0.1.2
-      '@skenora/runtime': 0.1.2
-      '@skenora/scene-plan': 0.1.2
-      '@skenora/workspace': 0.1.2
+      '@skenora/babylon-editor': 0.1.3
+      '@skenora/contracts': 0.1.3
+      '@skenora/document': 0.1.3
+      '@skenora/editor': 0.1.3
+      '@skenora/events': 0.1.3
+      '@skenora/lightbox': 0.1.3
+      '@skenora/procedural': 0.1.3
+      '@skenora/resources': 0.1.3
+      '@skenora/runtime': 0.1.3
+      '@skenora/scene-plan': 0.1.3
+      '@skenora/workspace': 0.1.3
 
-  '@skenora/workspace@0.1.2':
+  '@skenora/workspace@0.1.3':
     dependencies:
-      '@skenora/contracts': 0.1.2
-      '@skenora/events': 0.1.2
+      '@skenora/contracts': 0.1.3
+      '@skenora/events': 0.1.3
 
   '@standard-schema/spec@1.1.0': {}
 
