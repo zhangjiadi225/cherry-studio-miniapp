@@ -1,0 +1,113 @@
+name: Publish MiniApps development channel to GitHub Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v2
+        with:
+          version: 11.22.0
+          runtime: node@22
+          cache: true
+          require-lockfile: true
+
+      - name: Configure GitHub Pages
+        id: pages
+        uses: actions/configure-pages@v6
+
+      - name: Add Pages update URLs to packaged manifests
+        run: >-
+          node foundation/scripts/configure-pages-manifests.mjs
+          "${{ steps.pages.outputs.base_url }}"
+
+      - name: Build shared runtime
+        run: pnpm --filter @cherry-miniapp/kit build
+
+      - name: Build development MiniApps
+        run: |
+          pnpm --filter @miniapps/model-stage run build --mode development
+          pnpm --filter @miniapps/survivor-game run build --mode development
+
+      - name: Validate and package MiniApps
+        run: |
+          pnpm --filter @miniapps/model-stage miniapp:validate
+          pnpm --filter @miniapps/model-stage miniapp:pack
+          pnpm --filter @miniapps/survivor-game miniapp:validate
+          pnpm --filter @miniapps/survivor-game miniapp:pack
+
+      - name: Create distribution manifests
+        run: |
+          model_stage_version=$(node -p "require('./apps/model-stage/public/manifest.json').version")
+          survivor_game_version=$(node -p "require('./apps/survivor-game/public/manifest.json').version")
+          pages_base_url="${{ steps.pages.outputs.base_url }}"
+
+          node foundation/packages/cli/src/cli.mjs distribution \
+            "$pages_base_url/miniapps/model-stage/releases/$model_stage_version/model-stage-$model_stage_version.miniapp" \
+            --app apps/model-stage
+          node foundation/packages/cli/src/cli.mjs distribution \
+            "$pages_base_url/miniapps/survivor-game/releases/$survivor_game_version/survivor-game-$survivor_game_version.miniapp" \
+            --app apps/survivor-game \
+            --icon "$pages_base_url/miniapps/survivor-game/icon.png"
+
+      - name: Assemble Pages site
+        run: |
+          model_stage_version=$(node -p "require('./apps/model-stage/public/manifest.json').version")
+          survivor_game_version=$(node -p "require('./apps/survivor-game/public/manifest.json').version")
+          pages_root="$RUNNER_TEMP/miniapp-pages"
+
+          mkdir -p \
+            "$pages_root/miniapps/model-stage/releases/$model_stage_version" \
+            "$pages_root/miniapps/survivor-game/releases/$survivor_game_version"
+          cp foundation/pages/index.html "$pages_root/index.html"
+          cp \
+            "apps/model-stage/artifacts/model-stage-$model_stage_version.distribution.json" \
+            "$pages_root/miniapps/model-stage/manifest.json"
+          cp \
+            "apps/model-stage/artifacts/model-stage-$model_stage_version.miniapp" \
+            "$pages_root/miniapps/model-stage/releases/$model_stage_version/model-stage-$model_stage_version.miniapp"
+          cp \
+            "apps/survivor-game/artifacts/survivor-game-$survivor_game_version.distribution.json" \
+            "$pages_root/miniapps/survivor-game/manifest.json"
+          cp \
+            "apps/survivor-game/artifacts/survivor-game-$survivor_game_version.miniapp" \
+            "$pages_root/miniapps/survivor-game/releases/$survivor_game_version/survivor-game-$survivor_game_version.miniapp"
+          cp \
+            apps/survivor-game/public/sprites/units/player_wanderer.png \
+            "$pages_root/miniapps/survivor-game/icon.png"
+          touch "$pages_root/.nojekyll"
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/miniapp-pages
+          include-hidden-files: true
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cherry MiniApps Development Channel</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: Canvas;
+        color: CanvasText;
+      }
+
+      body {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 64px 24px;
+        line-height: 1.65;
+      }
+
+      h1,
+      h2 {
+        line-height: 1.2;
+      }
+
+      .notice,
+      article {
+        border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+        border-radius: 14px;
+        padding: 18px 20px;
+      }
+
+      .notice {
+        background: color-mix(in srgb, #f59e0b 12%, Canvas);
+      }
+
+      .apps {
+        display: grid;
+        gap: 16px;
+        margin: 28px 0;
+      }
+
+      a {
+        color: LinkText;
+      }
+
+      code {
+        font-size: 0.92em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Cherry MiniApps</h1>
+      <p class="notice">
+        这是开发分发通道，不代表应用已经通过当前 Cherry Studio 发布版验收，也不代表 Cherry
+        Studio 官方审核或推荐。请在安装前查看源码、版本和权限。
+      </p>
+
+      <section class="apps" aria-label="MiniApps">
+        <article>
+          <h2>模型布景 / Model Stage</h2>
+          <p>导入本地 3D 模型，调整灯光、镜头和环境；Cherry AI 为可选增强。</p>
+          <a href="./miniapps/model-stage/manifest.json">查看 development 安装清单</a>
+        </article>
+
+        <article>
+          <h2>暗夜幸存者 / Night Survivor</h2>
+          <p>描述并锻造 AI 武器，经本地校验和玩家接受后投入确定性生存战斗。</p>
+          <a href="./miniapps/survivor-game/manifest.json">查看 development 安装清单</a>
+        </article>
+      </section>
+
+      <p>
+        源码与问题反馈：
+        <a href="https://github.com/zhangjiadi225/cherry-studio-miniapp"
+          ><code>zhangjiadi225/cherry-studio-miniapp</code></a
+        >
+      </p>
+    </main>
+  </body>
+</html>

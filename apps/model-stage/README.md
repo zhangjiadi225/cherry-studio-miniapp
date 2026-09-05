@@ -1,6 +1,17 @@
-# 模型布景
+# 模型布景 / Model Stage
 
-Cherry miniapp monorepo 中的独立产品 workspace。
+运行在 Cherry Studio 中的本地 3D 模型布景工具。导入 GLB/glTF 模型，选择灯光方案、镜头与环境氛围；不配置 AI 也能使用本地布景功能。
+
+## 安装与兼容性
+
+- 在线安装清单：GitHub Pages development 地址待启用；计划路径为 `https://zhangjiadi225.github.io/cherry-studio-miniapp/miniapps/model-stage/manifest.json`，当前不是有效安装链接。
+- 应用 ID：`dev.cherrymini.model-stage`；当前版本以[包内清单](./public/manifest.json)为准。
+- 需要提供 Local MiniApp（本地小应用）能力的 Cherry Studio；已验收版本待记录，不将开发分支兼容基线当作发布版验收结果。
+- AI 对话和场景修改需要在 Cherry Studio 中配置可用模型；本地导入、方案与手动调节不依赖模型可用性。
+
+`public/manifest.json` 不是在线安装地址。手动触发仓库的 GitHub Pages 工作流后，将生成本应用独立的 HTTPS 发布清单和 `.miniapp` 安装包，不需要安装同仓库的其他应用；Pages 未启用或工作流未成功时不要使用上述计划地址。维护者见[社区发布指南](../../foundation/specs/community-publishing.md)。
+
+## 功能与保存边界
 
 打开就是一个纯黑背景的 3D 模型工作区，只显示位于世界坐标 `Y=0` 平面的网格辅助线，不创建实体地面、展台或内置模型。用户可以选择包含 GLB/glTF 及其贴图、二进制文件等依赖的模型目录，再选择本地效果方案完成布景；无需配置 AI，也不接入 MCP。
 
@@ -20,7 +31,34 @@ v0.6.0 接入 Skenora 0.1.3 的可选粒子模块：“环境氛围”提供雨�
 - [本地效果方案与验收说明](./docs/local-effects.md)
 - [目标界面](./docs/assets/product-target-v1.png)
 
-从 monorepo 根目录运行：
+## 权限与数据
+
+当前包内清单声明以下权限：
+
+| 权限 | 用途 |
+| --- | --- |
+| `ai.chat` | 用户发送对话时，通过 Cherry Studio 的模型生成回答或场景修改提案；必要时发送校验诊断请求修复 |
+| `storage.*` | 应用范围的存储权限集合；当前通过读取和写入保存布景参数、界面状态及只读历史，不保存模型文件 |
+| `file.save` | 用户点击“导出场景”时，先把场景 JSON 写入应用文件区 |
+| `file.export` | 将上述 JSON 经宿主导出到用户选择的位置 |
+
+模型导入通过用户主动选择文件目录完成。AI 请求会包含用户输入、近期对话与当前场景上下文（包括模型名称、场景层级和材质参数），交由 Cherry Studio 中配置的模型处理；不要把“本地布景”理解为启用 AI 后所有数据仍只在本机处理。当前未申请 `network.fetch`、通知或剪贴板权限，但这不等于宿主的 AI 调用不会联网。
+
+模型文件仅在当前会话中使用，重启需重新导入；导出只包含场景 JSON，不包含模型文件，也不是 PNG。更完整的保存与恢复边界见上文。
+
+## 截图
+
+发布用的真实运行截图待补充。现有[目标界面图](./docs/assets/product-target-v1.png)是设计参考，不是实际运行截图或验收证据。
+
+## 反馈与许可证
+
+用户可在[本仓库 Issues](https://github.com/zhangjiadi225/cherry-studio-miniapp/issues)提交问题，标题以 `[model-stage]` 开头，注明应用版本、Cherry Studio 版本、系统、复现步骤及脱敏截图。模型相关问题请优先提供可公开的最小示例，不上传私人模型、API Key 或完整私密对话。
+
+本项目自有源码采用 [MIT License](../../LICENSE)；第三方依赖与素材的分发条件见[仓库说明](../../README.md#许可证与素材)。
+
+## 本地开发
+
+本应用是 monorepo 中的独立 workspace（由根目录统一管理依赖的应用目录）。从仓库根目录运行：
 
 ```bash
 pnpm --filter @miniapps/model-stage dev
